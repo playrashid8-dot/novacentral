@@ -2,97 +2,44 @@ import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
-
-// 🔐 REGISTER
-export const register = async (req, res) => {
+// SIGNUP
+export const signup = async (req, res) => {
   try {
-    const { username, email, password, referralCode } = req.body;
+    const { email, password } = req.body;
 
-    // check existing user
-    const exist = await User.findOne({
-      $or: [{ email }, { username }]
-    });
+    const existing = await User.findOne({ email });
+    if (existing) return res.status(400).json({ msg: "User exists" });
 
-    if (exist) {
-      return res.status(400).json({ message: "User already exists" });
-    }
-
-    // hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // generate referral code
-    const myReferral = username + Math.floor(1000 + Math.random() * 9000);
+    const hashed = await bcrypt.hash(password, 10);
 
     const user = await User.create({
-      username,
       email,
-      password: hashedPassword,
-      referralCode: myReferral,
-      referredBy: referralCode || null,
-      balance: 0
+      password: hashed,
     });
 
-    res.json({
-      message: "Register working ✅",
-      data: user
-    });
-
+    res.json({ msg: "Signup success" });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ error: err.message });
   }
 };
 
-
-// 🔑 LOGIN (USERNAME BASED)
+// LOGIN
 export const login = async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { email, password } = req.body;
 
-    const user = await User.findOne({ username });
+    const user = await User.findOne({ email });
+    if (!user) return res.status(400).json({ msg: "User not found" });
 
-    if (!user) {
-      return res.status(400).json({ message: "User not found" });
-    }
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) return res.status(400).json({ msg: "Wrong password" });
 
-    const isMatch = await bcrypt.compare(password, user.password);
-
-    if (!isMatch) {
-      return res.status(400).json({ message: "Wrong password" });
-    }
-
-    const token = jwt.sign(
-      { id: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    res.json({
-      message: "Login success ✅",
-      token
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "7d",
     });
 
+    res.json({ token });
   } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-
-// 👤 GET LOGGED USER
-export const getMe = async (req, res) => {
-  try {
-    const token = req.headers.authorization;
-
-    if (!token) {
-      return res.status(401).json({ message: "No token" });
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    const user = await User.findById(decoded.id).select("-password");
-
-    res.json(user);
-
-  } catch (err) {
-    res.status(500).json({ message: "Auth error" });
+    res.status(500).json({ error: err.message });
   }
 };

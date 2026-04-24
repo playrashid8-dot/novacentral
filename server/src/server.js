@@ -1,57 +1,35 @@
 import express from "express";
-import cors from "cors";
 import dotenv from "dotenv";
-
+import cors from "cors";
 import connectDB from "./config/db.js";
+
+// ROUTES
 import authRoutes from "./routes/authRoutes.js";
+import userRoutes from "./routes/userRoutes.js";
+import depositRoutes from "./routes/depositRoutes.js";
 
 dotenv.config();
+connectDB();
 
 const app = express();
 
-
-// 🔥 CORS (Production Ready)
-app.use(cors({
-  origin: "*", // production me specific domain lagana better hota hai
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-}));
-
-
-// 🔧 BODY PARSER
+// MIDDLEWARE
+app.use(cors());
 app.use(express.json());
 
-
-// 🧠 DATABASE CONNECT
-connectDB();
-
-
-// 🔗 ROUTES
+// ROUTES
 app.use("/api/auth", authRoutes);
+app.use("/api/user", userRoutes);
+app.use("/api/deposit", depositRoutes); // 🔥 NEW
 
-
-// 🧪 HEALTH CHECK (IMPORTANT for Railway)
+// TEST ROUTE
 app.get("/", (req, res) => {
-  res.send("NovaCentral API Running 🚀");
+  res.send("API Running...");
 });
 
-
-// ❌ 404 HANDLER
-app.use((req, res) => {
-  res.status(404).json({ message: "Route not found" });
-});
-
-
-// ❌ GLOBAL ERROR HANDLER
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ message: "Server Error" });
-});
-
-
-// 🚀 START SERVER
+// SERVER START
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on port ${PORT} 🚀`);
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT} 🚀`);
 });
