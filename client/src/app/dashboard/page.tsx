@@ -3,9 +3,11 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
+import { useRouter, usePathname } from "next/navigation";
 
 export default function Dashboard() {
   const [balance, setBalance] = useState(12458.75);
+  const router = useRouter();
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -64,20 +66,48 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ⚡ QUICK ACTIONS */}
+      {/* ⚡ QUICK ACTIONS (FIXED) */}
       <div className="grid grid-cols-4 gap-3 mt-6">
 
-        <Action label="Deposit" icon="⬇️" color="from-purple-500 to-purple-700" />
-        <Action label="Withdraw" icon="⬆️" color="from-yellow-500 to-orange-600" />
-        <Action label="Plan" icon="🔒" color="from-blue-500 to-blue-700" />
-        <Action label="Team" icon="👥" color="from-green-500 to-green-700" />
+        <Action
+          label="Deposit"
+          icon="⬇️"
+          color="from-purple-500 to-purple-700"
+          onClick={() => router.push("/deposit")}
+        />
+
+        <Action
+          label="Withdraw"
+          icon="⬆️"
+          color="from-yellow-500 to-orange-600"
+          onClick={() => router.push("/withdraw")}
+        />
+
+        <Action
+          label="Plan"
+          icon="🔒"
+          color="from-blue-500 to-blue-700"
+          onClick={() => router.push("/plans")}
+        />
+
+        <Action
+          label="Team"
+          icon="👥"
+          color="from-green-500 to-green-700"
+          onClick={() => router.push("/team")}
+        />
 
       </div>
 
       {/* 📊 OVERVIEW */}
       <div className="mt-6 flex justify-between items-center">
         <h3 className="font-semibold">Overview</h3>
-        <span className="text-purple-400 text-sm">View All</span>
+        <button
+          onClick={() => router.push("/earnings")}
+          className="text-purple-400 text-sm"
+        >
+          View All
+        </button>
       </div>
 
       <div className="grid grid-cols-2 gap-4 mt-4">
@@ -89,24 +119,27 @@ export default function Dashboard() {
 
       </div>
 
-      {/* 📱 BOTTOM NAV */}
+      {/* 📱 BOTTOM NAV (FIXED) */}
       <BottomNav />
 
     </div>
   );
 }
 
-/* 🔥 COMPONENTS */
-
-function Action({ label, icon, color }: any) {
+/* 🔥 ACTION BUTTON */
+function Action({ label, icon, color, onClick }: any) {
   return (
-    <div className={`p-3 rounded-xl bg-gradient-to-br ${color} text-center`}>
+    <button
+      onClick={onClick}
+      className={`p-3 rounded-xl bg-gradient-to-br ${color} text-center active:scale-95 transition`}
+    >
       <div className="text-xl">{icon}</div>
       <p className="text-xs mt-1">{label}</p>
-    </div>
+    </button>
   );
 }
 
+/* 📊 STATS */
 function Stat({ title, value, color }: any) {
   const colors: any = {
     green: "from-green-500/20 to-green-700/20",
@@ -123,24 +156,34 @@ function Stat({ title, value, color }: any) {
   );
 }
 
+/* 📱 BOTTOM NAV WORKING */
 function BottomNav() {
+  const router = useRouter();
+  const path = usePathname();
+
+  const nav = [
+    { name: "Home", path: "/dashboard" },
+    { name: "Earnings", path: "/earnings" },
+    { name: "Team", path: "/team" },
+    { name: "Wallet", path: "/wallet" },
+    { name: "Profile", path: "/profile" },
+  ];
+
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-black/90 border-t border-white/10 flex justify-around py-3 text-sm">
 
-      <Nav label="Home" active />
-      <Nav label="Earnings" />
-      <Nav label="Team" />
-      <Nav label="Wallet" />
-      <Nav label="Profile" />
+      {nav.map((item) => (
+        <button
+          key={item.name}
+          onClick={() => router.push(item.path)}
+          className={`${
+            path === item.path ? "text-purple-400" : "text-gray-400"
+          }`}
+        >
+          {item.name}
+        </button>
+      ))}
 
-    </div>
-  );
-}
-
-function Nav({ label, active }: any) {
-  return (
-    <div className={active ? "text-purple-400" : "text-gray-400"}>
-      {label}
     </div>
   );
 }

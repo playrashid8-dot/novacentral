@@ -1,157 +1,142 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import Image from "next/image";
 
 export default function Home() {
-  const router = useRouter();
+  const router = useRouter();
 
-  const [balance, setBalance] = useState(2458920);
+  return (
+    <div className="min-h-screen bg-[#050507] text-white px-5 py-6 relative overflow-hidden">
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setBalance((prev) => prev + Math.floor(Math.random() * 50));
-    }, 2000);
+      {/* 🔥 BACKGROUND GLOW */}
+      <div className="absolute w-[500px] h-[500px] bg-purple-600 opacity-20 blur-[140px] top-[-150px] left-[-150px]" />
+      <div className="absolute w-[500px] h-[500px] bg-indigo-600 opacity-20 blur-[140px] bottom-[-150px] right-[-150px]" />
 
-    return () => clearInterval(interval);
-  }, []);
+      {/* GRID OVERLAY */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0.04)_1px,_transparent_1px)] [background-size:28px_28px]" />
 
-  return (
-    <div className="min-h-screen relative overflow-hidden">
+      {/* HEADER */}
+      <div className="flex justify-between items-center mb-6 relative z-10">
 
-      {/* 🔥 BACKGROUND GLOW */}
-      <div className="absolute w-[600px] h-[600px] bg-purple-600 opacity-20 blur-[160px] top-[-200px] left-[-200px]" />
-      <div className="absolute w-[600px] h-[600px] bg-indigo-600 opacity-20 blur-[160px] bottom-[-200px] right-[-200px]" />
+        <div className="flex items-center gap-2">
+          <Image
+            src="/logo.png"
+            alt="NovaCentral"
+            width={32}
+            height={32}
+            className="rounded-full shadow-[0_0_15px_rgba(168,85,247,0.7)]"
+          />
+          <h1 className="text-lg font-bold tracking-wide">NovaCentral</h1>
+        </div>
 
-      {/* NAVBAR */}
-      <div className="flex justify-between items-center px-5 py-4 relative z-10">
+        <div className="flex gap-2">
+          <button
+            onClick={() => router.push("/login")}
+            className="px-4 py-2 text-sm border border-purple-500 rounded-lg hover:bg-purple-500/10 transition"
+          >
+            Login
+          </button>
 
-        {/* LOGO */}
-        <div className="flex items-center gap-2">
-          <Image
-            src="/logo.png"
-            alt="NovaCentral"
-            width={34}
-            height={34}
-            className="rounded-full shadow-[0_0_15px_rgba(168,85,247,0.7)]"
-          />
-          <span className="font-bold text-lg tracking-wide">
-            NovaCentral
-          </span>
-        </div>
+          <button
+            onClick={() => router.push("/signup")}
+            className="px-4 py-2 text-sm bg-gradient-to-r from-purple-500 to-indigo-500 rounded-lg shadow-lg hover:scale-105 active:scale-95 transition"
+          >
+            Signup
+          </button>
+        </div>
+      </div>
 
-        {/* BUTTONS */}
-        <div className="flex gap-2">
-          <button
-            onClick={() => router.push("/login")}
-            className="px-4 py-2 rounded-xl border border-purple-500/40 hover:bg-purple-500/10 transition"
-          >
-            Login
-          </button>
+      {/* HERO */}
+      <motion.div
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative z-10 p-[1px] rounded-3xl bg-gradient-to-r from-purple-500 to-indigo-500 mb-6"
+      >
+        <div className="bg-[#0b0b0f]/90 backdrop-blur-xl p-6 rounded-3xl">
 
-          <button
-            onClick={() => router.push("/signup")}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-500 shadow-lg hover:scale-105 transition"
-          >
-            Signup
-          </button>
-        </div>
-      </div>
+          <h2 className="text-3xl font-bold leading-tight">
+            Earn Crypto Daily 💰
+          </h2>
 
-      {/* HERO */}
-      <div className="px-5 mt-6 relative z-10">
+          <p className="text-gray-400 mt-2 text-sm">
+            Smart staking, referral income & automated ROI system
+          </p>
 
-        <div className="rounded-3xl p-[1px] bg-gradient-to-r from-purple-500 to-indigo-500">
+          {/* LIVE STATS */}
+          <div className="mt-4 bg-white/5 p-3 rounded-xl text-center">
+            <p className="text-xs text-gray-400">Platform Earnings</p>
+            <h3 className="text-xl font-bold text-purple-400">
+              $2,458,920
+            </h3>
+          </div>
 
-          <div className="rounded-3xl bg-[#0b0b0f]/90 backdrop-blur-xl p-6">
+          <button
+            onClick={() => router.push("/signup")}
+            className="mt-5 w-full bg-gradient-to-r from-purple-500 to-indigo-500 p-3 rounded-xl font-semibold shadow-lg hover:scale-105 active:scale-95 transition"
+          >
+            Start Earning 🚀
+          </button>
 
-            <h2 className="text-3xl font-bold mb-2">
-              Earn Crypto Daily
-            </h2>
+        </div>
+      </motion.div>
 
-            <p className="text-gray-400 mb-6">
-              Smart staking, referral income & automated ROI system
-            </p>
+      {/* FEATURES */}
+      <div className="grid grid-cols-2 gap-4 mb-6 relative z-10">
 
-            {/* 🔥 LIVE COUNTER */}
-            <motion.div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-6">
-              <p className="text-gray-400 text-sm">
-                Platform Earnings
-              </p>
+        <Card title="Daily ROI" desc="1% - 2.5% profit" icon="📈" />
+        <Card title="Instant Deposit" desc="Auto balance update" icon="💰" />
+        <Card title="Secure Withdraw" desc="96h system" icon="🏦" />
+        <Card title="Referral Income" desc="Team earning" icon="🤝" />
 
-              <motion.h3
-                key={balance}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="text-2xl font-bold text-purple-400"
-              >
-                ${balance.toLocaleString()}
-              </motion.h3>
-            </motion.div>
+      </div>
 
-            {/* CTA */}
-            <button
-              onClick={() => router.push("/signup")}
-              className="w-full py-4 rounded-2xl text-lg font-semibold 
-              bg-gradient-to-r from-purple-500 to-indigo-500
-              shadow-[0_0_25px_rgba(168,85,247,0.6)]
-              hover:shadow-[0_0_40px_rgba(168,85,247,1)]
-              hover:scale-105 transition-all duration-300"
-            >
-              Start Earning 🚀
-            </button>
+      {/* STATS STRIP */}
+      <div className="grid grid-cols-3 gap-3 mb-6 text-center">
 
-          </div>
-        </div>
-      </div>
+        <Stat title="Users" value="25K+" />
+        <Stat title="Deposits" value="$8M+" />
+        <Stat title="Paid ROI" value="$2M+" />
 
-      {/* TRUST STATS */}
-      <div className="grid grid-cols-3 gap-3 px-5 mt-6">
-        <Stat title="Users" value="25K+" />
-        <Stat title="Deposits" value="$8M+" />
-        <Stat title="Paid ROI" value="$2M+" />
-      </div>
+      </div>
 
-      {/* FEATURES */}
-      <div className="grid grid-cols-2 gap-4 px-5 mt-6 pb-20">
+      {/* ABOUT */}
+      <div className="bg-[#0b0b0f]/80 backdrop-blur-xl p-5 rounded-2xl border border-white/5 relative z-10">
 
-        <Feature icon="📈" title="Daily ROI" desc="1% – 2.5%" />
-        <Feature icon="💰" title="Instant Deposit" desc="Auto update" />
-        <Feature icon="🏦" title="Secure Withdraw" desc="96h delay" />
-        <Feature icon="🤝" title="Team Income" desc="Referral system" />
+        <h3 className="font-semibold mb-3">About NovaCentral</h3>
 
-      </div>
+        <ul className="space-y-2 text-sm text-gray-400">
+          <li>✔ Daily ROI earning system</li>
+          <li>✔ Multiple staking plans</li>
+          <li>✔ Instant deposit credit</li>
+          <li>✔ 96 hours secure withdrawal</li>
+          <li>✔ Referral & team income system</li>
+        </ul>
 
-      {/* 🔥 LIVE ACTIVITY */}
-      <div className="px-5 pb-10 text-sm text-gray-400 space-y-2">
-        <p>🟢 Ali deposited $120</p>
-        <p>🟢 Ahmed earned $15 ROI</p>
-        <p>🟢 Sara withdrew $300</p>
-      </div>
+      </div>
 
-    </div>
-  );
+    </div>
+  );
 }
 
-/* COMPONENTS */
+/* 🔹 FEATURE CARD */
+function Card({ title, desc, icon }: any) {
+  return (
+    <div className="bg-[#0b0b0f]/80 backdrop-blur-xl p-4 rounded-2xl border border-white/5 hover:scale-105 hover:border-purple-500 transition shadow-md">
+      <p className="text-xl">{icon}</p>
+      <h3 className="font-semibold mt-1">{title}</h3>
+      <p className="text-sm text-gray-400">{desc}</p>
+    </div>
+  );
+}
 
+/* 🔹 STATS */
 function Stat({ title, value }: any) {
-  return (
-    <div className="bg-white/5 border border-white/10 p-3 rounded-xl text-center">
-      <p className="text-xs text-gray-400">{title}</p>
-      <p className="font-bold text-purple-400">{value}</p>
-    </div>
-  );
-}
-
-function Feature({ icon, title, desc }: any) {
-  return (
-    <div className="bg-white/5 border border-white/10 p-4 rounded-2xl">
-      <div className="text-2xl mb-2">{icon}</div>
-      <p className="font-semibold">{title}</p>
-      <p className="text-gray-400 text-sm">{desc}</p>
-    </div>
-  );
+  return (
+    <div className="bg-white/5 p-3 rounded-xl border border-white/5">
+      <p className="text-xs text-gray-400">{title}</p>
+      <h4 className="font-bold text-purple-400">{value}</h4>
+    </div>
+  );
 }
