@@ -11,32 +11,34 @@ export default function Dashboard() {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setBalance((prev) => prev + Math.random() * 3);
-    }, 2000);
+      setBalance((prev) => prev + Math.random() * 2);
+    }, 2500);
     return () => clearInterval(interval);
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#050507] text-white pb-24 px-4">
+    <div className="min-h-screen px-4 pb-28 text-white glow-bg relative">
 
-      {/* 🔥 HEADER */}
-      <div className="flex justify-between items-center pt-5">
-        <h1 className="font-bold text-lg">NovaCentral</h1>
-        <div className="flex gap-3">
-          <span>🔔</span>
-          <span>☰</span>
+      {/* HEADER */}
+      <div className="flex justify-between items-center pt-5 z-10 relative">
+        <h1 className="font-bold text-xl text-glow">NovaCentral</h1>
+
+        <div className="flex gap-3 text-lg">
+          <span className="hover:scale-110 cursor-pointer">🔔</span>
+          <span className="hover:scale-110 cursor-pointer">☰</span>
         </div>
       </div>
 
-      {/* 👤 PROFILE */}
-      <div className="flex items-center gap-3 mt-6">
+      {/* PROFILE */}
+      <div className="flex items-center gap-3 mt-6 relative z-10">
         <Image
           src="/logo.png"
           alt="user"
           width={60}
           height={60}
-          className="rounded-full border border-purple-500"
+          className="rounded-full border border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.8)]"
         />
+
         <div>
           <p className="text-gray-400 text-sm">Welcome Back</p>
           <h2 className="font-bold text-lg">Ahmed Khan</h2>
@@ -44,64 +46,39 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* 💰 BALANCE CARD */}
-      <div className="mt-6 rounded-3xl p-[1px] bg-gradient-to-r from-purple-500 to-indigo-500">
-        <div className="bg-[#0b0b0f] rounded-3xl p-5">
+      {/* BALANCE */}
+      <div className="mt-6 glow-card relative z-10">
 
-          <p className="text-gray-400 text-sm">Total Balance</p>
+        <p className="text-sm text-gray-200">Total Balance</p>
 
-          <motion.h1
-            key={balance}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-3xl font-bold text-purple-400 mt-2"
-          >
-            ${balance.toFixed(2)}
-          </motion.h1>
+        <motion.h1
+          key={balance}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-4xl font-bold mt-2"
+        >
+          ${balance.toFixed(2)}
+        </motion.h1>
 
-          <p className="text-sm text-gray-500 mt-1">
-            ≈ {(balance * 0.26).toFixed(2)} USDT
-          </p>
-
-        </div>
-      </div>
-
-      {/* ⚡ QUICK ACTIONS (FIXED) */}
-      <div className="grid grid-cols-4 gap-3 mt-6">
-
-        <Action
-          label="Deposit"
-          icon="⬇️"
-          color="from-purple-500 to-purple-700"
-          onClick={() => router.push("/deposit")}
-        />
-
-        <Action
-          label="Withdraw"
-          icon="⬆️"
-          color="from-yellow-500 to-orange-600"
-          onClick={() => router.push("/withdraw")}
-        />
-
-        <Action
-          label="Plan"
-          icon="🔒"
-          color="from-blue-500 to-blue-700"
-          onClick={() => router.push("/plans")}
-        />
-
-        <Action
-          label="Team"
-          icon="👥"
-          color="from-green-500 to-green-700"
-          onClick={() => router.push("/team")}
-        />
+        <p className="text-sm opacity-80 mt-1">
+          ≈ {(balance * 0.26).toFixed(2)} USDT
+        </p>
 
       </div>
 
-      {/* 📊 OVERVIEW */}
-      <div className="mt-6 flex justify-between items-center">
-        <h3 className="font-semibold">Overview</h3>
+      {/* QUICK ACTIONS */}
+      <div className="grid grid-cols-4 gap-3 mt-6 relative z-10">
+
+        <Action label="Deposit" icon="⬇️" onClick={() => router.push("/deposit")} />
+        <Action label="Withdraw" icon="⬆️" onClick={() => router.push("/withdraw")} />
+        <Action label="Plans" icon="📊" onClick={() => router.push("/plans")} />
+        <Action label="Team" icon="👥" onClick={() => router.push("/team")} />
+
+      </div>
+
+      {/* OVERVIEW */}
+      <div className="mt-8 flex justify-between items-center">
+        <h3 className="font-semibold text-lg">Overview</h3>
         <button
           onClick={() => router.push("/earnings")}
           className="text-purple-400 text-sm"
@@ -112,26 +89,26 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-2 gap-4 mt-4">
 
-        <Stat title="Total Earnings" value="$3,245" color="green" />
-        <Stat title="Today's Profit" value="$124" color="blue" />
-        <Stat title="Total Invested" value="$5,000" color="yellow" />
-        <Stat title="Total Withdraw" value="$1,250" color="purple" />
+        <Stat title="Total Earnings" value="$3,245" />
+        <Stat title="Today's Profit" value="$124" />
+        <Stat title="Total Invested" value="$5,000" />
+        <Stat title="Withdrawn" value="$1,250" />
 
       </div>
 
-      {/* 📱 BOTTOM NAV (FIXED) */}
+      {/* BOTTOM NAV */}
       <BottomNav />
 
     </div>
   );
 }
 
-/* 🔥 ACTION BUTTON */
-function Action({ label, icon, color, onClick }: any) {
+/* ACTION BUTTON */
+function Action({ label, icon, onClick }: any) {
   return (
     <button
       onClick={onClick}
-      className={`p-3 rounded-xl bg-gradient-to-br ${color} text-center active:scale-95 transition`}
+      className="card text-center active:scale-95 hover:scale-105 transition"
     >
       <div className="text-xl">{icon}</div>
       <p className="text-xs mt-1">{label}</p>
@@ -139,24 +116,17 @@ function Action({ label, icon, color, onClick }: any) {
   );
 }
 
-/* 📊 STATS */
-function Stat({ title, value, color }: any) {
-  const colors: any = {
-    green: "from-green-500/20 to-green-700/20",
-    blue: "from-blue-500/20 to-blue-700/20",
-    yellow: "from-yellow-500/20 to-yellow-700/20",
-    purple: "from-purple-500/20 to-purple-700/20",
-  };
-
+/* STATS */
+function Stat({ title, value }: any) {
   return (
-    <div className={`p-4 rounded-2xl bg-gradient-to-br ${colors[color]} border border-white/10`}>
+    <div className="card">
       <p className="text-sm text-gray-400">{title}</p>
-      <h4 className="font-bold text-lg mt-1">{value}</h4>
+      <h4 className="font-bold text-lg mt-1 text-glow">{value}</h4>
     </div>
   );
 }
 
-/* 📱 BOTTOM NAV WORKING */
+/* BOTTOM NAV */
 function BottomNav() {
   const router = useRouter();
   const path = usePathname();
@@ -170,14 +140,16 @@ function BottomNav() {
   ];
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-black/90 border-t border-white/10 flex justify-around py-3 text-sm">
+    <div className="fixed bottom-3 left-1/2 -translate-x-1/2 w-[95%] max-w-[420px] bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl flex justify-around py-3 shadow-[0_0_20px_rgba(168,85,247,0.3)]">
 
       {nav.map((item) => (
         <button
           key={item.name}
           onClick={() => router.push(item.path)}
-          className={`${
-            path === item.path ? "text-purple-400" : "text-gray-400"
+          className={`text-sm ${
+            path === item.path
+              ? "text-purple-400"
+              : "text-gray-400"
           }`}
         >
           {item.name}
