@@ -2,47 +2,40 @@
 @tailwind components;
 @tailwind utilities;
 
-/* BACKGROUND */
 body {
-  background: radial-gradient(circle at top, #1a1a2e, #0b0b0f);
+  background: radial-gradient(circle at top, #0f172a, #020617);
   color: white;
-  font-family: 'Inter', sans-serif;
 }
 
 /* GLASS CARD */
 .card {
-  @apply backdrop-blur-xl bg-white/5 border border-white/10 p-5 rounded-2xl shadow-xl;
+  @apply bg-white/5 backdrop-blur-xl border border-white/10 p-5 rounded-2xl;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
 }
 
-/* GLOW CARD */
+/* MAIN BALANCE CARD */
 .glow-card {
-  @apply p-5 rounded-2xl bg-gradient-to-br from-purple-600/30 to-indigo-600/20 border border-purple-500/30;
-  box-shadow: 0 0 25px rgba(168, 85, 247, 0.3);
+  @apply p-6 rounded-2xl;
+  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+  box-shadow: 0 0 40px rgba(124,58,237,0.6);
 }
 
 /* BUTTON */
 .btn {
-  @apply w-full p-3 rounded-xl font-semibold text-white;
-  background: linear-gradient(135deg, #7c3aed, #6366f1);
-  box-shadow: 0 0 15px rgba(124, 58, 237, 0.5);
-  transition: 0.3s;
+  @apply px-4 py-2 rounded-xl font-semibold;
+  background: linear-gradient(135deg, #9333ea, #6366f1);
 }
 
-.btn:hover {
-  transform: scale(1.05);
-  box-shadow: 0 0 25px rgba(124, 58, 237, 0.8);
-}
-
-/* INPUT */
-.input {
-  @apply w-full p-3 rounded-xl bg-white/5 border border-white/10 outline-none;
+/* SECOND BUTTON */
+.btn-secondary {
+  @apply px-4 py-2 rounded-xl bg-white/10;
 }
 
 /* TEXT */
 .title {
-  @apply text-xl font-bold;
+  @apply text-base font-semibold;
 }
 
 .sub {
-  @apply text-gray-400 text-sm;
+  @apply text-xs text-gray-400;
 }
