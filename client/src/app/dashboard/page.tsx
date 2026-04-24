@@ -4,70 +4,110 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
+import API from "../../lib/api";
+import { getUser, logout } from "../../lib/auth";
 
 export default function Dashboard() {
-  const [balance, setBalance] = useState(12458.75);
   const router = useRouter();
 
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  // 🔐 AUTH CHECK
   useEffect(() => {
-    const interval = setInterval(() => {
-      setBalance((prev) => prev + Math.random() * 2);
-    }, 2500);
-    return () => clearInterval(interval);
+    const u = getUser();
+
+    if (!u) {
+      router.push("/login");
+      return;
+    }
+
+    loadUser();
   }, []);
+
+  // 📡 LOAD USER FROM BACKEND
+  const loadUser = async () => {
+    try {
+      const res = await API.get("/user/me"); // 🔥 better endpoint
+      setUser(res.data.user || res.data);
+    } catch (err) {
+      logout();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 🔄 LOADING UI
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-white">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ repeat: Infinity, duration: 1 }}
+          className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen px-4 pb-28 text-white glow-bg relative">
 
       {/* HEADER */}
-      <div className="flex justify-between items-center pt-5 z-10 relative">
+      <div className="flex justify-between items-center pt-5">
         <h1 className="font-bold text-xl text-glow">NovaCentral</h1>
 
-        <div className="flex gap-3 text-lg">
-          <span className="hover:scale-110 cursor-pointer">🔔</span>
-          <span className="hover:scale-110 cursor-pointer">☰</span>
-        </div>
+        <button
+          onClick={logout}
+          className="text-sm text-red-400 hover:text-red-500"
+        >
+          Logout 🚪
+        </button>
       </div>
 
       {/* PROFILE */}
-      <div className="flex items-center gap-3 mt-6 relative z-10">
+      <div className="flex items-center gap-3 mt-6">
         <Image
           src="/logo.png"
           alt="user"
           width={60}
           height={60}
-          className="rounded-full border border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.8)]"
+          className="rounded-full border border-purple-500"
         />
 
         <div>
           <p className="text-gray-400 text-sm">Welcome Back</p>
-          <h2 className="font-bold text-lg">Ahmed Khan</h2>
-          <p className="text-xs text-gray-500">ID: NC123456</p>
+          <h2 className="font-bold text-lg">
+            {user?.username || "User"}
+          </h2>
+          <p className="text-xs text-gray-500">
+            ID: {user?._id?.slice(0, 6)}
+          </p>
         </div>
       </div>
 
-      {/* BALANCE */}
-      <div className="mt-6 glow-card relative z-10">
+      {/* 💰 BALANCE */}
+      <div className="mt-6 glow-card">
 
         <p className="text-sm text-gray-200">Total Balance</p>
 
         <motion.h1
-          key={balance}
+          key={user?.balance}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           className="text-4xl font-bold mt-2"
         >
-          ${balance.toFixed(2)}
+          ${Number(user?.balance || 0).toFixed(2)}
         </motion.h1>
 
         <p className="text-sm opacity-80 mt-1">
-          ≈ {(balance * 0.26).toFixed(2)} USDT
+          ≈ {Number(user?.balance || 0).toFixed(2)} USDT
         </p>
 
       </div>
 
-      {/* QUICK ACTIONS */}
-      <div className="grid grid-cols-4 gap-3 mt-6 relative z-10">
+      {/* ⚡ ACTIONS */}
+      <div className="grid grid-cols-4 gap-3 mt-6">
 
         <Action label="Deposit" icon="⬇️" onClick={() => router.push("/deposit")} />
         <Action label="Withdraw" icon="⬆️" onClick={() => router.push("/withdraw")} />
@@ -76,34 +116,28 @@ export default function Dashboard() {
 
       </div>
 
-      {/* OVERVIEW */}
-      <div className="mt-8 flex justify-between items-center">
+      {/* 📊 OVERVIEW */}
+      <div className="mt-8">
         <h3 className="font-semibold text-lg">Overview</h3>
-        <button
-          onClick={() => router.push("/earnings")}
-          className="text-purple-400 text-sm"
-        >
-          View All
-        </button>
       </div>
 
       <div className="grid grid-cols-2 gap-4 mt-4">
 
-        <Stat title="Total Earnings" value="$3,245" />
-        <Stat title="Today's Profit" value="$124" />
-        <Stat title="Total Invested" value="$5,000" />
-        <Stat title="Withdrawn" value="$1,250" />
+        <Stat title="Total Earnings" value={`$${user?.totalEarnings || 0}`} />
+        <Stat title="Today's Profit" value={`$${user?.todayProfit || 0}`} />
+        <Stat title="Total Invested" value={`$${user?.totalInvested || 0}`} />
+        <Stat title="Withdrawn" value={`$${user?.totalWithdraw || 0}`} />
 
       </div>
 
-      {/* BOTTOM NAV */}
+      {/* NAV */}
       <BottomNav />
 
     </div>
   );
 }
 
-/* ACTION BUTTON */
+/* ACTION */
 function Action({ label, icon, onClick }: any) {
   return (
     <button
@@ -116,7 +150,7 @@ function Action({ label, icon, onClick }: any) {
   );
 }
 
-/* STATS */
+/* STAT */
 function Stat({ title, value }: any) {
   return (
     <div className="card">
@@ -126,7 +160,7 @@ function Stat({ title, value }: any) {
   );
 }
 
-/* BOTTOM NAV */
+/* NAV */
 function BottomNav() {
   const router = useRouter();
   const path = usePathname();
@@ -140,7 +174,7 @@ function BottomNav() {
   ];
 
   return (
-    <div className="fixed bottom-3 left-1/2 -translate-x-1/2 w-[95%] max-w-[420px] bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl flex justify-around py-3 shadow-[0_0_20px_rgba(168,85,247,0.3)]">
+    <div className="fixed bottom-3 left-1/2 -translate-x-1/2 w-[95%] max-w-[420px] bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl flex justify-around py-3">
 
       {nav.map((item) => (
         <button

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import API from "../../lib/api";
+import { getUser } from "../../lib/auth";
 import { motion } from "framer-motion";
 
 export default function Deposit() {
@@ -12,38 +13,50 @@ export default function Deposit() {
   const [txHash, setTxHash] = useState("");
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [user, setUser]: any = useState(null);
 
   const wallet = "0xEC4Edc0654Ee207F9dB9E1068d3adfE689362B64";
 
+  // 🔐 LOAD USER
+  useEffect(() => {
+    const u = getUser();
+    if (!u) return router.push("/login");
+    setUser(u);
+  }, []);
+
+  // 🚀 SUBMIT DEPOSIT
   const handleDeposit = async () => {
     try {
       if (!amount || Number(amount) < 10) {
-        alert("Minimum deposit is $10");
-        return;
+        return alert("Minimum deposit is $10");
       }
 
-      if (!txHash) {
-        alert("Enter transaction hash");
-        return;
+      if (!txHash || txHash.length < 20) {
+        return alert("Invalid TX Hash");
       }
 
       setLoading(true);
 
-      await API.post("/deposit", {
+      const res = await API.post("/deposit", {
         amount: Number(amount),
         txHash,
       });
 
-      alert("Deposit submitted 🚀");
+      alert("Deposit submitted successfully 🚀");
+
+      setAmount("");
+      setTxHash("");
+
       router.push("/dashboard");
 
-    } catch (err) {
-      alert("Deposit failed ❌");
+    } catch (err: any) {
+      alert(err?.response?.data?.message || "Deposit failed ❌");
     } finally {
       setLoading(false);
     }
   };
 
+  // 📋 COPY
   const copyWallet = () => {
     navigator.clipboard.writeText(wallet);
     setCopied(true);
@@ -51,96 +64,91 @@ export default function Deposit() {
   };
 
   return (
-    <div className="min-h-screen bg-[#050507] text-white px-5 py-6 relative overflow-hidden">
-
-      {/* 🔥 BACKGROUND GLOW */}
-      <div className="absolute w-[400px] h-[400px] bg-purple-600 opacity-20 blur-[120px] top-[-100px] left-[-100px]" />
-      <div className="absolute w-[400px] h-[400px] bg-indigo-600 opacity-20 blur-[120px] bottom-[-100px] right-[-100px]" />
+    <div className="min-h-screen text-white px-5 py-6 glow-bg relative">
 
       {/* HEADER */}
-      <div className="flex justify-between items-center mb-6 relative z-10">
-        <h1 className="text-xl font-bold">💰 Deposit</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-xl font-bold text-glow">💰 Deposit</h1>
 
         <button
           onClick={() => router.push("/dashboard")}
-          className="text-sm text-purple-400 hover:underline"
+          className="text-sm text-purple-400"
         >
           Back
         </button>
+      </div>
+
+      {/* 💰 BALANCE CARD */}
+      <div className="glow-card mb-6">
+        <p className="text-sm opacity-80">Your Balance</p>
+        <h2 className="text-3xl font-bold mt-1">
+          ${Number(user?.balance || 0).toFixed(2)}
+        </h2>
       </div>
 
       {/* MAIN CARD */}
       <motion.div
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative z-10 p-[1px] rounded-3xl bg-gradient-to-r from-purple-500 to-indigo-500"
+        className="card"
       >
-        <div className="bg-[#0b0b0f]/90 backdrop-blur-xl p-6 rounded-3xl">
 
-          {/* NETWORK */}
-          <p className="text-gray-400 text-sm mb-3">
-            Send USDT (BEP20 Network)
-          </p>
+        <p className="text-sm text-gray-400 mb-3">
+          Send USDT (BEP20 Network)
+        </p>
 
-          {/* WALLET BOX */}
-          <div className="bg-black/40 p-3 rounded-xl flex justify-between items-center border border-white/10">
+        {/* WALLET */}
+        <div className="flex justify-between items-center bg-black/40 p-3 rounded-xl border border-white/10">
+          <span className="truncate text-sm">{wallet}</span>
 
-            <span className="truncate text-sm">{wallet}</span>
-
-            <button
-              onClick={copyWallet}
-              className="text-purple-400 text-xs font-semibold"
-            >
-              {copied ? "Copied" : "Copy"}
-            </button>
-
-          </div>
-
-          {/* AMOUNT */}
-          <input
-            type="number"
-            placeholder="Enter Amount ($)"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="w-full mt-4 p-3 bg-black/40 rounded-xl border border-white/10 outline-none focus:border-purple-500"
-          />
-
-          {/* TX HASH */}
-          <input
-            type="text"
-            placeholder="Enter Transaction Hash"
-            value={txHash}
-            onChange={(e) => setTxHash(e.target.value)}
-            className="w-full mt-3 p-3 bg-black/40 rounded-xl border border-white/10 outline-none focus:border-purple-500"
-          />
-
-          {/* BUTTON */}
           <button
-            onClick={handleDeposit}
-            disabled={loading}
-            className="w-full mt-5 bg-gradient-to-r from-purple-500 to-indigo-500 p-3 rounded-xl font-semibold shadow-lg hover:scale-105 active:scale-95 transition disabled:opacity-50"
+            onClick={copyWallet}
+            className="text-purple-400 text-xs"
           >
-            {loading ? "Processing..." : "Submit Deposit"}
+            {copied ? "Copied" : "Copy"}
           </button>
-
         </div>
+
+        {/* AMOUNT */}
+        <input
+          type="number"
+          placeholder="Enter Amount ($)"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className="input mt-4"
+        />
+
+        {/* TX HASH */}
+        <input
+          type="text"
+          placeholder="Enter Transaction Hash"
+          value={txHash}
+          onChange={(e) => setTxHash(e.target.value)}
+          className="input mt-3"
+        />
+
+        {/* BUTTON */}
+        <button
+          onClick={handleDeposit}
+          disabled={loading}
+          className="btn w-full mt-5"
+        >
+          {loading ? "Processing..." : "Submit Deposit"}
+        </button>
+
       </motion.div>
 
-      {/* 🔥 VIP INFO CARD */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="mt-5 p-4 rounded-2xl bg-gradient-to-br from-yellow-500/10 to-purple-500/10 border border-yellow-500/20 text-sm relative z-10"
-      >
-        <p className="font-semibold text-yellow-400 mb-2">⚠️ Important</p>
+      {/* ⚠️ INFO */}
+      <div className="card mt-5 text-sm">
+        <p className="text-yellow-400 font-semibold mb-2">⚠️ Important</p>
 
-        <ul className="space-y-1 text-gray-300">
+        <ul className="space-y-1 text-gray-400">
           <li>• Send only USDT (BEP20)</li>
           <li>• Minimum deposit: $10</li>
-          <li>• Confirmation within 1–2 minutes</li>
-          <li>• Wrong network = funds lost</li>
+          <li>• Confirmation: 1–2 minutes</li>
+          <li>• Wrong network = loss</li>
         </ul>
-      </motion.div>
+      </div>
 
     </div>
   );
