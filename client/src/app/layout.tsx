@@ -1,5 +1,13 @@
 import "./globals.css";
-import BottomNav from "./components/BottomNav";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "NovaCentral",
+  description: "Hybrid Crypto Earning Platform",
+  icons: {
+    icon: "/logo.png",
+  },
+};
 
 export default function RootLayout({
   children,
@@ -8,25 +16,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
-
-        {/* APP WRAPPER */}
-        <div className="max-w-md mx-auto min-h-screen px-3 pb-24">
-
-          {/* HEADER */}
-          <div className="flex justify-between items-center py-4">
-            <h1 className="text-lg font-bold">🚀 NovaCentral</h1>
-            <span className="text-sm text-gray-400">Dashboard</span>
-          </div>
-
-          {/* MAIN CONTENT */}
-          {children}
-
-        </div>
-
-        {/* BOTTOM NAV */}
-        <BottomNav />
-
+      <body className="bg-[#050507] text-white">
+        {children}
       </body>
     </html>
   );
