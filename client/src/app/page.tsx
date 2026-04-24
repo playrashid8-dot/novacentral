@@ -6,124 +6,97 @@ export default function Home() {
   const router = useRouter();
 
   return (
-    <div className="space-y-6 fade-in">
+    <div className="space-y-5">
 
-      {/* HEADER */}
-      <div className="flex justify-between items-center">
-        <h1 className="text-xl font-bold">🚀 NovaCentral</h1>
+      {/* 🔥 BALANCE CARD */}
+      <div className="glow-card">
 
-        <div className="flex gap-2">
+        <p className="text-gray-300 text-sm">Total Balance</p>
+
+        <h1 className="text-3xl font-bold mt-2">
+          $1,250.00
+        </h1>
+
+        <div className="flex gap-3 mt-4">
           <button
-            onClick={() => router.push("/login")}
-            className="btn-secondary px-3 py-1"
+            className="btn"
+            onClick={() => router.push("/deposit")}
           >
-            Login
+            Deposit
           </button>
 
-          <button
-            onClick={() => router.push("/signup")}
-            className="btn px-3 py-1"
-          >
-            Signup
+          <button className="btn-secondary">
+            Withdraw
           </button>
         </div>
+
       </div>
 
-      {/* HERO */}
-      <div className="balance-card">
-        <h2 className="text-2xl font-bold mb-2">
-          Hybrid Crypto Earning Platform
-        </h2>
-
-        <p className="text-sm opacity-90">
-          Earn daily profits with staking, referrals, and smart investment plans.
-        </p>
-
-        <button
-          onClick={() => router.push("/signup")}
-          className="mt-4 bg-black px-5 py-2 rounded-xl font-semibold"
-        >
-          Start Earning
-        </button>
-      </div>
-
-      {/* FEATURES */}
+      {/* ⚡ QUICK FEATURES */}
       <div className="grid grid-cols-2 gap-3">
 
         <div className="card">
-          <p>📈 Daily ROI</p>
-          <p className="subtext">1% - 2.5%</p>
+          <p className="title">📈 ROI</p>
+          <p className="sub">Daily Profit</p>
         </div>
 
         <div className="card">
-          <p>💰 Deposit</p>
-          <p className="subtext">Instant update</p>
+          <p className="title">💰 Deposit</p>
+          <p className="sub">Instant</p>
         </div>
 
         <div className="card">
-          <p>💸 Withdraw</p>
-          <p className="subtext">96h secure</p>
+          <p className="title">🏦 Withdraw</p>
+          <p className="sub">96h Delay</p>
         </div>
 
         <div className="card">
-          <p>🤝 Referral</p>
-          <p className="subtext">Team income</p>
+          <p className="title">🤝 Team</p>
+          <p className="sub">Referral Income</p>
         </div>
 
       </div>
 
-      {/* PLANS */}
-      <div>
-        <h2 className="title">🔥 Investment Plans</h2>
+      {/* 📊 INVESTMENT PLANS */}
+      <div className="space-y-3">
 
-        <div className="space-y-3">
+        <p className="title">Investment Plans</p>
 
-          <div className="card flex justify-between">
-            <div>
-              <p>Starter</p>
-              <p className="subtext">1% Daily</p>
-            </div>
-            <p>$50</p>
+        <div className="card flex justify-between items-center">
+          <div>
+            <p className="font-semibold">Starter Plan</p>
+            <p className="sub">1% Daily</p>
           </div>
-
-          <div className="card flex justify-between">
-            <div>
-              <p>Pro</p>
-              <p className="subtext">2% Daily</p>
-            </div>
-            <p>$200</p>
-          </div>
-
-          <div className="card flex justify-between">
-            <div>
-              <p>VIP</p>
-              <p className="subtext">2.5% Daily</p>
-            </div>
-            <p>$500</p>
-          </div>
-
+          <span>$50</span>
         </div>
+
+        <div className="card flex justify-between items-center">
+          <div>
+            <p className="font-semibold">Pro Plan</p>
+            <p className="sub">2% Daily</p>
+          </div>
+          <span>$200</span>
+        </div>
+
+        <div className="card flex justify-between items-center">
+          <div>
+            <p className="font-semibold">VIP Plan</p>
+            <p className="sub">2.5% Daily</p>
+          </div>
+          <span>$500</span>
+        </div>
+
       </div>
 
-      {/* BONUS */}
-      <div>
-        <h2 className="title">🎁 Rewards & Bonus</h2>
-
-        <div className="reward-box">
-          <p>✔ Referral Commission</p>
-          <p>✔ Team Income Levels</p>
-          <p>✔ VIP Salary Rewards</p>
-          <p>✔ Passive Daily Earnings</p>
-        </div>
+      {/* 🎁 BONUS SECTION */}
+      <div className="card">
+        <p className="title">🎁 Rewards & Bonus</p>
+        <ul className="text-sm text-gray-400 mt-2 space-y-1">
+          <li>✔ Referral Commission</li>
+          <li>✔ Team Income Levels</li>
+          <li>✔ VIP Salary Bonus</li>
+        </ul>
       </div>
-
-      {/* CTA */}
-      <button
-        onClick={() => router.push("/signup")}
-        className="btn"
-      >
-        Join Now 🚀
-      </button>
 
     </div>
   );

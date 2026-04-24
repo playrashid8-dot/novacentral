@@ -2,42 +2,47 @@
 @tailwind components;
 @tailwind utilities;
 
+/* BACKGROUND */
 body {
-  background: #0b0b0f;
+  background: radial-gradient(circle at top, #1a1a2e, #0b0b0f);
   color: white;
-  font-family: sans-serif;
+  font-family: 'Inter', sans-serif;
 }
 
-/* CARD */
+/* GLASS CARD */
 .card {
-  @apply bg-[#111827] p-5 rounded-2xl shadow-lg;
+  @apply backdrop-blur-xl bg-white/5 border border-white/10 p-5 rounded-2xl shadow-xl;
+}
+
+/* GLOW CARD */
+.glow-card {
+  @apply p-5 rounded-2xl bg-gradient-to-br from-purple-600/30 to-indigo-600/20 border border-purple-500/30;
+  box-shadow: 0 0 25px rgba(168, 85, 247, 0.3);
 }
 
 /* BUTTON */
 .btn {
-  @apply bg-gradient-to-r from-purple-600 to-indigo-600 p-3 rounded-xl w-full font-semibold;
+  @apply w-full p-3 rounded-xl font-semibold text-white;
+  background: linear-gradient(135deg, #7c3aed, #6366f1);
+  box-shadow: 0 0 15px rgba(124, 58, 237, 0.5);
+  transition: 0.3s;
 }
 
-/* SECOND BUTTON */
-.btn-secondary {
-  @apply bg-gray-700 p-3 rounded-xl w-full;
+.btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 25px rgba(124, 58, 237, 0.8);
 }
 
 /* INPUT */
 .input {
-  @apply w-full p-3 bg-[#1f2937] rounded-xl outline-none;
+  @apply w-full p-3 rounded-xl bg-white/5 border border-white/10 outline-none;
 }
 
 /* TEXT */
 .title {
-  @apply text-lg font-semibold mb-2;
+  @apply text-xl font-bold;
 }
 
-.subtext {
+.sub {
   @apply text-gray-400 text-sm;
-}
-
-/* BALANCE CARD */
-.balance-card {
-  @apply bg-gradient-to-r from-purple-600 to-indigo-600 p-6 rounded-2xl shadow-lg;
 }
