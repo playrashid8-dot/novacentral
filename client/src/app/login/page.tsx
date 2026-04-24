@@ -1,61 +1,63 @@
 "use client";
+
 import { useState } from "react";
+import API from "../../lib/api";
 import { useRouter } from "next/navigation";
 
 export default function Login() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
   const handleLogin = async () => {
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/auth/login`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
-        }
-      );
+      const res = await API.post("/auth/login", {
+        username,
+        password,
+      });
 
-      const data = await res.json();
+      localStorage.setItem("token", res.data.token);
+      router.push("/dashboard");
 
-      if (res.ok) {
-        localStorage.setItem("token", data.token);
-        router.push("/dashboard");
-      } else {
-        alert(data.message);
-      }
-    } catch (err) {
-      alert("Server error");
+    } catch {
+      alert("Login failed");
     }
   };
 
   return (
-    <div className="flex h-screen items-center justify-center bg-black text-white">
-      <div className="bg-gray-900 p-8 rounded-xl w-80">
-        <h2 className="text-xl mb-4">Login</h2>
+    <div className="space-y-5">
+
+      <h1 className="text-2xl font-bold text-center">Login</h1>
+
+      <div className="card space-y-3">
 
         <input
-          className="w-full p-2 mb-3 bg-gray-800 rounded"
-          placeholder="Email"
-          onChange={(e) => setEmail(e.target.value)}
+          className="input"
+          placeholder="Username"
+          onChange={(e) => setUsername(e.target.value)}
         />
 
         <input
+          className="input"
           type="password"
-          className="w-full p-2 mb-3 bg-gray-800 rounded"
           placeholder="Password"
           onChange={(e) => setPassword(e.target.value)}
         />
 
-        <button
-          onClick={handleLogin}
-          className="w-full bg-green-500 p-2 rounded"
-        >
+        <button onClick={handleLogin} className="btn">
           Login
         </button>
+
+        <p
+          onClick={() => alert("Forgot password system later")}
+          className="text-sm text-center text-gray-400 cursor-pointer"
+        >
+          Forgot Password?
+        </p>
+
       </div>
+
     </div>
   );
 }

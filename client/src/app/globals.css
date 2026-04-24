@@ -5,16 +5,39 @@
 body {
   background: #0b0b0f;
   color: white;
+  font-family: sans-serif;
 }
 
+/* CARD */
 .card {
-  @apply bg-[#111827] p-4 rounded-2xl shadow;
+  @apply bg-[#111827] p-5 rounded-2xl shadow-lg;
 }
 
+/* BUTTON */
 .btn {
-  @apply bg-gradient-to-r from-purple-500 to-indigo-500 p-3 rounded-xl w-full;
+  @apply bg-gradient-to-r from-purple-600 to-indigo-600 p-3 rounded-xl w-full font-semibold;
 }
 
+/* SECOND BUTTON */
+.btn-secondary {
+  @apply bg-gray-700 p-3 rounded-xl w-full;
+}
+
+/* INPUT */
 .input {
-  @apply w-full p-3 mb-3 bg-[#1f2937] rounded-xl;
+  @apply w-full p-3 bg-[#1f2937] rounded-xl outline-none;
+}
+
+/* TEXT */
+.title {
+  @apply text-lg font-semibold mb-2;
+}
+
+.subtext {
+  @apply text-gray-400 text-sm;
+}
+
+/* BALANCE CARD */
+.balance-card {
+  @apply bg-gradient-to-r from-purple-600 to-indigo-600 p-6 rounded-2xl shadow-lg;
 }

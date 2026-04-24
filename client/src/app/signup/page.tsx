@@ -1,57 +1,74 @@
 "use client";
+
 import { useState } from "react";
+import API from "../../lib/api";
 import { useRouter } from "next/navigation";
 
 export default function Signup() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+
+  const [form, setForm] = useState({
+    username: "",
+    email: "",
+    phone: "",
+    password: "",
+    referral: "",
+  });
 
   const handleSignup = async () => {
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/auth/register`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      }
-    );
-
-    const data = await res.json();
-
-    if (res.ok) {
+    try {
+      await API.post("/auth/signup", form);
       alert("Signup success");
       router.push("/login");
-    } else {
-      alert(data.message);
+    } catch {
+      alert("Signup failed");
     }
   };
 
   return (
-    <div className="flex h-screen items-center justify-center bg-black text-white">
-      <div className="bg-gray-900 p-8 rounded-xl w-80">
-        <h2 className="text-xl mb-4">Signup</h2>
+    <div className="space-y-5">
+
+      <h1 className="text-2xl font-bold text-center">Create Account</h1>
+
+      <div className="card space-y-3">
 
         <input
-          className="w-full p-2 mb-3 bg-gray-800 rounded"
+          className="input"
+          placeholder="Username"
+          onChange={(e) => setForm({ ...form, username: e.target.value })}
+        />
+
+        <input
+          className="input"
           placeholder="Email"
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => setForm({ ...form, email: e.target.value })}
         />
 
         <input
-          type="password"
-          className="w-full p-2 mb-3 bg-gray-800 rounded"
-          placeholder="Password"
-          onChange={(e) => setPassword(e.target.value)}
+          className="input"
+          placeholder="Phone Number"
+          onChange={(e) => setForm({ ...form, phone: e.target.value })}
         />
 
-        <button
-          onClick={handleSignup}
-          className="w-full bg-blue-500 p-2 rounded"
-        >
+        <input
+          className="input"
+          type="password"
+          placeholder="Password"
+          onChange={(e) => setForm({ ...form, password: e.target.value })}
+        />
+
+        <input
+          className="input"
+          placeholder="Referral Code (optional)"
+          onChange={(e) => setForm({ ...form, referral: e.target.value })}
+        />
+
+        <button onClick={handleSignup} className="btn">
           Signup
         </button>
+
       </div>
+
     </div>
   );
 }
