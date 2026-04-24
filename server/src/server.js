@@ -20,7 +20,7 @@ app.use(express.json());
 // ROUTES
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
-app.use("/api/deposit", depositRoutes); // 🔥 NEW
+app.use("/api/deposit", depositRoutes);
 
 // TEST ROUTE
 app.get("/", (req, res) => {
