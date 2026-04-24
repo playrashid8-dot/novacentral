@@ -1,21 +1,30 @@
 import axios from "axios";
 
+// 🔗 BASE URL SAFE
+const BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:5000/api";
+
 // 🔗 API INSTANCE
 const API = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL, // Railway backend
+  baseURL: BASE_URL,
   timeout: 10000,
 });
 
-// 🔐 REQUEST INTERCEPTOR (TOKEN)
+// 🔐 REQUEST INTERCEPTOR
 API.interceptors.request.use(
   (req) => {
     if (typeof window !== "undefined") {
       const token = localStorage.getItem("token");
 
       if (token) {
-        req.headers.Authorization = `Bearer ${token}`; // ✅ FIXED
+        req.headers = {
+          ...req.headers,
+          Authorization: `Bearer ${token}`,
+        };
       }
     }
+
     return req;
   },
   (error) => Promise.reject(error)
@@ -25,17 +34,28 @@ API.interceptors.request.use(
 API.interceptors.response.use(
   (res) => res,
   (error) => {
+    // ❌ NO RESPONSE (SERVER DOWN / NETWORK)
     if (!error.response) {
-      alert("Network error ❌ Backend not reachable");
+      console.error("Network Error:", error.message);
+      alert("Server not reachable ❌");
       return Promise.reject(error);
     }
 
-    if (error.response.status === 401) {
-      localStorage.clear();
-      window.location.href = "/login";
+    const status = error.response.status;
+
+    // 🔐 UNAUTHORIZED
+    if (status === 401) {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+
+        window.location.href = "/login";
+      }
     }
 
-    if (error.response.status >= 500) {
+    // 🔥 SERVER ERROR
+    if (status >= 500) {
+      console.error("Server Error:", error.response.data);
       alert("Server error ❌");
     }
 

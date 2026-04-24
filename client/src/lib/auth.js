@@ -2,16 +2,23 @@
 export const saveUser = (data) => {
   if (typeof window === "undefined") return;
 
+  if (!data?.token) return;
+
   localStorage.setItem("token", data.token);
-  localStorage.setItem("user", JSON.stringify(data.user));
+  localStorage.setItem("user", JSON.stringify(data.user || {}));
 };
 
-// 👤 GET USER
+// 👤 GET USER (SAFE)
 export const getUser = () => {
   if (typeof window === "undefined") return null;
 
-  const user = localStorage.getItem("user");
-  return user ? JSON.parse(user) : null;
+  try {
+    const user = localStorage.getItem("user");
+    return user ? JSON.parse(user) : null;
+  } catch (err) {
+    console.error("User parse error", err);
+    return null;
+  }
 };
 
 // 🔑 GET TOKEN
@@ -21,28 +28,44 @@ export const getToken = () => {
   return localStorage.getItem("token");
 };
 
-// 🚪 LOGOUT
+// 🚪 LOGOUT (SAFE)
 export const logout = () => {
   if (typeof window === "undefined") return;
 
-  localStorage.removeItem("token");
-  localStorage.removeItem("user");
+  localStorage.clear();
 
-  window.location.href = "/login";
+  window.location.replace("/login"); // ✅ better than href
 };
 
-// 🔒 CHECK AUTH (use in pages)
+// 🔒 CHECK AUTH
 export const isAuth = () => {
   if (typeof window === "undefined") return false;
 
-  return !!localStorage.getItem("token");
+  const token = localStorage.getItem("token");
+
+  if (!token) return false;
+
+  // OPTIONAL: basic expiry check (JWT decode lite)
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    if (payload.exp * 1000 < Date.now()) {
+      logout();
+      return false;
+    }
+  } catch (err) {
+    return false;
+  }
+
+  return true;
 };
 
-// 🛡️ PROTECT ROUTE HELPER
+// 🛡️ PROTECT ROUTE (IMPROVED)
 export const protectRoute = (router) => {
+  if (typeof window === "undefined") return;
+
   const token = getToken();
 
   if (!token) {
-    router.push("/login");
+    router.replace("/login"); // ✅ better UX
   }
 };

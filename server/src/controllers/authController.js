@@ -2,6 +2,11 @@ import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
+// 🔥 GENERATE REFERRAL CODE
+const generateCode = () => {
+  return "NC" + Math.random().toString(36).substring(2, 8).toUpperCase();
+};
+
 // 🔥 REGISTER / SIGNUP
 export const register = async (req, res) => {
   try {
@@ -46,11 +51,14 @@ export const register = async (req, res) => {
       expiresIn: "7d",
     });
 
-    // ✅ RESPONSE (IMPORTANT)
+    // ✅ CLEAN USER (NO PASSWORD)
+    const safeUser = await User.findById(user._id).select("-password");
+
+    // ✅ RESPONSE
     res.json({
       success: true,
       token,
-      user,
+      user: safeUser,
     });
 
   } catch (err) {
@@ -83,19 +91,17 @@ export const login = async (req, res) => {
       expiresIn: "7d",
     });
 
+    // ✅ CLEAN USER
+    const safeUser = await User.findById(user._id).select("-password");
+
     // ✅ RESPONSE
     res.json({
       success: true,
       token,
-      user,
+      user: safeUser,
     });
 
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-};
-
-// 🔥 GENERATE REFERRAL CODE
-const generateCode = () => {
-  return "NC" + Math.random().toString(36).substring(2, 8).toUpperCase();
 };
