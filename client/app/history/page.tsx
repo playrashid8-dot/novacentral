@@ -1,20 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import API from "../../lib/api";
-import { getUser } from "../../lib/auth";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import API from "../../lib/api";
+import { getUser, logout } from "../../lib/auth";
+import BottomNav from "../../components/BottomNav";
 
 export default function History() {
   const router = useRouter();
 
-  const [data, setData]: any = useState([]);
+  const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const u = getUser();
-    if (!u) return router.replace("/login");
+    if (!u) {
+      router.replace("/login");
+      return;
+    }
 
     loadHistory();
   }, []);
@@ -22,9 +25,9 @@ export default function History() {
   const loadHistory = async () => {
     try {
       const res = await API.get("/history");
-      setData(res.data);
+      setData(res.data.history || []);
     } catch {
-      alert("Failed to load history");
+      logout();
     } finally {
       setLoading(false);
     }
@@ -32,58 +35,98 @@ export default function History() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex justify-center items-center text-white">
+      <div className="min-h-screen flex items-center justify-center text-white">
         Loading...
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 text-white bg-[#040406]">
+    <div className="min-h-screen max-w-[420px] mx-auto px-4 pb-28 text-white">
 
-      <h1 className="text-xl font-bold mb-5 text-center">
-        Transaction History 📜
-      </h1>
+      {/* HEADER */}
+      <div className="flex justify-between items-center pt-5">
+        <h1 className="text-xl font-bold text-purple-400">📜 History</h1>
 
-      <div className="space-y-3">
+        <button
+          onClick={() => router.push("/dashboard")}
+          className="text-sm text-gray-400"
+        >
+          Back
+        </button>
+      </div>
+
+      {/* LIST */}
+      <div className="mt-5 space-y-3">
 
         {data.length === 0 && (
-          <p className="text-center text-gray-400 text-sm">
+          <p className="text-center text-gray-500 mt-10">
             No transactions yet
           </p>
         )}
 
-        {data.map((tx: any, i: number) => (
-          <motion.div
+        {data.map((item, i) => (
+          <div
             key={i}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="bg-white/5 p-4 rounded-xl border border-white/10"
+            className="bg-white/5 border border-white/10 p-4 rounded-xl"
           >
+            <div className="flex justify-between items-center">
 
-            <div className="flex justify-between">
-              <p className="text-sm capitalize">
-                {tx.type}
-              </p>
+              {/* TYPE */}
+              <span className={`text-sm font-semibold ${getTypeColor(item.type)}`}>
+                {item.type.toUpperCase()}
+              </span>
 
-              <p className="text-xs text-gray-400">
-                {new Date(tx.createdAt).toLocaleDateString()}
-              </p>
+              {/* STATUS */}
+              <span className={`text-xs ${getStatusColor(item.status)}`}>
+                {item.status}
+              </span>
             </div>
 
-            <h3 className="text-lg font-bold mt-1 text-green-400">
-              ${tx.amount}
-            </h3>
-
-            <p className="text-xs text-gray-400 mt-1">
-              Status: {tx.status}
+            {/* AMOUNT */}
+            <p className="text-lg font-bold mt-1 text-green-400">
+              ${Number(item.amount).toFixed(2)}
             </p>
 
-          </motion.div>
+            {/* DATE */}
+            <p className="text-xs text-gray-500 mt-1">
+              {new Date(item.createdAt).toLocaleString()}
+            </p>
+          </div>
         ))}
 
       </div>
 
+      <BottomNav />
     </div>
   );
+}
+
+/* 🎨 TYPE COLOR */
+function getTypeColor(type: string) {
+  switch (type) {
+    case "deposit":
+      return "text-green-400";
+    case "withdraw":
+      return "text-red-400";
+    case "investment":
+      return "text-blue-400";
+    default:
+      return "text-gray-400";
+  }
+}
+
+/* 🎨 STATUS COLOR */
+function getStatusColor(status: string) {
+  switch (status) {
+    case "approved":
+    case "success":
+      return "text-green-400";
+    case "pending":
+      return "text-yellow-400";
+    case "rejected":
+      return "text-red-400";
+    default:
+      return "text-gray-400";
+  }
 }

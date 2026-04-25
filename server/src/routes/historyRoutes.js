@@ -1,18 +1,23 @@
 import express from "express";
-import Transaction from "../models/Transaction.js";
 import auth from "../middleware/auth.js";
+import Transaction from "../models/Transaction.js";
 
 const router = express.Router();
 
-// ✅ GET USER HISTORY
+/* ==============================
+   📜 GET USER HISTORY
+============================== */
 router.get("/", auth, async (req, res) => {
   try {
-    const data = await Transaction.find({ user: req.user.id })
+    const history = await Transaction.find({ user: req.user.id })
       .sort({ createdAt: -1 });
 
-    res.json(data);
+    res.json({
+      success: true,
+      history,
+    });
   } catch (err) {
-    console.error(err);
+    console.error("HISTORY ERROR:", err.message);
     res.status(500).json({ msg: "Server error" });
   }
 });

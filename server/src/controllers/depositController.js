@@ -10,11 +10,12 @@ export const createDeposit = async (req, res) => {
   try {
     let { amount, txHash } = req.body;
 
+    // 🔧 NORMALIZE
     amount = Number(amount);
     txHash = txHash?.trim().toLowerCase();
 
-    // ✅ VALIDATION
-    if (!amount || amount < 10) {
+    // ✅ VALIDATION (STRONG)
+    if (!amount || isNaN(amount) || amount < 10) {
       return res.status(400).json({ msg: "Minimum deposit is $10" });
     }
 
@@ -56,7 +57,7 @@ export const createDeposit = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("CREATE DEPOSIT ERROR:", err);
+    console.error("CREATE DEPOSIT ERROR:", err.message);
     res.status(500).json({ msg: "Server error" });
   }
 };
@@ -103,11 +104,11 @@ export const approveDeposit = async (req, res) => {
     // 🔥 REFERRAL DISTRIBUTION
     await distributeReferralIncome(user._id, deposit.amount);
 
-    // 🔥 UPDATE TRANSACTION
+    // 🔥 UPDATE TRANSACTION (SAFE)
     await Transaction.findOneAndUpdate(
       { refId: deposit._id },
       { status: "approved" },
-      { new: true }
+      { new: true, upsert: true } // ✅ IMPORTANT FIX
     );
 
     res.json({
@@ -116,7 +117,7 @@ export const approveDeposit = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("APPROVE ERROR:", err);
+    console.error("APPROVE ERROR:", err.message);
     res.status(500).json({ msg: "Server error" });
   }
 };
@@ -137,11 +138,11 @@ export const rejectDeposit = async (req, res) => {
       return res.status(400).json({ msg: "Already processed or not found" });
     }
 
-    // 🔥 UPDATE TRANSACTION
+    // 🔥 UPDATE TRANSACTION (SAFE)
     await Transaction.findOneAndUpdate(
       { refId: deposit._id },
       { status: "rejected" },
-      { new: true }
+      { new: true, upsert: true } // ✅ IMPORTANT FIX
     );
 
     res.json({
@@ -150,7 +151,7 @@ export const rejectDeposit = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("REJECT ERROR:", err);
+    console.error("REJECT ERROR:", err.message);
     res.status(500).json({ msg: "Server error" });
   }
 };
@@ -170,7 +171,7 @@ export const getMyDeposits = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("GET DEPOSITS ERROR:", err);
+    console.error("GET DEPOSITS ERROR:", err.message);
     res.status(500).json({ msg: "Server error" });
   }
 };
