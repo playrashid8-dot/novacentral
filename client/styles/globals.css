@@ -1,33 +1,192 @@
+
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* BODY */
+
+/* ============================= */
+/* 🌌 GLOBAL RESET */
+/* ============================= */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
 body {
-  @apply bg-black text-white;
+  background: #040406;
+  color: white;
+  font-family: system-ui, sans-serif;
+  overflow-x: hidden;
 }
 
-/* BG */
+
+/* ============================= */
+/* 🌠 PREMIUM BACKGROUND */
+/* ============================= */
 .glow-bg {
-  background: radial-gradient(circle at top, #020617, #000);
+  position: relative;
+  background: radial-gradient(circle at top, #0b0b12, #040406);
 }
 
-/* CARD */
-.card {
-  @apply bg-[#0b0b0f] p-4 rounded-xl border border-white/10;
+.glow-bg::before {
+  content: "";
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  background: #7c3aed;
+  opacity: 0.15;
+  filter: blur(160px);
+  top: -150px;
+  left: -150px;
+  z-index: 0;
 }
 
-/* BUTTON */
-.btn {
-  @apply px-4 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-cyan-500;
+.glow-bg::after {
+  content: "";
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  background: #4f46e5;
+  opacity: 0.15;
+  filter: blur(160px);
+  bottom: -150px;
+  right: -150px;
+  z-index: 0;
 }
 
-/* INPUT */
-.input {
-  @apply w-full px-3 py-2 rounded-xl bg-[#111] border border-white/10;
+
+/* ============================= */
+/* ✨ GRID OVERLAY */
+/* ============================= */
+.grid-bg {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(
+    rgba(255, 255, 255, 0.06) 1px,
+    transparent 1px
+  );
+  background-size: 26px 26px;
+  pointer-events: none;
 }
 
-/* TEXT */
+
+/* ============================= */
+/* 💎 GLASS CARD */
+/* ============================= */
+.glow-card {
+  background: rgba(20, 20, 25, 0.6);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 0 25px rgba(139, 92, 246, 0.2);
+  transition: all 0.3s ease;
+}
+
+.glow-card:hover {
+  border-color: rgba(168, 85, 247, 0.4);
+  box-shadow: 0 0 30px rgba(139, 92, 246, 0.4);
+  transform: translateY(-2px);
+}
+
+
+/* ============================= */
+/* 🔥 TEXT GLOW */
+/* ============================= */
 .text-glow {
-  @apply text-purple-400;
+  text-shadow: 0 0 12px rgba(139, 92, 246, 0.6);
+}
+
+
+/* ============================= */
+/* 🎯 BUTTON PREMIUM */
+/* ============================= */
+.btn-primary {
+  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-weight: 600;
+  transition: 0.3s;
+}
+
+.btn-primary:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.5);
+}
+
+
+/* ============================= */
+/* 📱 BOTTOM NAV */
+/* ============================= */
+.bottom-nav {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 95%;
+  max-width: 420px;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  display: flex;
+  justify-content: space-around;
+  padding: 12px;
+  z-index: 50;
+}
+
+
+/* ============================= */
+/* ⚡ SCROLLBAR */
+/* ============================= */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #040406;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(#7c3aed, #4f46e5);
+  border-radius: 10px;
+}
+
+
+/* ============================= */
+/* 🎬 ANIMATIONS */
+/* ============================= */
+.fade-in {
+  animation: fadeIn 0.6s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+
+/* ============================= */
+/* 💡 UTILITIES */
+/* ============================= */
+.card {
+  @apply glow-card;
+}
+
+.center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }

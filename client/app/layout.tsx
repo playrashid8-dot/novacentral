@@ -15,11 +15,22 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>
-        <div className="min-h-screen">
-          {children}
+    <html lang="en" data-scroll-behavior="smooth">
+      <body className={`${inter.className} bg-[#040406] text-white`}>
+
+        {/* 🔥 GLOBAL APP WRAPPER */}
+        <div className="min-h-screen glow-bg relative overflow-x-hidden">
+
+          {/* 🌌 GRID BACKGROUND */}
+          <div className="grid-bg" />
+
+          {/* APP */}
+          <div className="relative z-10">
+            {children}
+          </div>
+
         </div>
+
       </body>
     </html>
   );
