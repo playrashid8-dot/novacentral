@@ -1,21 +1,34 @@
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
-const TransactionSchema = new mongoose.Schema(
+const transactionSchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
+
     type: {
-      type: String, // deposit / withdraw / investment
+      type: String,
+      enum: ["deposit", "withdraw", "investment"],
+      required: true,
     },
-    amount: Number,
+
+    amount: {
+      type: Number,
+      required: true,
+    },
+
     status: {
-      type: String, // pending / approved / rejected
-      default: "pending",
+      type: String,
+      enum: ["pending", "success", "failed"],
+      default: "success",
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-module.exports = mongoose.model("Transaction", TransactionSchema);
+const Transaction = mongoose.model("Transaction", transactionSchema);
+
+export default Transaction; // 🔥 IMPORTANT LINE

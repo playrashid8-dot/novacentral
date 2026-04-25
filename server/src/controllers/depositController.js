@@ -10,7 +10,7 @@ export const createDeposit = async (req, res) => {
   try {
     let { amount, txHash } = req.body;
 
-    // 🔧 NORMALIZE
+    amount = Number(amount);
     txHash = txHash?.trim().toLowerCase();
 
     // ✅ VALIDATION
@@ -18,11 +18,11 @@ export const createDeposit = async (req, res) => {
       return res.status(400).json({ msg: "Minimum deposit is $10" });
     }
 
-    if (!txHash) {
-      return res.status(400).json({ msg: "Transaction hash required" });
+    if (!txHash || txHash.length < 10) {
+      return res.status(400).json({ msg: "Invalid transaction hash" });
     }
 
-    // ❌ DUPLICATE TX CHECK
+    // ❌ DUPLICATE TX
     const existing = await Deposit.findOne({ txHash });
     if (existing) {
       return res.status(400).json({ msg: "Transaction already used" });
@@ -36,14 +36,18 @@ export const createDeposit = async (req, res) => {
       status: "pending",
     });
 
-    // 🔥 CREATE TRANSACTION (HISTORY)
-    await Transaction.create({
-      user: req.user.id,
-      type: "deposit",
-      amount,
-      status: "pending",
-      refId: deposit._id, // 🔥 best practice
-    });
+    // 🔥 CREATE TRANSACTION (SAFE - NO DUPLICATE)
+    await Transaction.findOneAndUpdate(
+      { refId: deposit._id },
+      {
+        user: req.user.id,
+        type: "deposit",
+        amount,
+        status: "pending",
+        refId: deposit._id,
+      },
+      { upsert: true, new: true }
+    );
 
     res.json({
       success: true,
@@ -52,7 +56,7 @@ export const createDeposit = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("CREATE DEPOSIT ERROR:", err.message);
+    console.error("CREATE DEPOSIT ERROR:", err);
     res.status(500).json({ msg: "Server error" });
   }
 };
@@ -63,7 +67,7 @@ export const createDeposit = async (req, res) => {
 //
 export const approveDeposit = async (req, res) => {
   try {
-    // 🔒 ATOMIC UPDATE
+    // 🔒 ATOMIC UPDATE (avoid double approve)
     const deposit = await Deposit.findOneAndUpdate(
       { _id: req.params.id, status: "pending" },
       { status: "approved", approvedAt: new Date() },
@@ -74,7 +78,7 @@ export const approveDeposit = async (req, res) => {
       return res.status(400).json({ msg: "Already processed or not found" });
     }
 
-    // 🔍 USER FIND
+    // 🔍 USER
     const user = await User.findById(deposit.userId);
 
     if (!user) {
@@ -85,7 +89,7 @@ export const approveDeposit = async (req, res) => {
       return res.status(403).json({ msg: "User is blocked" });
     }
 
-    // 🔥 BALANCE UPDATE
+    // 🔥 SAFE BALANCE UPDATE
     await User.updateOne(
       { _id: user._id },
       {
@@ -96,13 +100,14 @@ export const approveDeposit = async (req, res) => {
       }
     );
 
-    // 🔥 REFERRAL
+    // 🔥 REFERRAL DISTRIBUTION
     await distributeReferralIncome(user._id, deposit.amount);
 
-    // 🔥 UPDATE TRANSACTION STATUS
+    // 🔥 UPDATE TRANSACTION
     await Transaction.findOneAndUpdate(
       { refId: deposit._id },
-      { status: "approved" }
+      { status: "approved" },
+      { new: true }
     );
 
     res.json({
@@ -111,7 +116,7 @@ export const approveDeposit = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("APPROVE ERROR:", err.message);
+    console.error("APPROVE ERROR:", err);
     res.status(500).json({ msg: "Server error" });
   }
 };
@@ -135,7 +140,8 @@ export const rejectDeposit = async (req, res) => {
     // 🔥 UPDATE TRANSACTION
     await Transaction.findOneAndUpdate(
       { refId: deposit._id },
-      { status: "rejected" }
+      { status: "rejected" },
+      { new: true }
     );
 
     res.json({
@@ -144,7 +150,7 @@ export const rejectDeposit = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("REJECT ERROR:", err.message);
+    console.error("REJECT ERROR:", err);
     res.status(500).json({ msg: "Server error" });
   }
 };
@@ -164,7 +170,7 @@ export const getMyDeposits = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("GET DEPOSITS ERROR:", err.message);
+    console.error("GET DEPOSITS ERROR:", err);
     res.status(500).json({ msg: "Server error" });
   }
 };
