@@ -133,7 +133,7 @@ const userSchema = new mongoose.Schema(
 );
 
 //
-// 🔥 SAFE RESPONSE (password hide)
+// 🔥 SAFE RESPONSE
 //
 userSchema.methods.toJSON = function () {
   const obj = this.toObject();
@@ -142,7 +142,7 @@ userSchema.methods.toJSON = function () {
 };
 
 //
-// 🔥 INDEXES (OPTIMIZED ONLY)
+// 🔥 INDEXES (NO DUPLICATE)
 //
 userSchema.index({ email: 1 });
 userSchema.index({ username: 1 });

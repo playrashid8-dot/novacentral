@@ -7,7 +7,7 @@ const investmentSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true,
+      index: true, // ✅ keep (used in compound index)
     },
 
     // 💰 AMOUNT
@@ -47,19 +47,20 @@ const investmentSchema = new mongoose.Schema(
     endDate: {
       type: Date,
       required: true,
-      index: true,
+      // ❌ removed index: true (duplicate fix)
     },
 
-    // ⏱ LAST ROI CLAIM (IMPORTANT)
+    // ⏱ LAST ROI CLAIM
     lastClaim: {
       type: Date,
-      default: null, // 🔥 FIX (important)
+      default: null,
     },
 
     // 📊 DAYS COUNT (ANTI-BUG)
     daysClaimed: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
     // 🔥 STATUS
@@ -74,17 +75,16 @@ const investmentSchema = new mongoose.Schema(
 );
 
 //
-// 🔥 INDEXES (PERFORMANCE)
+// 🔥 INDEXES (CLEAN)
 //
-investmentSchema.index({ userId: 1, status: 1 });
-investmentSchema.index({ endDate: 1 });
+investmentSchema.index({ userId: 1, status: 1 }); // user queries
+investmentSchema.index({ endDate: 1 }); // expiry check
 
 //
 // 🔥 SAFE JSON
 //
 investmentSchema.methods.toJSON = function () {
-  const obj = this.toObject();
-  return obj;
+  return this.toObject();
 };
 
 export default mongoose.model("Investment", investmentSchema);

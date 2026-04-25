@@ -17,7 +17,7 @@ export default function Login() {
   const handleLogin = async () => {
     try {
       if (!form.email || !form.password) {
-        return alert("Enter email & password");
+        return alert("Enter Username & password");
       }
 
       setLoading(true);
@@ -46,7 +46,7 @@ export default function Login() {
 
         <h2 className="text-xl mb-4">Login</h2>
 
-        <input placeholder="Email"
+        <input placeholder="Username"
           onChange={(e)=>setForm({...form, email:e.target.value})}
           className="input" />
 
