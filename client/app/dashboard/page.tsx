@@ -13,35 +13,26 @@ export default function Dashboard() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [displayBalance, setDisplayBalance] = useState(0);
-  const [notify, setNotify] = useState("");
   const [cooldown, setCooldown] = useState(0);
 
-  /* ==============================
-     🔐 AUTH CHECK
-  ============================== */
+  /* 🔐 AUTH */
   useEffect(() => {
     const u = getUser();
     if (!u) {
       router.replace("/login");
       return;
     }
-
     loadUser();
   }, []);
 
-  /* ==============================
-     📡 LOAD USER (REAL API)
-  ============================== */
+  /* 📡 LOAD USER */
   const loadUser = async () => {
     try {
       const res = await API.get("/user/me");
-
       const data = res.data.user || res.data;
 
       setUser(data);
       setDisplayBalance(data.balance || 0);
-
-      // 🔥 sync localStorage
       updateUser(data);
 
     } catch {
@@ -51,9 +42,7 @@ export default function Dashboard() {
     }
   };
 
-  /* ==============================
-     💰 LIVE BALANCE EFFECT
-  ============================== */
+  /* 💰 LIVE BALANCE */
   useEffect(() => {
     if (!user?.balance) return;
 
@@ -67,29 +56,7 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [user]);
 
-  /* ==============================
-     🔔 NOTIFICATIONS
-  ============================== */
-  useEffect(() => {
-    const messages = [
-      "💰 Deposit received",
-      "📈 ROI added",
-      "🎉 Team bonus earned",
-    ];
-
-    const interval = setInterval(() => {
-      const msg = messages[Math.floor(Math.random() * messages.length)];
-      setNotify(msg);
-
-      setTimeout(() => setNotify(""), 3000);
-    }, 8000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  /* ==============================
-     ⏱️ WITHDRAW COOLDOWN
-  ============================== */
+  /* ⏱️ COOLDOWN */
   useEffect(() => {
     const saved = localStorage.getItem("withdrawTime");
 
@@ -118,9 +85,7 @@ export default function Dashboard() {
     return `${h}h ${m}m ${sec}s`;
   };
 
-  /* ==============================
-     ⏳ LOADER
-  ============================== */
+  /* ⏳ LOADER */
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#040406]">
@@ -135,13 +100,6 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen max-w-[420px] mx-auto px-4 pb-28 text-white">
-
-      {/* 🔔 TOAST */}
-      {notify && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 bg-purple-600 px-4 py-2 rounded-xl z-50 shadow-lg">
-          {notify}
-        </div>
-      )}
 
       {/* HEADER */}
       <div className="flex justify-between items-center pt-5">
@@ -191,12 +149,11 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* ACTION BUTTONS */}
-      <div className="grid grid-cols-4 gap-3 mt-6">
+      {/* 🔥 ACTION BUTTONS (FIXED) */}
+      <div className="grid grid-cols-3 gap-3 mt-6">
         <Action label="Deposit" icon="⬇️" onClick={() => router.push("/deposit")} />
         <Action label="Withdraw" icon="⬆️" onClick={() => router.push("/withdrawal")} />
         <Action label="Invest" icon="📊" onClick={() => router.push("/investment")} />
-        <Action label="Team" icon="👥" onClick={() => router.push("/referral")} />
       </div>
 
       {/* STATS */}
@@ -207,15 +164,13 @@ export default function Dashboard() {
         <Stat title="Withdrawn" value={user?.totalWithdraw} />
       </div>
 
-      {/* 🔥 FIXED NAV */}
+      {/* 🔻 BOTTOM NAV (UPDATED) */}
       <BottomNav />
     </div>
   );
 }
 
-/* ==============================
-   🔘 ACTION BUTTON
-============================== */
+/* 🔘 ACTION */
 function Action({ label, icon, onClick }: any) {
   return (
     <button
@@ -228,9 +183,7 @@ function Action({ label, icon, onClick }: any) {
   );
 }
 
-/* ==============================
-   📊 STAT CARD
-============================== */
+/* 📊 STAT */
 function Stat({ title, value }: any) {
   return (
     <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
@@ -242,18 +195,15 @@ function Stat({ title, value }: any) {
   );
 }
 
-/* ==============================
-   📱 BOTTOM NAV (FIXED)
-============================== */
+/* 📱 BOTTOM NAV FINAL */
 function BottomNav() {
   const router = useRouter();
   const path = usePathname();
 
   const nav = [
     { name: "Home", path: "/dashboard" },
-    { name: "Invest", path: "/investment" },
     { name: "Team", path: "/referral" },
-    { name: "Wallet", path: "/deposit" },
+    { name: "History", path: "/history" },
     { name: "Profile", path: "/profile" },
   ];
 
@@ -264,10 +214,10 @@ function BottomNav() {
         <button
           key={item.name}
           onClick={() => router.push(item.path)}
-          className={`text-sm transition ${
+          className={`text-sm ${
             path === item.path
               ? "text-purple-400"
-              : "text-gray-400 hover:text-white"
+              : "text-gray-400"
           }`}
         >
           {item.name}

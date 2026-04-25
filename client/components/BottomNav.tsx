@@ -9,15 +9,15 @@ export default function BottomNav() {
 
   const nav = [
     { name: "Home", path: "/dashboard", icon: "🏠" },
-    { name: "Invest", path: "/investment", icon: "📊" },
-    { name: "Referral", path: "/referral", icon: "👥" },
+    { name: "Team", path: "/referral", icon: "👥" },
+    { name: "History", path: "/history", icon: "📜" },
     { name: "Profile", path: "/profile", icon: "👤" },
   ];
 
   return (
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[95%] max-w-[420px] z-50">
 
-      <div className="bg-black/80 backdrop-blur-xl border border-white/10 rounded-2xl flex justify-around py-3 shadow-lg">
+      <div className="bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl flex justify-around py-3 shadow-xl">
 
         {nav.map((item) => {
           const active = path === item.path;
@@ -29,7 +29,7 @@ export default function BottomNav() {
               className="relative flex flex-col items-center text-xs"
             >
 
-              {/* ACTIVE GLOW */}
+              {/* 🔥 ACTIVE GLOW */}
               {active && (
                 <motion.div
                   layoutId="nav-glow"
@@ -40,6 +40,7 @@ export default function BottomNav() {
               {/* ICON */}
               <motion.div
                 animate={{ scale: active ? 1.2 : 1 }}
+                transition={{ duration: 0.2 }}
                 className={active ? "text-purple-400" : "text-gray-400"}
               >
                 {item.icon}
@@ -47,11 +48,9 @@ export default function BottomNav() {
 
               {/* LABEL */}
               <span
-                className={
-                  active
-                    ? "text-purple-400 mt-1"
-                    : "text-gray-500 mt-1"
-                }
+                className={`mt-1 ${
+                  active ? "text-purple-400" : "text-gray-500"
+                }`}
               >
                 {item.name}
               </span>
