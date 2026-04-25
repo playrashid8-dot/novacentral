@@ -33,17 +33,10 @@ export default function Investment() {
 
   // 🚀 INVEST
   const confirmInvest = async () => {
-    if (loadingPlan) return;
-
     const amt = Number(amount);
 
-    if (!amt || amt < 10) {
-      return alert("Minimum investment is $10");
-    }
-
-    if (amt > (user?.balance || 0)) {
-      return alert("Insufficient balance");
-    }
+    if (!amt || amt < 10) return alert("Minimum investment is $10");
+    if (amt > (user?.balance || 0)) return alert("Insufficient balance");
 
     try {
       setLoadingPlan(selectedPlan.key);
@@ -55,11 +48,9 @@ export default function Investment() {
 
       alert("Investment started 🚀");
 
-      // reset
       setSelectedPlan(null);
       setAmount("");
 
-      // 🔄 optional refresh
       router.refresh?.();
 
     } catch (err: any) {
@@ -70,39 +61,73 @@ export default function Investment() {
   };
 
   return (
-    <div className="min-h-screen px-4 py-6 text-white">
+    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 text-white relative bg-[#040406]">
 
-      <h1 className="text-xl font-bold mb-5">📊 Investment Plans</h1>
+      {/* 🌌 BACKGROUND */}
+      <div className="absolute w-[500px] h-[500px] bg-purple-600 opacity-20 blur-[150px] top-[-150px] left-[-150px]" />
+      <div className="absolute w-[500px] h-[500px] bg-indigo-600 opacity-20 blur-[150px] bottom-[-150px] right-[-150px]" />
 
-      <div className="space-y-4">
+      {/* HEADER */}
+      <div className="flex justify-between items-center mb-6 relative z-10">
+        <h1 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
+          Investment Plans 📊
+        </h1>
 
-        {plans.map((plan, i) => (
+        <button
+          onClick={() => router.push("/dashboard")}
+          className="text-sm text-purple-400"
+        >
+          Back
+        </button>
+      </div>
+
+      {/* BALANCE */}
+      <div className="bg-white/5 p-4 rounded-2xl border border-white/10 text-center mb-6">
+        <p className="text-xs text-gray-400">Available Balance</p>
+        <h2 className="text-3xl font-bold text-green-400">
+          ${Number(user?.balance || 0).toFixed(2)}
+        </h2>
+      </div>
+
+      {/* PLANS */}
+      <div className="space-y-4 relative z-10">
+
+        {plans.map((plan) => (
           <motion.div
-            key={i}
+            key={plan.key}
             whileHover={{ scale: 1.03 }}
             className={`p-[1px] rounded-2xl bg-gradient-to-r ${plan.color}`}
           >
             <div className="bg-[#0b0b0f] p-5 rounded-2xl">
 
-              <h2 className="font-bold text-lg">{plan.name}</h2>
+              <div className="flex justify-between items-center">
+                <h2 className="font-bold text-lg">{plan.name}</h2>
+                <span className="text-xs bg-white/10 px-2 py-1 rounded-lg">
+                  {plan.days}D
+                </span>
+              </div>
 
-              <p className="text-gray-400 text-sm mt-1">
-                Duration: {plan.days} Days
+              <p className="text-green-400 font-semibold mt-2 text-lg">
+                {plan.roi}% / day
               </p>
 
-              <p className="text-green-400 font-semibold mt-2">
-                Daily ROI: {plan.roi}%
+              <p className="text-xs text-gray-400 mt-1">
+                Total Return ≈ {(plan.roi * plan.days).toFixed(1)}%
               </p>
 
-              <p className="text-xs text-gray-500 mt-1">
-                Total ≈ {(plan.roi * plan.days).toFixed(1)}%
-              </p>
+              {/* ROI BAR */}
+              <div className="w-full bg-white/5 h-2 rounded-full mt-3 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-purple-500 to-indigo-500"
+                  style={{ width: `${plan.roi * 20}%` }}
+                />
+              </div>
 
               <button
                 onClick={() => setSelectedPlan(plan)}
-                className="mt-4 w-full btn"
+                className="mt-4 w-full bg-gradient-to-r from-purple-500 to-indigo-500 p-2 rounded-xl text-sm font-semibold"
               >
-                Invest Now
+                Invest Now 🚀
               </button>
 
             </div>
@@ -118,42 +143,59 @@ export default function Investment() {
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="w-full max-w-sm bg-[#0b0b0f] p-5 rounded-2xl border border-white/10"
+            className="w-full max-w-sm p-[1px] rounded-2xl bg-gradient-to-r from-purple-500 to-indigo-500"
           >
-            <h2 className="font-bold text-lg mb-3">
-              Invest in {selectedPlan.name}
-            </h2>
+            <div className="bg-[#0b0b0f] p-5 rounded-2xl">
 
-            <p className="text-sm text-gray-400 mb-2">
-              Balance: ${Number(user?.balance || 0).toFixed(2)}
-            </p>
+              <h2 className="font-bold text-lg mb-2">
+                Invest in {selectedPlan.name}
+              </h2>
 
-            <input
-              type="number"
-              placeholder="Enter Amount"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="input w-full"
-            />
+              <p className="text-xs text-gray-400 mb-3">
+                Balance: ${Number(user?.balance || 0).toFixed(2)}
+              </p>
 
-            <div className="flex gap-2 mt-4">
-              <button
-                onClick={() => setSelectedPlan(null)}
-                className="w-full btn-secondary"
-              >
-                Cancel
-              </button>
+              {/* QUICK AMOUNTS */}
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                {[10, 50, 100].map((val) => (
+                  <button
+                    key={val}
+                    onClick={() => setAmount(String(val))}
+                    className="bg-white/5 p-2 rounded-lg text-xs"
+                  >
+                    ${val}
+                  </button>
+                ))}
+              </div>
 
-              <button
-                onClick={confirmInvest}
-                disabled={loadingPlan === selectedPlan.key}
-                className="w-full btn flex justify-center items-center gap-2"
-              >
-                {loadingPlan === selectedPlan.key && (
-                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                )}
-                Confirm
-              </button>
+              <input
+                type="number"
+                placeholder="Enter Amount"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-sm"
+              />
+
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={() => setSelectedPlan(null)}
+                  className="w-full bg-white/5 p-2 rounded-xl text-sm"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  onClick={confirmInvest}
+                  disabled={loadingPlan === selectedPlan.key}
+                  className="w-full bg-gradient-to-r from-purple-500 to-indigo-500 p-2 rounded-xl text-sm flex justify-center items-center gap-2"
+                >
+                  {loadingPlan === selectedPlan.key && (
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  )}
+                  Confirm 🚀
+                </button>
+              </div>
+
             </div>
           </motion.div>
 

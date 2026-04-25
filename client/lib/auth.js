@@ -28,7 +28,7 @@ export const getToken = () => {
   return localStorage.getItem("token");
 };
 
-// 🔐 PARSE JWT (SAFE)
+// 🔐 PARSE JWT
 const parseJwt = (token) => {
   try {
     const base64 = token.split(".")[1]
@@ -48,6 +48,9 @@ const parseJwt = (token) => {
   }
 };
 
+// 🚫 prevent multiple logout redirects
+let isLoggingOut = false;
+
 // 🔒 CHECK AUTH
 export const isAuth = () => {
   if (typeof window === "undefined") return false;
@@ -58,26 +61,41 @@ export const isAuth = () => {
   const payload = parseJwt(token);
   if (!payload) return false;
 
-  // ⏳ TOKEN EXPIRED
+  // ⏳ EXPIRED TOKEN
   if (payload.exp && payload.exp * 1000 < Date.now()) {
-    logout();
+    logout("Session expired 🔒");
     return false;
   }
 
   return true;
 };
 
+// 🛡️ ADMIN CHECK
+export const isAdmin = () => {
+  const user = getUser();
+  return user?.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+};
+
 // 🚪 LOGOUT
-export const logout = () => {
+export const logout = (message) => {
   if (typeof window === "undefined") return;
+
+  if (isLoggingOut) return;
+  isLoggingOut = true;
 
   localStorage.removeItem("token");
   localStorage.removeItem("user");
 
-  window.location.href = "/login";
+  if (message) {
+    showToast(message);
+  }
+
+  setTimeout(() => {
+    window.location.href = "/login";
+  }, 500);
 };
 
-// 🛡️ PROTECT ROUTE (HOOK STYLE USE)
+// 🛡️ PROTECT ROUTE
 export const protectRoute = (router) => {
   if (typeof window === "undefined") return;
 
@@ -86,15 +104,28 @@ export const protectRoute = (router) => {
   }
 };
 
-// 🔄 UPDATE USER (IMPORTANT FOR BALANCE REFRESH)
+// 🔄 UPDATE USER
 export const updateUser = (newData) => {
   if (typeof window === "undefined") return;
 
   const user = getUser();
-
   if (!user) return;
 
   const updated = { ...user, ...newData };
 
   localStorage.setItem("user", JSON.stringify(updated));
 };
+
+// 🔥 SIMPLE TOAST
+function showToast(message) {
+  const div = document.createElement("div");
+
+  div.innerText = message;
+
+  div.className =
+    "fixed top-5 left-1/2 -translate-x-1/2 bg-purple-600 text-white px-4 py-2 rounded-lg text-sm shadow-lg z-50";
+
+  document.body.appendChild(div);
+
+  setTimeout(() => div.remove(), 2500);
+}

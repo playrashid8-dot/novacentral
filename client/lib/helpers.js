@@ -1,11 +1,13 @@
 // 💰 FORMAT USD
 export const formatUSD = (num) => {
-  return `$${Number(num || 0).toFixed(2)}`;
+  const n = Number(num || 0);
+  return `$${n.toFixed(2)}`;
 };
 
 // 💎 FORMAT USDT
 export const formatUSDT = (num) => {
-  return `${Number(num || 0).toFixed(2)} USDT`;
+  const n = Number(num || 0);
+  return `${n.toFixed(2)} USDT`;
 };
 
 // 🔢 SHORT NUMBER (25K+, 2.4M)
@@ -18,27 +20,38 @@ export const shortNumber = (num) => {
   return n.toString();
 };
 
-// 📅 FORMAT DATE
+// 📅 FORMAT DATE (SAFE)
 export const formatDate = (date) => {
   if (!date) return "-";
-  return new Date(date).toLocaleString();
+
+  try {
+    return new Date(date).toLocaleString();
+  } catch {
+    return "-";
+  }
 };
 
 // 📆 SIMPLE DATE (DD MMM)
 export const formatShortDate = (date) => {
   if (!date) return "-";
 
-  return new Date(date).toLocaleDateString("en-US", {
-    day: "2-digit",
-    month: "short",
-  });
+  try {
+    return new Date(date).toLocaleDateString("en-US", {
+      day: "2-digit",
+      month: "short",
+    });
+  } catch {
+    return "-";
+  }
 };
 
-// ⏳ TIME AGO (2h ago)
+// ⏳ TIME AGO (IMPROVED)
 export const timeAgo = (date) => {
   if (!date) return "-";
 
   const seconds = Math.floor((Date.now() - new Date(date)) / 1000);
+
+  if (isNaN(seconds)) return "-";
 
   const intervals = {
     year: 31536000,
@@ -58,52 +71,65 @@ export const timeAgo = (date) => {
   return "Just now";
 };
 
-// 🔐 MASK WALLET (0x1234...abcd)
+// 🔐 MASK WALLET (SAFE)
 export const maskAddress = (addr) => {
-  if (!addr) return "-";
+  if (!addr || addr.length < 10) return addr || "-";
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 };
 
-// 🔗 COPY TO CLIPBOARD
+// 🔗 COPY TO CLIPBOARD (WITH FEEDBACK)
 export const copyToClipboard = async (text) => {
   try {
     await navigator.clipboard.writeText(text);
     return true;
-  } catch {
+  } catch (err) {
+    console.error("Copy failed:", err);
     return false;
   }
 };
 
 // 📊 CALCULATE ROI TOTAL
 export const calculateROI = (amount, dailyROI, days) => {
-  const total = (amount * dailyROI * days) / 100;
-  return total;
+  const a = Number(amount || 0);
+  const r = Number(dailyROI || 0);
+  const d = Number(days || 0);
+
+  return (a * r * d) / 100;
 };
 
 // 💹 FINAL AMOUNT AFTER ROI
 export const finalAmount = (amount, dailyROI, days) => {
-  return Number(amount) + calculateROI(amount, dailyROI, days);
+  return Number(amount || 0) + calculateROI(amount, dailyROI, days);
 };
 
 // 🎯 VALIDATE NUMBER INPUT
 export const isValidNumber = (value) => {
-  return !isNaN(value) && Number(value) > 0;
+  const n = Number(value);
+  return !isNaN(n) && n > 0;
 };
 
 // 🧠 SAFE PARSE FLOAT
 export const toNumber = (val) => {
-  return Number(val || 0);
+  const n = Number(val);
+  return isNaN(n) ? 0 : n;
 };
 
-// 🎨 STATUS COLOR (UI use)
+// 🎨 STATUS COLOR (IMPROVED)
 export const getStatusColor = (status) => {
-  switch (status) {
+  const s = status?.toLowerCase();
+
+  switch (s) {
     case "success":
+    case "approved":
       return "text-green-400";
+
     case "pending":
       return "text-yellow-400";
+
     case "failed":
+    case "rejected":
       return "text-red-400";
+
     default:
       return "text-gray-400";
   }

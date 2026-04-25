@@ -1,5 +1,6 @@
 import Investment from "../models/Investment.js";
 import User from "../models/User.js";
+import Transaction from "../models/Transaction.js";
 import { distributeReferralIncome } from "../utils/referral.js";
 
 //
@@ -27,7 +28,7 @@ export const createInvestment = async (req, res) => {
       return res.status(400).json({ msg: "Invalid plan" });
     }
 
-    // 🔍 FIND USER
+    // 🔍 USER
     const user = await User.findById(req.user.id);
 
     if (!user) {
@@ -38,7 +39,6 @@ export const createInvestment = async (req, res) => {
       return res.status(403).json({ msg: "Account blocked" });
     }
 
-    // ❌ BALANCE CHECK
     if (user.balance < amount) {
       return res.status(400).json({ msg: "Insufficient balance" });
     }
@@ -70,7 +70,16 @@ export const createInvestment = async (req, res) => {
       status: "active",
     });
 
-    // 🔥 REFERRAL INCOME (VERY IMPORTANT)
+    // 🔥 CREATE TRANSACTION (HISTORY)
+    await Transaction.create({
+      user: user._id,
+      type: "investment",
+      amount,
+      status: "active",
+      refId: investment._id, // 🔥 best practice
+    });
+
+    // 🔥 REFERRAL
     await distributeReferralIncome(user._id, amount);
 
     res.json({

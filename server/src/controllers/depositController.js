@@ -1,5 +1,6 @@
 import Deposit from "../models/Deposit.js";
 import User from "../models/User.js";
+import Transaction from "../models/Transaction.js";
 import { distributeReferralIncome } from "../utils/referral.js";
 
 //
@@ -27,12 +28,21 @@ export const createDeposit = async (req, res) => {
       return res.status(400).json({ msg: "Transaction already used" });
     }
 
-    // 🔥 CREATE
+    // 🔥 CREATE DEPOSIT
     const deposit = await Deposit.create({
       userId: req.user.id,
       amount,
       txHash,
       status: "pending",
+    });
+
+    // 🔥 CREATE TRANSACTION (HISTORY)
+    await Transaction.create({
+      user: req.user.id,
+      type: "deposit",
+      amount,
+      status: "pending",
+      refId: deposit._id, // 🔥 best practice
     });
 
     res.json({
@@ -49,11 +59,11 @@ export const createDeposit = async (req, res) => {
 
 
 //
-// 🔥 ADMIN APPROVE DEPOSIT (SAFE + ATOMIC + REFERRAL)
+// 🔥 ADMIN APPROVE DEPOSIT
 //
 export const approveDeposit = async (req, res) => {
   try {
-    // 🔒 ATOMIC FIND + UPDATE (prevents double approve)
+    // 🔒 ATOMIC UPDATE
     const deposit = await Deposit.findOneAndUpdate(
       { _id: req.params.id, status: "pending" },
       { status: "approved", approvedAt: new Date() },
@@ -64,19 +74,18 @@ export const approveDeposit = async (req, res) => {
       return res.status(400).json({ msg: "Already processed or not found" });
     }
 
-    // 🔍 FIND USER
+    // 🔍 USER FIND
     const user = await User.findById(deposit.userId);
 
     if (!user) {
       return res.status(404).json({ msg: "User not found" });
     }
 
-    // 🔒 BLOCK CHECK
     if (user.isBlocked) {
       return res.status(403).json({ msg: "User is blocked" });
     }
 
-    // 🔥 ATOMIC BALANCE UPDATE
+    // 🔥 BALANCE UPDATE
     await User.updateOne(
       { _id: user._id },
       {
@@ -87,8 +96,14 @@ export const approveDeposit = async (req, res) => {
       }
     );
 
-    // 🔥 REFERRAL + VIP SYSTEM
+    // 🔥 REFERRAL
     await distributeReferralIncome(user._id, deposit.amount);
+
+    // 🔥 UPDATE TRANSACTION STATUS
+    await Transaction.findOneAndUpdate(
+      { refId: deposit._id },
+      { status: "approved" }
+    );
 
     res.json({
       success: true,
@@ -116,6 +131,12 @@ export const rejectDeposit = async (req, res) => {
     if (!deposit) {
       return res.status(400).json({ msg: "Already processed or not found" });
     }
+
+    // 🔥 UPDATE TRANSACTION
+    await Transaction.findOneAndUpdate(
+      { refId: deposit._id },
+      { status: "rejected" }
+    );
 
     res.json({
       success: true,

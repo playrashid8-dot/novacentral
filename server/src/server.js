@@ -16,6 +16,7 @@ import investmentRoutes from "./routes/investmentRoutes.js";
 import withdrawalRoutes from "./routes/withdrawalRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
+import historyRoutes from "./routes/historyRoutes.js";
 
 // 🔧 CONFIG
 dotenv.config();
@@ -97,6 +98,7 @@ app.use("/api/investment", investmentRoutes);
 app.use("/api/withdrawal", withdrawalRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/history", historyRoutes);
 
 /* ==============================
    🧪 HEALTH CHECK

@@ -1,5 +1,6 @@
 import Withdrawal from "../models/Withdrawal.js";
 import User from "../models/User.js";
+import Transaction from "../models/Transaction.js";
 
 //
 // 🔥 CREATE WITHDRAWAL
@@ -29,7 +30,7 @@ export const createWithdrawal = async (req, res) => {
       return res.status(403).json({ msg: "Account blocked" });
     }
 
-    // 🔥 ATOMIC BALANCE DEDUCT (NO DOUBLE WITHDRAW)
+    // 🔥 ATOMIC BALANCE DEDUCT
     const updated = await User.findOneAndUpdate(
       { _id: user._id, balance: { $gte: amount } },
       { $inc: { balance: -amount } },
@@ -49,6 +50,15 @@ export const createWithdrawal = async (req, res) => {
       walletAddress,
       releaseAt,
       status: "pending",
+    });
+
+    // 🔥 CREATE TRANSACTION (HISTORY)
+    await Transaction.create({
+      user: user._id,
+      type: "withdraw",
+      amount,
+      status: "pending",
+      refId: withdrawal._id,
     });
 
     res.json({
@@ -85,7 +95,7 @@ export const getMyWithdrawals = async (req, res) => {
 
 
 //
-// 🔥 ADMIN APPROVE (SAFE)
+// 🔥 ADMIN APPROVE
 //
 export const approveWithdrawal = async (req, res) => {
   try {
@@ -98,6 +108,12 @@ export const approveWithdrawal = async (req, res) => {
     if (!withdrawal) {
       return res.status(400).json({ msg: "Already processed or not found" });
     }
+
+    // 🔥 UPDATE TRANSACTION
+    await Transaction.findOneAndUpdate(
+      { refId: withdrawal._id },
+      { status: "approved" }
+    );
 
     res.json({
       success: true,
@@ -126,7 +142,7 @@ export const rejectWithdrawal = async (req, res) => {
       return res.status(400).json({ msg: "Already processed or not found" });
     }
 
-    // 🔁 REFUND (ATOMIC)
+    // 🔁 REFUND
     await User.updateOne(
       { _id: withdrawal.userId },
       {
@@ -134,6 +150,12 @@ export const rejectWithdrawal = async (req, res) => {
           balance: withdrawal.amount,
         },
       }
+    );
+
+    // 🔥 UPDATE TRANSACTION
+    await Transaction.findOneAndUpdate(
+      { refId: withdrawal._id },
+      { status: "rejected" }
     );
 
     res.json({

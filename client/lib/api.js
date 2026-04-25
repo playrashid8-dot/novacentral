@@ -4,7 +4,7 @@ import axios from "axios";
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
-// 🚀 AXIOS INSTANCE
+// 🚀 INSTANCE
 const API = axios.create({
   baseURL: BASE_URL,
   timeout: 15000,
@@ -13,7 +13,12 @@ const API = axios.create({
   },
 });
 
-// 🔐 REQUEST INTERCEPTOR
+// 🚫 prevent multiple redirects
+let isRedirecting = false;
+
+/* ==============================
+   🔐 REQUEST INTERCEPTOR
+============================== */
 API.interceptors.request.use(
   (req) => {
     if (typeof window !== "undefined") {
@@ -29,7 +34,9 @@ API.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// 🚨 RESPONSE INTERCEPTOR
+/* ==============================
+   🚨 RESPONSE INTERCEPTOR
+============================== */
 API.interceptors.response.use(
   (res) => res,
 
@@ -39,7 +46,7 @@ API.interceptors.response.use(
       console.error("❌ Network Error:", error.message);
 
       if (typeof window !== "undefined") {
-        alert("Server not reachable ❌");
+        showToast("Server not reachable ❌");
       }
 
       return Promise.reject(error);
@@ -47,22 +54,37 @@ API.interceptors.response.use(
 
     const { status, data } = error.response;
 
-    // 🔐 UNAUTHORIZED
+    // 🔐 UNAUTHORIZED (TOKEN EXPIRED / INVALID)
     if (status === 401) {
-      if (typeof window !== "undefined") {
+      if (typeof window !== "undefined" && !isRedirecting) {
+        isRedirecting = true;
+
         localStorage.clear();
-        window.location.href = "/login";
+
+        showToast("Session expired 🔒");
+
+        setTimeout(() => {
+          window.location.href = "/login";
+        }, 800);
       }
     }
 
-    // ⚠️ VALIDATION ERROR
+    // ⚠️ BAD REQUEST
     if (status === 400) {
-      console.warn("⚠️ Bad Request:", data?.message);
+      console.warn("⚠️ Bad Request:", data?.msg || data?.message);
+
+      if (typeof window !== "undefined") {
+        showToast(data?.msg || data?.message || "Invalid request ⚠️");
+      }
     }
 
     // 🔥 SERVER ERROR
     if (status >= 500) {
       console.error("🔥 Server Error:", data);
+
+      if (typeof window !== "undefined") {
+        showToast("Server error, try again later ❌");
+      }
     }
 
     return Promise.reject(error);
@@ -70,3 +92,21 @@ API.interceptors.response.use(
 );
 
 export default API;
+
+/* ==============================
+   🔥 SIMPLE TOAST SYSTEM
+============================== */
+function showToast(message) {
+  const div = document.createElement("div");
+
+  div.innerText = message;
+
+  div.className =
+    "fixed top-5 left-1/2 -translate-x-1/2 bg-purple-600 text-white px-4 py-2 rounded-lg text-sm shadow-lg z-50 animate-fade-in";
+
+  document.body.appendChild(div);
+
+  setTimeout(() => {
+    div.remove();
+  }, 2500);
+}

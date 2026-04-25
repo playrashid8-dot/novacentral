@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
 import API from "../../lib/api";
-import { getUser, logout } from "../../lib/auth";
+import { getUser, logout, updateUser } from "../../lib/auth";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -16,23 +16,34 @@ export default function Dashboard() {
   const [notify, setNotify] = useState("");
   const [cooldown, setCooldown] = useState(0);
 
-  // 🔐 AUTH
+  /* ==============================
+     🔐 AUTH CHECK
+  ============================== */
   useEffect(() => {
     const u = getUser();
     if (!u) {
       router.replace("/login");
       return;
     }
+
     loadUser();
   }, []);
 
-  // 📡 LOAD USER
+  /* ==============================
+     📡 LOAD USER (REAL API)
+  ============================== */
   const loadUser = async () => {
     try {
       const res = await API.get("/user/me");
+
       const data = res.data.user || res.data;
+
       setUser(data);
       setDisplayBalance(data.balance || 0);
+
+      // 🔥 sync localStorage
+      updateUser(data);
+
     } catch {
       logout();
     } finally {
@@ -40,7 +51,9 @@ export default function Dashboard() {
     }
   };
 
-  // 💰 LIVE BALANCE
+  /* ==============================
+     💰 LIVE BALANCE EFFECT
+  ============================== */
   useEffect(() => {
     if (!user?.balance) return;
 
@@ -54,7 +67,9 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [user]);
 
-  // 🔔 NOTIFICATIONS
+  /* ==============================
+     🔔 NOTIFICATIONS
+  ============================== */
   useEffect(() => {
     const messages = [
       "💰 Deposit received",
@@ -65,25 +80,27 @@ export default function Dashboard() {
     const interval = setInterval(() => {
       const msg = messages[Math.floor(Math.random() * messages.length)];
       setNotify(msg);
+
       setTimeout(() => setNotify(""), 3000);
     }, 8000);
 
     return () => clearInterval(interval);
   }, []);
 
-  // ⏱️ COOLDOWN LOAD
+  /* ==============================
+     ⏱️ WITHDRAW COOLDOWN
+  ============================== */
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
     const saved = localStorage.getItem("withdrawTime");
+
     if (saved) {
       const diff = Math.floor((Date.now() - Number(saved)) / 1000);
       const remaining = 96 * 3600 - diff;
+
       if (remaining > 0) setCooldown(remaining);
     }
   }, []);
 
-  // ⏱️ TIMER
   useEffect(() => {
     if (cooldown <= 0) return;
 
@@ -94,7 +111,6 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [cooldown]);
 
-  // ✅ FIXED FUNCTION
   const formatTime = (s: number) => {
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
@@ -102,7 +118,9 @@ export default function Dashboard() {
     return `${h}h ${m}m ${sec}s`;
   };
 
-  // LOADER
+  /* ==============================
+     ⏳ LOADER
+  ============================== */
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#040406]">
@@ -116,38 +134,38 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen max-w-[420px] mx-auto px-4 pb-28 text-white glow-bg">
+    <div className="min-h-screen max-w-[420px] mx-auto px-4 pb-28 text-white">
 
-      {/* 🔔 NOTIFY */}
+      {/* 🔔 TOAST */}
       {notify && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 bg-purple-600 px-4 py-2 rounded-xl z-50">
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 bg-purple-600 px-4 py-2 rounded-xl z-50 shadow-lg">
           {notify}
         </div>
       )}
 
       {/* HEADER */}
       <div className="flex justify-between items-center pt-5">
-        <h1 className="font-bold text-xl text-glow">NovaCentral</h1>
+        <h1 className="font-bold text-xl text-purple-400">
+          NovaCentral 🚀
+        </h1>
 
         <button
           onClick={logout}
-          className="text-sm text-red-400"
+          className="text-sm text-red-400 hover:opacity-70"
         >
-          Logout 🚪
+          Logout
         </button>
       </div>
 
       {/* PROFILE */}
       <div className="flex items-center gap-3 mt-6">
-        <div className="p-[2px] rounded-full bg-gradient-to-r from-purple-500 to-cyan-500">
-          <Image
-            src="/logo.png"
-            alt="user"
-            width={55}
-            height={55}
-            className="rounded-full bg-black"
-          />
-        </div>
+        <Image
+          src="/logo.png"
+          alt="user"
+          width={55}
+          height={55}
+          className="rounded-full border border-purple-500"
+        />
 
         <div>
           <p className="text-gray-400 text-xs">Welcome Back</p>
@@ -159,7 +177,7 @@ export default function Dashboard() {
       </div>
 
       {/* BALANCE */}
-      <div className="mt-6 glow-card">
+      <div className="mt-6 bg-white/5 p-5 rounded-2xl border border-white/10">
         <p className="text-xs text-gray-400">Total Balance</p>
 
         <h1 className="text-3xl font-bold text-green-400 mt-2">
@@ -173,7 +191,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* ACTIONS */}
+      {/* ACTION BUTTONS */}
       <div className="grid grid-cols-4 gap-3 mt-6">
         <Action label="Deposit" icon="⬇️" onClick={() => router.push("/deposit")} />
         <Action label="Withdraw" icon="⬆️" onClick={() => router.push("/withdrawal")} />
@@ -189,31 +207,33 @@ export default function Dashboard() {
         <Stat title="Withdrawn" value={user?.totalWithdraw} />
       </div>
 
+      {/* 🔥 FIXED NAV */}
       <BottomNav />
     </div>
   );
 }
 
-/* ACTION */
+/* ==============================
+   🔘 ACTION BUTTON
+============================== */
 function Action({ label, icon, onClick }: any) {
   return (
     <button
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-      className="glow-card text-center active:scale-95 transition"
+      onClick={onClick}
+      className="bg-white/5 border border-white/10 rounded-xl p-3 text-center active:scale-95 transition"
     >
-      <div>{icon}</div>
+      <div className="text-lg">{icon}</div>
       <p className="text-[10px]">{label}</p>
     </button>
   );
 }
 
-/* STAT */
+/* ==============================
+   📊 STAT CARD
+============================== */
 function Stat({ title, value }: any) {
   return (
-    <div className="glow-card">
+    <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
       <p className="text-xs text-gray-400">{title}</p>
       <h4 className="text-sm text-cyan-400">
         ${Number(value || 0).toFixed(2)}
@@ -222,7 +242,9 @@ function Stat({ title, value }: any) {
   );
 }
 
-/* NAV */
+/* ==============================
+   📱 BOTTOM NAV (FIXED)
+============================== */
 function BottomNav() {
   const router = useRouter();
   const path = usePathname();
@@ -231,21 +253,21 @@ function BottomNav() {
     { name: "Home", path: "/dashboard" },
     { name: "Invest", path: "/investment" },
     { name: "Team", path: "/referral" },
-    { name: "Wallet", path: "/deposit" }, // ✅ FIXED
+    { name: "Wallet", path: "/deposit" },
     { name: "Profile", path: "/profile" },
   ];
 
   return (
-    <div className="fixed bottom-3 left-1/2 -translate-x-1/2 w-[95%] max-w-[420px] bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl flex justify-around py-3">
+    <div className="fixed bottom-3 left-1/2 -translate-x-1/2 w-[95%] max-w-[420px] bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl flex justify-around py-3 z-50">
 
       {nav.map((item) => (
         <button
           key={item.name}
           onClick={() => router.push(item.path)}
-          className={`text-sm ${
+          className={`text-sm transition ${
             path === item.path
               ? "text-purple-400"
-              : "text-gray-400"
+              : "text-gray-400 hover:text-white"
           }`}
         >
           {item.name}
