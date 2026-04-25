@@ -2,7 +2,7 @@ import axios from "axios";
 
 // 🔗 BASE URL (AUTO ADD /api)
 const BASE_URL =
-  (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000") + "/api";
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 // 🚀 CREATE INSTANCE
 const API = axios.create({
