@@ -4,7 +4,7 @@ import { Inter } from "next/font/google";
 
 const inter = Inter({
   subsets: ["latin"],
-  display: "swap", // 🔥 better performance
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -29,15 +29,15 @@ export default function RootLayout({
         {/* 🔥 GLOBAL WRAPPER */}
         <div className="min-h-screen relative overflow-x-hidden">
 
-          {/* 🌌 BACKGROUND GLOW */}
-          <div className="pointer-events-none absolute w-[500px] h-[500px] bg-purple-600 opacity-20 blur-[150px] top-[-150px] left-[-150px]" />
-          <div className="pointer-events-none absolute w-[500px] h-[500px] bg-indigo-600 opacity-20 blur-[150px] bottom-[-150px] right-[-150px]" />
+          {/* 🌌 BACKGROUND GLOW (OPTIMIZED) */}
+          <div className="pointer-events-none absolute w-[500px] h-[500px] bg-purple-600/20 blur-[140px] top-[-150px] left-[-150px]" />
+          <div className="pointer-events-none absolute w-[500px] h-[500px] bg-indigo-600/20 blur-[140px] bottom-[-150px] right-[-150px]" />
 
           {/* 🔲 GRID */}
-          <div className="grid-bg pointer-events-none" />
+          <div className="pointer-events-none absolute inset-0 grid-bg" />
 
           {/* 📱 APP CONTAINER */}
-          <main className="relative z-10 max-w-[420px] mx-auto">
+          <main className="relative z-10 max-w-[420px] mx-auto px-3">
             {children}
           </main>
 
