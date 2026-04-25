@@ -1,16 +1,19 @@
 import axios from "axios";
 
-// 🔗 BASE URL (AUTO ADD /api)
+// 🔗 BASE URL
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
-// 🚀 CREATE INSTANCE
+// 🚀 AXIOS INSTANCE
 const API = axios.create({
   baseURL: BASE_URL,
-  timeout: 10000,
+  timeout: 15000,
+  headers: {
+    "Content-Type": "application/json",
+  },
 });
 
-// 🔐 REQUEST INTERCEPTOR (ADD TOKEN)
+// 🔐 REQUEST INTERCEPTOR
 API.interceptors.request.use(
   (req) => {
     if (typeof window !== "undefined") {
@@ -20,6 +23,7 @@ API.interceptors.request.use(
         req.headers.Authorization = `Bearer ${token}`;
       }
     }
+
     return req;
   },
   (error) => Promise.reject(error)
@@ -28,28 +32,37 @@ API.interceptors.request.use(
 // 🚨 RESPONSE INTERCEPTOR
 API.interceptors.response.use(
   (res) => res,
+
   (error) => {
     // ❌ NETWORK ERROR
     if (!error.response) {
-      console.error("Network Error:", error.message);
-      alert("Server not reachable ❌");
+      console.error("❌ Network Error:", error.message);
+
+      if (typeof window !== "undefined") {
+        alert("Server not reachable ❌");
+      }
+
       return Promise.reject(error);
     }
 
-    const status = error.response.status;
+    const { status, data } = error.response;
 
-    // 🔐 TOKEN EXPIRED / UNAUTHORIZED
+    // 🔐 UNAUTHORIZED
     if (status === 401) {
       if (typeof window !== "undefined") {
         localStorage.clear();
-        window.location.replace("/login");
+        window.location.href = "/login";
       }
+    }
+
+    // ⚠️ VALIDATION ERROR
+    if (status === 400) {
+      console.warn("⚠️ Bad Request:", data?.message);
     }
 
     // 🔥 SERVER ERROR
     if (status >= 500) {
-      console.error("Server Error:", error.response.data);
-      alert("Server error ❌");
+      console.error("🔥 Server Error:", data);
     }
 
     return Promise.reject(error);

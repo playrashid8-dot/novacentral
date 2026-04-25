@@ -1,38 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import API from "../../lib/api";
 import { getUser } from "../../lib/auth";
 
-export default function Profile() {
+export default function Referral() {
+  const user = getUser();
 
-  const [user, setUser]: any = useState(null);
-
-  useEffect(() => {
-    loadUser();
-  }, []);
-
-  const loadUser = async () => {
-    try {
-      const res = await API.get("/user/me");
-      setUser(res.data.user || res.data);
-    } catch (err) {}
-  };
+  const link = `https://yourdomain.com/signup?ref=${user?._id}`;
 
   return (
-    <div className="min-h-screen px-4 py-6 text-white">
+    <div className="min-h-screen text-white p-5">
+      <h1 className="text-xl font-bold mb-4">Referral</h1>
 
-      <h1 className="text-xl font-bold mb-5">👤 Profile</h1>
-
-      <div className="card space-y-3">
-
-        <p>Username: <b>{user?.username}</b></p>
-        <p>Email: <b>{user?.email}</b></p>
-        <p>Balance: <b>${user?.balance}</b></p>
-        <p>Referral Code: <b>{user?.referralCode}</b></p>
-
+      <div className="card">
+        <p className="text-sm mb-2">Your Referral Link:</p>
+        <p className="text-xs break-all">{link}</p>
       </div>
-
     </div>
   );
 }

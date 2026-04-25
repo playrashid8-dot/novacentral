@@ -1,38 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import API from "../../lib/api";
-import { getUser } from "../../lib/auth";
+import { useRouter } from "next/navigation";
 
-export default function Profile() {
-
-  const [user, setUser]: any = useState(null);
-
-  useEffect(() => {
-    loadUser();
-  }, []);
-
-  const loadUser = async () => {
-    try {
-      const res = await API.get("/user/me");
-      setUser(res.data.user || res.data);
-    } catch (err) {}
-  };
+export default function Navbar() {
+  const router = useRouter();
 
   return (
-    <div className="min-h-screen px-4 py-6 text-white">
-
-      <h1 className="text-xl font-bold mb-5">👤 Profile</h1>
-
-      <div className="card space-y-3">
-
-        <p>Username: <b>{user?.username}</b></p>
-        <p>Email: <b>{user?.email}</b></p>
-        <p>Balance: <b>${user?.balance}</b></p>
-        <p>Referral Code: <b>{user?.referralCode}</b></p>
-
-      </div>
-
+    <div className="fixed bottom-0 w-full bg-black border-t border-white/10 flex justify-around py-3 text-white">
+      <button onClick={() => router.push("/dashboard")}>Home</button>
+      <button onClick={() => router.push("/investment")}>Invest</button>
+      <button onClick={() => router.push("/referral")}>Team</button>
+      <button onClick={() => router.push("/profile")}>Profile</button>
     </div>
   );
 }

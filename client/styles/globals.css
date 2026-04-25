@@ -2,136 +2,32 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ================= BODY ================= */
+/* BODY */
 body {
+  @apply bg-black text-white;
+}
+
+/* BG */
+.glow-bg {
   background: radial-gradient(circle at top, #020617, #000);
-  color: white;
-  font-family: system-ui, sans-serif;
-  overflow-x: hidden;
 }
 
-/* ================= GLOBAL GLOW BG ================= */
-.glow-bg::before {
-  content: "";
-  position: absolute;
-  width: 600px;
-  height: 600px;
-  background: #7c3aed;
-  filter: blur(160px);
-  opacity: 0.2;
-  top: -200px;
-  left: -200px;
-  z-index: 0;
-}
-
-.glow-bg::after {
-  content: "";
-  position: absolute;
-  width: 600px;
-  height: 600px;
-  background: #4f46e5;
-  filter: blur(160px);
-  opacity: 0.2;
-  bottom: -200px;
-  right: -200px;
-  z-index: 0;
-}
-
-/* ================= GLASS CARD ================= */
+/* CARD */
 .card {
-  @apply bg-white/5 backdrop-blur-xl border border-white/10 p-5 rounded-2xl;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.6);
-  transition: 0.3s;
+  @apply bg-[#0b0b0f] p-4 rounded-xl border border-white/10;
 }
 
-.card:hover {
-  transform: translateY(-4px);
-  border-color: rgba(168,85,247,0.5);
-  box-shadow: 0 0 25px rgba(168,85,247,0.3);
-}
-
-/* ================= VIP GLOW CARD ================= */
-.glow-card {
-  @apply p-6 rounded-2xl;
-  background: linear-gradient(135deg, #7c3aed, #4f46e5);
-  box-shadow:
-    0 0 40px rgba(124,58,237,0.6),
-    0 0 80px rgba(79,70,229,0.4);
-}
-
-/* ================= BUTTON PRIMARY ================= */
+/* BUTTON */
 .btn {
-  @apply px-4 py-2 rounded-xl font-semibold text-white;
-  background: linear-gradient(135deg, #9333ea, #6366f1);
-  box-shadow: 0 0 15px rgba(147,51,234,0.6);
-  transition: 0.3s;
+  @apply px-4 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-cyan-500;
 }
 
-.btn:hover {
-  transform: scale(1.05);
-  box-shadow: 0 0 25px rgba(147,51,234,1);
-}
-
-/* ================= BUTTON SECONDARY ================= */
-.btn-secondary {
-  @apply px-4 py-2 rounded-xl bg-white/10 text-white;
-  backdrop-filter: blur(10px);
-  transition: 0.3s;
-}
-
-.btn-secondary:hover {
-  background: rgba(255,255,255,0.15);
-}
-
-/* ================= INPUT ================= */
+/* INPUT */
 .input {
-  @apply w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white outline-none;
-  backdrop-filter: blur(10px);
-  transition: 0.3s;
+  @apply w-full px-3 py-2 rounded-xl bg-[#111] border border-white/10;
 }
 
-.input:focus {
-  border-color: #7c3aed;
-  box-shadow: 0 0 10px rgba(124,58,237,0.7);
-}
-
-/* ================= TITLES ================= */
-.title {
-  @apply text-base font-semibold;
-}
-
-.sub {
-  @apply text-xs text-gray-400;
-}
-
-/* ================= VIP TEXT GLOW ================= */
+/* TEXT */
 .text-glow {
-  color: #a855f7;
-  text-shadow: 0 0 10px rgba(168,85,247,0.8);
-}
-
-/* ================= SCROLLBAR ================= */
-::-webkit-scrollbar {
-  width: 6px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: linear-gradient(#9333ea, #4f46e5);
-  border-radius: 10px;
-}
-
-/* ================= ANIMATION ================= */
-.fade-in {
-  animation: fadeIn 0.5s ease-in-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(15px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  @apply text-purple-400;
 }

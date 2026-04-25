@@ -1,39 +1,31 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import API from "../../lib/api";
+import { saveUser } from "../../lib/auth";
 
 export default function Login() {
   const router = useRouter();
 
-  const [form, setForm] = useState({
-    email: "",
-    password: "",
-  });
-
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
     try {
-      if (!form.email || !form.password) {
-        return alert("Enter Username & password");
-      }
-
       setLoading(true);
 
-      const res = await API.post("/auth/login", form);
+      const res = await API.post("/auth/login", {
+        email,
+        password,
+      });
 
-      // 🔐 SAVE TOKEN
-      localStorage.setItem("token", res.data.token);
-      localStorage.setItem("user", JSON.stringify(res.data.user));
-
-      alert("Login successful 🚀");
+      saveUser(res.data);
 
       router.push("/dashboard");
-
     } catch (err: any) {
-      alert(err?.response?.data?.msg || "Login failed ❌");
+      alert(err?.response?.data?.message || "Login failed ❌");
     } finally {
       setLoading(false);
     }
@@ -41,24 +33,27 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center text-white">
+      <div className="card w-full max-w-sm">
+        <h1 className="text-xl font-bold mb-4">Login</h1>
 
-      <div className="w-full max-w-md p-6 bg-black rounded-xl">
+        <input
+          className="input mb-3"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
 
-        <h2 className="text-xl mb-4">Login</h2>
+        <input
+          className="input mb-3"
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
 
-        <input placeholder="Username"
-          onChange={(e)=>setForm({...form, email:e.target.value})}
-          className="input" />
-
-        <input type="password" placeholder="Password"
-          onChange={(e)=>setForm({...form, password:e.target.value})}
-          className="input mt-2" />
-
-        <button onClick={handleLogin}
-          className="btn mt-4 w-full">
+        <button onClick={handleLogin} className="btn w-full">
           {loading ? "Loading..." : "Login"}
         </button>
-
       </div>
     </div>
   );

@@ -17,50 +17,64 @@ export default function Deposit() {
 
   const wallet = "0xEC4Edc0654Ee207F9dB9E1068d3adfE689362B64";
 
-  // 🔐 LOAD USER
+  // 🔐 AUTH + USER LOAD
   useEffect(() => {
     const u = getUser();
-    if (!u) return router.push("/login");
+    if (!u) {
+      router.replace("/login"); // 🔥 better
+      return;
+    }
+
     setUser(u);
   }, []);
 
-  // 🚀 SUBMIT DEPOSIT
+  // 🚀 SUBMIT
   const handleDeposit = async () => {
+    if (loading) return;
+
+    const amt = Number(amount);
+
+    // 🔥 VALIDATION (IMPROVED)
+    if (!amt || amt < 10) {
+      return alert("Minimum deposit is $10");
+    }
+
+    if (!txHash || txHash.trim().length < 20) {
+      return alert("Invalid TX Hash");
+    }
+
     try {
-      if (!amount || Number(amount) < 10) {
-        return alert("Minimum deposit is $10");
-      }
-
-      if (!txHash || txHash.length < 20) {
-        return alert("Invalid TX Hash");
-      }
-
       setLoading(true);
 
-      const res = await API.post("/deposit", {
-        amount: Number(amount),
-        txHash,
+      await API.post("/deposit", {
+        amount: amt,
+        txHash: txHash.trim().toLowerCase(), // 🔥 normalize
       });
 
       alert("Deposit submitted successfully 🚀");
 
+      // 🔄 RESET
       setAmount("");
       setTxHash("");
 
       router.push("/dashboard");
 
     } catch (err: any) {
-      alert(err?.response?.data?.message || "Deposit failed ❌");
+      alert(err?.response?.data?.msg || "Deposit failed ❌");
     } finally {
       setLoading(false);
     }
   };
 
   // 📋 COPY
-  const copyWallet = () => {
-    navigator.clipboard.writeText(wallet);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyWallet = async () => {
+    try {
+      await navigator.clipboard.writeText(wallet);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      alert("Copy failed");
+    }
   };
 
   return (
@@ -72,13 +86,13 @@ export default function Deposit() {
 
         <button
           onClick={() => router.push("/dashboard")}
-          className="text-sm text-purple-400"
+          className="text-sm text-purple-400 hover:opacity-80 transition"
         >
           Back
         </button>
       </div>
 
-      {/* 💰 BALANCE CARD */}
+      {/* 💰 BALANCE */}
       <div className="glow-card mb-6">
         <p className="text-sm opacity-80">Your Balance</p>
         <h2 className="text-3xl font-bold mt-1">
@@ -86,13 +100,13 @@ export default function Deposit() {
         </h2>
       </div>
 
-      {/* MAIN CARD */}
+      {/* MAIN */}
       <motion.div
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
         className="card"
       >
-
         <p className="text-sm text-gray-400 mb-3">
           Send USDT (BEP20 Network)
         </p>
@@ -103,7 +117,7 @@ export default function Deposit() {
 
           <button
             onClick={copyWallet}
-            className="text-purple-400 text-xs"
+            className="text-purple-400 text-xs hover:opacity-80 transition"
           >
             {copied ? "Copied" : "Copy"}
           </button>
@@ -131,11 +145,13 @@ export default function Deposit() {
         <button
           onClick={handleDeposit}
           disabled={loading}
-          className="btn w-full mt-5"
+          className="btn w-full mt-5 flex justify-center items-center gap-2"
         >
+          {loading && (
+            <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          )}
           {loading ? "Processing..." : "Submit Deposit"}
         </button>
-
       </motion.div>
 
       {/* ⚠️ INFO */}
@@ -149,7 +165,6 @@ export default function Deposit() {
           <li>• Wrong network = loss</li>
         </ul>
       </div>
-
     </div>
   );
 }

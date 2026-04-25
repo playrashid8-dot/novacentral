@@ -28,13 +28,21 @@ export const getToken = () => {
   return localStorage.getItem("token");
 };
 
-// 🔐 PARSE JWT
+// 🔐 PARSE JWT (SAFE)
 const parseJwt = (token) => {
   try {
     const base64 = token.split(".")[1]
       .replace(/-/g, "+")
       .replace(/_/g, "/");
-    return JSON.parse(atob(base64));
+
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+
+    return JSON.parse(jsonPayload);
   } catch {
     return null;
   }
@@ -50,7 +58,8 @@ export const isAuth = () => {
   const payload = parseJwt(token);
   if (!payload) return false;
 
-  if (payload.exp * 1000 < Date.now()) {
+  // ⏳ TOKEN EXPIRED
+  if (payload.exp && payload.exp * 1000 < Date.now()) {
     logout();
     return false;
   }
@@ -62,15 +71,30 @@ export const isAuth = () => {
 export const logout = () => {
   if (typeof window === "undefined") return;
 
-  localStorage.clear();
-  window.location.replace("/login");
+  localStorage.removeItem("token");
+  localStorage.removeItem("user");
+
+  window.location.href = "/login";
 };
 
-// 🛡️ PROTECT ROUTE
+// 🛡️ PROTECT ROUTE (HOOK STYLE USE)
 export const protectRoute = (router) => {
   if (typeof window === "undefined") return;
 
   if (!isAuth()) {
     router.replace("/login");
   }
+};
+
+// 🔄 UPDATE USER (IMPORTANT FOR BALANCE REFRESH)
+export const updateUser = (newData) => {
+  if (typeof window === "undefined") return;
+
+  const user = getUser();
+
+  if (!user) return;
+
+  const updated = { ...user, ...newData };
+
+  localStorage.setItem("user", JSON.stringify(updated));
 };
