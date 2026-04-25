@@ -6,8 +6,11 @@ const connectDB = async () => {
       throw new Error("❌ MONGO_URI not defined in .env");
     }
 
+    mongoose.set("strictQuery", true); // 🔒 safer queries
+
     const conn = await mongoose.connect(process.env.MONGO_URI, {
       autoIndex: true,
+      serverSelectionTimeoutMS: 5000, // ⏱ timeout
     });
 
     console.log(`MongoDB Connected ✅: ${conn.connection.host}`);

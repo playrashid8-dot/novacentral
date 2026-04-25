@@ -8,6 +8,9 @@ const userSchema = new mongoose.Schema(
       required: true,
       unique: true,
       trim: true,
+      lowercase: true,
+      minlength: 3,
+      maxlength: 20,
     },
 
     email: {
@@ -15,43 +18,71 @@ const userSchema = new mongoose.Schema(
       required: true,
       unique: true,
       trim: true,
+      lowercase: true,
+      match: [/^\S+@\S+\.\S+$/, "Invalid email"],
     },
 
     password: {
       type: String,
       required: true,
+      select: false,
     },
 
     // 💰 WALLET
     balance: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
     totalInvested: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
     totalWithdraw: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
     totalEarnings: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
     todayProfit: {
       type: Number,
       default: 0,
+      min: 0,
+    },
+
+    // 💎 VIP SYSTEM
+    vipLevel: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    vipEarnings: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    claimedVIP: {
+      type: [Number],
+      default: [],
     },
 
     // 👥 REFERRAL SYSTEM
     referralCode: {
       type: String,
+      required: true,
       unique: true,
+      uppercase: true,
     },
 
     referredBy: {
@@ -63,28 +94,26 @@ const userSchema = new mongoose.Schema(
     directCount: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
     teamCount: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
     teamVolume: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
-    // 🏆 VIP / LEVEL SYSTEM
-    vipLevel: {
-      type: Number,
-      default: 0,
-    },
-
-    // 📍 WALLET ADDRESS (future blockchain use)
+    // 📍 WALLET ADDRESS
     walletAddress: {
       type: String,
       default: "",
+      trim: true,
     },
 
     // 🔐 SECURITY
@@ -92,14 +121,32 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    lastLogin: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
   }
 );
 
-// 🔥 INDEXES (PERFORMANCE)
+//
+// 🔥 SAFE RESPONSE (password hide)
+//
+userSchema.methods.toJSON = function () {
+  const obj = this.toObject();
+  delete obj.password;
+  return obj;
+};
+
+//
+// 🔥 INDEXES (OPTIMIZED ONLY)
+//
 userSchema.index({ email: 1 });
+userSchema.index({ username: 1 });
 userSchema.index({ referralCode: 1 });
+userSchema.index({ createdAt: -1 });
 
 export default mongoose.model("User", userSchema);

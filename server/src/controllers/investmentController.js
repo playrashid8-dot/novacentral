@@ -1,0 +1,106 @@
+import Investment from "../models/Investment.js";
+import User from "../models/User.js";
+import { distributeReferralIncome } from "../utils/referral.js";
+
+//
+// 🔥 CREATE INVESTMENT
+//
+export const createInvestment = async (req, res) => {
+  try {
+    let { amount, plan } = req.body;
+
+    amount = Number(amount);
+
+    // ✅ VALIDATION
+    if (!amount || amount < 10) {
+      return res.status(400).json({ msg: "Minimum investment is $10" });
+    }
+
+    const plans = {
+      basic: { roi: 1, days: 30 },
+      silver: { roi: 1.5, days: 45 },
+      gold: { roi: 2, days: 60 },
+      vip: { roi: 2.5, days: 90 },
+    };
+
+    if (!plans[plan]) {
+      return res.status(400).json({ msg: "Invalid plan" });
+    }
+
+    // 🔍 FIND USER
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({ msg: "User not found" });
+    }
+
+    if (user.isBlocked) {
+      return res.status(403).json({ msg: "Account blocked" });
+    }
+
+    // ❌ BALANCE CHECK
+    if (user.balance < amount) {
+      return res.status(400).json({ msg: "Insufficient balance" });
+    }
+
+    const selected = plans[plan];
+
+    const endDate = new Date(
+      Date.now() + selected.days * 24 * 60 * 60 * 1000
+    );
+
+    // 🔥 ATOMIC BALANCE UPDATE
+    await User.updateOne(
+      { _id: user._id, balance: { $gte: amount } },
+      {
+        $inc: {
+          balance: -amount,
+          totalInvested: amount,
+        },
+      }
+    );
+
+    // 🔥 CREATE INVESTMENT
+    const investment = await Investment.create({
+      userId: user._id,
+      amount,
+      dailyROI: selected.roi,
+      duration: selected.days,
+      endDate,
+      status: "active",
+    });
+
+    // 🔥 REFERRAL INCOME (VERY IMPORTANT)
+    await distributeReferralIncome(user._id, amount);
+
+    res.json({
+      success: true,
+      msg: "Investment started 🚀",
+      investment,
+    });
+
+  } catch (err) {
+    console.error("INVESTMENT ERROR:", err.message);
+    res.status(500).json({ msg: "Server error" });
+  }
+};
+
+
+//
+// 📄 USER INVESTMENTS
+//
+export const getMyInvestments = async (req, res) => {
+  try {
+    const data = await Investment.find({ userId: req.user.id })
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      investments: data,
+    });
+
+  } catch (err) {
+    console.error("GET INVESTMENTS ERROR:", err.message);
+    res.status(500).json({ msg: "Server error" });
+  }
+};

@@ -1,101 +1,147 @@
 import express from "express";
-import Deposit from "../models/Deposit.js";
-import User from "../models/User.js";
 import auth from "../middleware/auth.js";
+import User from "../models/User.js";
+import Deposit from "../models/Deposit.js";
+import Withdrawal from "../models/Withdrawal.js";
+
+// 🔥 controllers
+import {
+  approveDeposit,
+  rejectDeposit,
+} from "../controllers/depositController.js";
+
+import {
+  approveWithdrawal,
+  rejectWithdrawal,
+} from "../controllers/withdrawalController.js";
 
 const router = express.Router();
 
 /* ==============================
-   🔐 ADMIN MIDDLEWARE (BASIC)
+   🔐 ADMIN CHECK
 ============================== */
-const isAdmin = (req, res, next) => {
-  // 👉 simple check (later upgrade karenge)
-  if (!req.user) {
-    return res.status(401).json({ msg: "Unauthorized" });
+const isAdmin = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id);
+
+    if (!user || user.email !== process.env.ADMIN_EMAIL) {
+      return res.status(403).json({ msg: "Admin access only" });
+    }
+
+    next();
+  } catch (err) {
+    res.status(500).json({ msg: "Admin check error" });
   }
-  next();
 };
 
 /* ==============================
-   📥 GET ALL DEPOSITS
+   📥 DEPOSITS
 ============================== */
 router.get("/deposits", auth, isAdmin, async (req, res) => {
-  try {
-    const deposits = await Deposit.find()
-      .populate("userId", "username email")
-      .sort({ createdAt: -1 });
+  const deposits = await Deposit.find()
+    .populate("userId", "username email")
+    .sort({ createdAt: -1 });
 
-    res.json({
-      success: true,
-      deposits,
-    });
+  res.json({ success: true, deposits });
+});
 
-  } catch (err) {
-    res.status(500).json({ message: "Error fetching deposits" });
-  }
+router.get("/deposits/pending", auth, isAdmin, async (req, res) => {
+  const deposits = await Deposit.find({ status: "pending" })
+    .populate("userId", "username email")
+    .sort({ createdAt: -1 });
+
+  res.json({ success: true, deposits });
+});
+
+router.post("/approve-deposit/:id", auth, isAdmin, approveDeposit);
+router.post("/reject-deposit/:id", auth, isAdmin, rejectDeposit);
+
+/* ==============================
+   💸 WITHDRAWALS
+============================== */
+router.get("/withdrawals", auth, isAdmin, async (req, res) => {
+  const withdrawals = await Withdrawal.find()
+    .populate("userId", "username email")
+    .sort({ createdAt: -1 });
+
+  res.json({ success: true, withdrawals });
+});
+
+router.get("/withdrawals/pending", auth, isAdmin, async (req, res) => {
+  const withdrawals = await Withdrawal.find({ status: "pending" })
+    .populate("userId", "username email")
+    .sort({ createdAt: -1 });
+
+  res.json({ success: true, withdrawals });
+});
+
+router.post("/approve-withdrawal/:id", auth, isAdmin, approveWithdrawal);
+router.post("/reject-withdrawal/:id", auth, isAdmin, rejectWithdrawal);
+
+/* ==============================
+   👤 USER MANAGEMENT
+============================== */
+
+// 📄 all users
+router.get("/users", auth, isAdmin, async (req, res) => {
+  const users = await User.find().select("-password").sort({ createdAt: -1 });
+
+  res.json({ success: true, users });
+});
+
+// 🔒 block
+router.post("/block/:id", auth, isAdmin, async (req, res) => {
+  await User.findByIdAndUpdate(req.params.id, { isBlocked: true });
+
+  res.json({ success: true, msg: "User blocked" });
+});
+
+// 🔓 unblock
+router.post("/unblock/:id", auth, isAdmin, async (req, res) => {
+  await User.findByIdAndUpdate(req.params.id, { isBlocked: false });
+
+  res.json({ success: true, msg: "User unblocked" });
+});
+
+// 💰 reset wallet (dangerous → admin only)
+router.post("/reset-wallet/:id", auth, isAdmin, async (req, res) => {
+  await User.findByIdAndUpdate(req.params.id, {
+    balance: 0,
+    totalEarnings: 0,
+    totalWithdraw: 0,
+  });
+
+  res.json({ success: true, msg: "Wallet reset" });
 });
 
 /* ==============================
-   ✅ APPROVE DEPOSIT
+   📊 ADMIN STATS
 ============================== */
-router.post("/approve/:id", auth, isAdmin, async (req, res) => {
-  try {
-    const deposit = await Deposit.findById(req.params.id);
+router.get("/stats", auth, isAdmin, async (req, res) => {
+  const totalUsers = await User.countDocuments();
+  const totalDeposits = await Deposit.countDocuments({ status: "approved" });
+  const totalWithdrawals = await Withdrawal.countDocuments({ status: "approved" });
 
-    if (!deposit) {
-      return res.status(404).json({ message: "Deposit not found" });
-    }
+  const users = await User.find();
 
-    // ❌ already approved
-    if (deposit.status === "approved") {
-      return res.status(400).json({ message: "Already approved" });
-    }
+  let totalBalance = 0;
+  let totalEarnings = 0;
 
-    // 🔥 UPDATE STATUS
-    deposit.status = "approved";
-    await deposit.save();
+  users.forEach((u) => {
+    totalBalance += u.balance;
+    totalEarnings += u.totalEarnings;
+  });
 
-    // 🔥 UPDATE USER
-    const user = await User.findById(deposit.userId);
-
-    user.balance += deposit.amount;
-    user.totalInvested += deposit.amount;
-
-    await user.save();
-
-    res.json({
-      success: true,
-      message: "Deposit approved & balance updated ✅",
-    });
-
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({ message: "Error approving deposit" });
-  }
-});
-
-/* ==============================
-   ❌ REJECT DEPOSIT
-============================== */
-router.post("/reject/:id", auth, isAdmin, async (req, res) => {
-  try {
-    const deposit = await Deposit.findById(req.params.id);
-
-    if (!deposit) {
-      return res.status(404).json({ message: "Deposit not found" });
-    }
-
-    deposit.status = "rejected";
-    await deposit.save();
-
-    res.json({
-      success: true,
-      message: "Deposit rejected ❌",
-    });
-
-  } catch (err) {
-    res.status(500).json({ message: "Error rejecting deposit" });
-  }
+  res.json({
+    success: true,
+    stats: {
+      totalUsers,
+      totalDeposits,
+      totalWithdrawals,
+      totalBalance,
+      totalEarnings,
+    },
+  });
 });
 
 export default router;

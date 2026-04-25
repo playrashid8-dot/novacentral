@@ -1,15 +1,16 @@
 import jwt from "jsonwebtoken";
+import User from "../models/User.js";
 
-const auth = (req, res, next) => {
+const auth = async (req, res, next) => {
   try {
     const header = req.headers.authorization;
 
-    // ❌ NO TOKEN
+    // ❌ NO HEADER
     if (!header) {
       return res.status(401).json({ msg: "No token, authorization denied" });
     }
 
-    // ❌ WRONG FORMAT
+    // ❌ INVALID FORMAT
     if (!header.startsWith("Bearer ")) {
       return res.status(401).json({ msg: "Invalid token format" });
     }
@@ -21,21 +22,45 @@ const auth = (req, res, next) => {
       return res.status(401).json({ msg: "Token missing" });
     }
 
-    // 🔐 VERIFY
+    // 🔐 VERIFY TOKEN
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // ✅ IMPORTANT FIX
+    // 🔍 FETCH USER (LIGHT QUERY)
+    const user = await User.findById(decoded.id)
+      .select("_id isBlocked vipLevel");
+
+    if (!user) {
+      return res.status(401).json({ msg: "User not found" });
+    }
+
+    // 🔒 BLOCK CHECK
+    if (user.isBlocked) {
+      return res.status(403).json({ msg: "Account blocked" });
+    }
+
+    // ✅ ATTACH USER (MINIMAL DATA)
     req.user = {
-      id: decoded.id,
+      id: user._id,
+      vipLevel: user.vipLevel,
     };
 
     next();
 
   } catch (err) {
-    console.log("Auth Error:", err.message);
+    console.error("AUTH ERROR:", err.message);
+
+    // 🔥 TOKEN EXPIRED
+    if (err.name === "TokenExpiredError") {
+      return res.status(401).json({ msg: "Token expired" });
+    }
+
+    // 🔥 INVALID TOKEN
+    if (err.name === "JsonWebTokenError") {
+      return res.status(401).json({ msg: "Invalid token" });
+    }
 
     return res.status(401).json({
-      msg: "Token is not valid",
+      msg: "Authorization failed",
     });
   }
 };

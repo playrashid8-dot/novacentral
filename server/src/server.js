@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
+import rateLimit from "express-rate-limit";
 
 // 🔥 DB
 import connectDB from "./config/db.js";
@@ -11,47 +12,101 @@ import connectDB from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import depositRoutes from "./routes/depositRoutes.js";
+import investmentRoutes from "./routes/investmentRoutes.js";
+import withdrawalRoutes from "./routes/withdrawalRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import dashboardRoutes from "./routes/dashboardRoutes.js";
 
-// CONFIG
+// 🔧 CONFIG
 dotenv.config();
 
 const app = express();
 
 /* ==============================
-   🔥 CONNECT DB (SAFE WAY)
+   🔥 TRUST PROXY (Railway fix)
+============================== */
+app.set("trust proxy", 1);
+
+/* ==============================
+   🔥 CONNECT DATABASE
 ============================== */
 connectDB();
 
 /* ==============================
-   🔐 SECURITY + MIDDLEWARE
+   🔐 GLOBAL SECURITY
 ============================== */
-app.use(cors());
-app.use(express.json());
+
+// ✅ CORS (PRODUCTION SAFE)
+app.use(
+  cors({
+    origin: [
+      "http://localhost:3000",
+      "https://novacentral.vercel.app",
+    ],
+    credentials: true,
+  })
+);
+
+// ✅ BODY PARSER (LIMITED SIZE)
+app.use(express.json({ limit: "10kb" }));
+
+// ✅ HELMET (SECURITY HEADERS)
 app.use(helmet());
+
+// ✅ LOGGER
 app.use(morgan("dev"));
 
 /* ==============================
-   🔥 ROUTE LOGGER (OPTIONAL)
+   🚫 GLOBAL RATE LIMIT (ANTI DDOS)
+============================== */
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use(globalLimiter);
+
+/* ==============================
+   🔐 AUTH RATE LIMIT (STRICT)
+============================== */
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 50,
+  message: {
+    msg: "Too many requests, try again later ❌",
+  },
+});
+
+/* ==============================
+   🔥 ROUTE LOGGER (DEV)
 ============================== */
 app.use((req, res, next) => {
-  console.log(`➡️ ${req.method} ${req.url}`);
+  console.log(`➡️ ${req.method} ${req.originalUrl}`);
   next();
 });
 
 /* ==============================
    🔥 API ROUTES
 ============================== */
-app.use("/api/auth", authRoutes);
+app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/deposit", depositRoutes);
+app.use("/api/investment", investmentRoutes);
+app.use("/api/withdrawal", withdrawalRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 /* ==============================
-   🧪 TEST ROUTE
+   🧪 HEALTH CHECK
 ============================== */
 app.get("/", (req, res) => {
-  res.send("🚀 API Running...");
+  res.json({
+    success: true,
+    msg: "🚀 NovaCentral API running",
+    time: new Date(),
+  });
 });
 
 /* ==============================
@@ -59,7 +114,7 @@ app.get("/", (req, res) => {
 ============================== */
 app.use((req, res) => {
   res.status(404).json({
-    msg: "Route not found",
+    msg: "Route not found ❌",
   });
 });
 
@@ -67,7 +122,7 @@ app.use((req, res) => {
    🔥 GLOBAL ERROR HANDLER
 ============================== */
 app.use((err, req, res, next) => {
-  console.error("❌ Server Error:", err.message);
+  console.error("❌ Server Error:", err.stack);
 
   res.status(500).json({
     msg: "Internal Server Error",

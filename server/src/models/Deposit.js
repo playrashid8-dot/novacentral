@@ -7,21 +7,23 @@ const depositSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      index: true,
     },
 
     // 💰 AMOUNT
     amount: {
       type: Number,
       required: true,
-      min: 10, // minimum deposit
+      min: 10,
     },
 
-    // 🔐 TX HASH (IMPORTANT)
+    // 🔐 TX HASH (ANTI-DUPLICATE CORE)
     txHash: {
       type: String,
       required: true,
-      unique: true, // ❌ duplicate block
+      unique: true,
       trim: true,
+      lowercase: true,
     },
 
     // 🔥 STATUS FLOW
@@ -29,27 +31,57 @@ const depositSchema = new mongoose.Schema(
       type: String,
       enum: ["pending", "approved", "rejected"],
       default: "pending",
+      index: true,
     },
 
-    // 📡 NETWORK INFO (future use)
+    // 📡 NETWORK
     network: {
       type: String,
       default: "BEP20",
+      trim: true,
     },
 
-    // 🧾 ADMIN NOTE (optional)
+    // 🧾 ADMIN NOTE
     note: {
       type: String,
       default: "",
+      trim: true,
+      maxlength: 200,
     },
+
+    // ⏱ TIMINGS
+    approvedAt: Date,
+    rejectedAt: Date,
   },
   {
     timestamps: true,
   }
 );
 
-// 🔥 INDEX (FAST SEARCH)
-depositSchema.index({ userId: 1 });
-depositSchema.index({ txHash: 1 });
+//
+// 🔥 COMPOUND INDEX (ADMIN SPEED BOOST)
+//
+depositSchema.index({ userId: 1, status: 1 });
+depositSchema.index({ createdAt: -1 });
+
+//
+// 🔥 SAFE JSON RESPONSE
+//
+depositSchema.methods.toJSON = function () {
+  const obj = this.toObject();
+
+  // future sensitive fields hide yahan kar sakte ho
+  return obj;
+};
+
+//
+// 🔥 PRE-SAVE CLEAN (IMPORTANT)
+//
+depositSchema.pre("save", function (next) {
+  if (this.txHash) {
+    this.txHash = this.txHash.toLowerCase().trim();
+  }
+  next();
+});
 
 export default mongoose.model("Deposit", depositSchema);
