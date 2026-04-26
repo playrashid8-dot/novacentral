@@ -4,11 +4,15 @@ import jwt from "jsonwebtoken";
 
 const TOKEN_COOKIE_NAME = "token";
 
-const getCookieOptions = () => ({
-  httpOnly: true,
-  secure: false,
-  sameSite: "lax",
-});
+const getCookieOptions = () => {
+  const isProd = process.env.NODE_ENV === "production";
+
+  return {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",
+  };
+};
 
 const setAuthCookie = (res, token) => {
   const options = getCookieOptions();
@@ -208,10 +212,11 @@ export const login = async (req, res) => {
 };
 
 export const logout = async (req, res) => {
+  const isProd = process.env.NODE_ENV === "production";
   const clearOptions = {
     httpOnly: true,
-    secure: false,
-    sameSite: "lax",
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",
     path: "/",
   };
 

@@ -23,6 +23,13 @@ import historyRoutes from "./routes/historyRoutes.js";
 dotenv.config();
 
 const app = express();
+const corsOptions = {
+  origin: [
+    "http://localhost:3000",
+    "https://novacentral.vercel.app",
+  ],
+  credentials: true,
+};
 
 /* ==============================
    🔥 TRUST PROXY (Railway fix)
@@ -39,12 +46,8 @@ connectDB();
 ============================== */
 
 // ✅ CORS
-app.use(
-  cors({
-    origin: "http://localhost:3000",
-    credentials: true,
-  })
-);
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 
 // ✅ BODY PARSER (LIMITED SIZE)
 app.use(express.json({ limit: "10kb" }));
