@@ -22,6 +22,23 @@ export const resetRedirectState = () => {
 };
 
 /* ==============================
+   🔐 REQUEST INTERCEPTOR
+============================== */
+API.interceptors.request.use((config) => {
+  config.withCredentials = true;
+
+  if (config.headers?.delete) {
+    config.headers.delete("Authorization");
+    config.headers.delete("authorization");
+  } else if (config.headers) {
+    delete config.headers.Authorization;
+    delete config.headers.authorization;
+  }
+
+  return config;
+});
+
+/* ==============================
    🚨 RESPONSE INTERCEPTOR
 ============================== */
 API.interceptors.response.use(

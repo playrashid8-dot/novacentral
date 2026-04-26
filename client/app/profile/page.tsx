@@ -1,14 +1,22 @@
 "use client";
 
-import { getUser, logout } from "../../lib/auth";
+import { logout } from "../../lib/auth";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import ProtectedRoute from "../../components/ProtectedRoute";
+import { fetchCurrentUser } from "../../lib/session";
 
 export default function Profile() {
   const router = useRouter();
-  const user = getUser();
+  const [user, setUser]: any = useState(null);
+
+  useEffect(() => {
+    fetchCurrentUser().then((fresh) => {
+      if (fresh) setUser(fresh);
+    });
+  }, []);
 
   return (
     <ProtectedRoute>

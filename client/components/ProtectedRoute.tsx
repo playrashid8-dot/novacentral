@@ -25,7 +25,9 @@ export default function ProtectedRoute({
 
         if (!mounted) return;
 
-        const admin = isAdmin();
+        const admin = adminOnly ? await isAdmin() : false;
+
+        if (!mounted) return;
 
         if (!ok) {
           setRedirecting(true);

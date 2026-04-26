@@ -3,10 +3,10 @@
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 import API, { getApiErrorMessage } from "../../lib/api";
-import { getUser } from "../../lib/auth";
 import { useRouter } from "next/navigation";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import AppToast from "../../components/AppToast";
+import { fetchCurrentUser } from "../../lib/session";
 
 export default function Investment() {
   const router = useRouter();
@@ -31,13 +31,14 @@ export default function Investment() {
 
   // 🔐 USER LOAD
   useEffect(() => {
-    const u = getUser();
-    if (!u) {
-      router.replace("/login");
-      return;
-    }
-    setUser(u);
-  }, []);
+    fetchCurrentUser()
+      .then((fresh) => {
+        if (fresh) setUser(fresh);
+      })
+      .catch(() => {
+        router.replace("/login");
+      });
+  }, [router]);
 
   // 🚀 INVEST
   const confirmInvest = async () => {

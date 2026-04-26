@@ -9,12 +9,16 @@ export const API_BASE =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 export async function adminFetch(path, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  delete headers.Authorization;
+  delete headers.authorization;
+
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...(options.headers || {}),
+      ...headers,
     },
   });
 

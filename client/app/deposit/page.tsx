@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import API, { getApiErrorMessage } from "../../lib/api";
-import { getUser } from "../../lib/auth";
 import { motion } from "framer-motion";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import AppToast from "../../components/AppToast";
@@ -45,8 +44,6 @@ export default function Deposit() {
 
   // 🔐 AUTH
   useEffect(() => {
-    const cached = getUser();
-    if (cached) setUser(cached);
     fetchCurrentUser().then((fresh) => {
       if (fresh) setUser(fresh);
     });

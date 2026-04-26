@@ -1,18 +1,17 @@
 "use client";
 
-import { getUser } from "../../lib/auth";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import API, { getApiErrorMessage } from "../../lib/api";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import AppToast from "../../components/AppToast";
+import { fetchCurrentUser } from "../../lib/session";
 
 export default function Referral() {
-  const user = getUser();
-
   const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState("");
   const [stats, setStats] = useState<any>(null);
+  const [user, setUser]: any = useState(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -22,6 +21,9 @@ export default function Referral() {
   useEffect(() => {
     const loadStats = async () => {
       try {
+        const fresh = await fetchCurrentUser();
+        if (fresh) setUser(fresh);
+
         const res = await API.get("/user/referral-stats");
         setStats(res.data?.stats || null);
       } catch (err: any) {

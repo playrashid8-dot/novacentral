@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import API, { getApiErrorMessage } from "../../lib/api";
-import { saveUser, resetLogoutState } from "../../lib/auth";
+import { resetLogoutState } from "../../lib/auth";
 
 export default function Login() {
   const router = useRouter();
@@ -40,15 +40,10 @@ export default function Login() {
       setLoading(true);
       resetLogoutState();
 
-      const res = await API.post("/auth/login", {
+      await API.post("/auth/login", {
         username: cleanUsername,
         password: cleanPassword,
       });
-
-      const saved = saveUser(res.data);
-      if (!saved) {
-        throw new Error("Invalid auth response from server");
-      }
 
       showToast("Login successful ✅");
       router.replace("/dashboard");

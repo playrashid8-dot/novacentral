@@ -1,40 +1,5 @@
 import API, { resetRedirectState } from "./api";
 
-const USER_KEY = "user";
-
-const getStorage = () => {
-  if (typeof window === "undefined") return null;
-  return window.localStorage;
-};
-
-const extractUser = (data) => data?.user || data?.data?.user || null;
-
-// 🔐 SAVE USER PROFILE (JWT stays in httpOnly cookie)
-export const saveUser = (data) => {
-  const storage = getStorage();
-  if (!storage) return false;
-
-  const user = extractUser(data);
-  if (!user) return false;
-
-  storage.setItem(USER_KEY, JSON.stringify(user));
-
-  return true;
-};
-
-// 👤 GET USER
-export const getUser = () => {
-  const storage = getStorage();
-  if (!storage) return null;
-
-  try {
-    const user = storage.getItem(USER_KEY);
-    return user ? JSON.parse(user) : null;
-  } catch {
-    return null;
-  }
-};
-
 // 🚫 prevent multiple logout redirects
 let isLoggingOut = false;
 
@@ -43,10 +8,7 @@ export const isAuth = async () => {
   if (typeof window === "undefined") return false;
 
   try {
-    const res = await API.get("/user/me");
-    if (res?.data?.user) {
-      localStorage.setItem(USER_KEY, JSON.stringify(res.data.user));
-    }
+    await API.get("/user/me");
     return true;
   } catch {
     return false;
@@ -54,20 +16,21 @@ export const isAuth = async () => {
 };
 
 // 🛡️ ADMIN CHECK
-export const isAdmin = () => {
-  const user = getUser();
-  return user?.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+export const isAdmin = async () => {
+  try {
+    const res = await API.get("/user/me");
+    return Boolean(res.data?.user?.isAdmin);
+  } catch {
+    return false;
+  }
 };
 
 // 🚪 LOGOUT
 export const logout = (message) => {
-  const storage = getStorage();
-  if (!storage) return;
+  if (typeof window === "undefined") return;
 
   if (isLoggingOut) return;
   isLoggingOut = true;
-
-  storage.removeItem(USER_KEY);
 
   API.post("/auth/logout").catch(() => {
     // No-op: local cleanup + redirect should still complete.
@@ -96,19 +59,6 @@ export const protectRoute = (router) => {
       router.replace("/login");
     }
   });
-};
-
-// 🔄 UPDATE USER
-export const updateUser = (newData) => {
-  const storage = getStorage();
-  if (!storage) return;
-
-  const user = getUser();
-  if (!user) return;
-
-  const updated = { ...user, ...newData };
-
-  storage.setItem(USER_KEY, JSON.stringify(updated));
 };
 
 // 🔥 SIMPLE TOAST

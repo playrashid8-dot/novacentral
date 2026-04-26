@@ -3,9 +3,9 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { getApiErrorMessage } from "../../lib/api";
-import { getUser, logout } from "../../lib/auth";
+import { logout } from "../../lib/auth";
 import { fetchCurrentUser } from "../../lib/session";
 import AppToast from "../../components/AppToast";
 import ProtectedRoute from "../../components/ProtectedRoute";
@@ -26,11 +26,6 @@ export default function Dashboard() {
 
   /* 🔐 AUTH */
   useEffect(() => {
-    const cachedUser = getUser();
-    if (cachedUser) {
-      setUser(cachedUser);
-      setDisplayBalance(cachedUser.balance || 0);
-    }
     loadUser(false);
 
     const onFocus = () => loadUser(true);
@@ -76,14 +71,7 @@ export default function Dashboard() {
 
   /* ⏱️ COOLDOWN */
   useEffect(() => {
-    const saved = localStorage.getItem("withdrawTime");
-
-    if (saved) {
-      const diff = Math.floor((Date.now() - Number(saved)) / 1000);
-      const remaining = 96 * 3600 - diff;
-
-      if (remaining > 0) setCooldown(remaining);
-    }
+    setCooldown(0);
   }, []);
 
   useEffect(() => {

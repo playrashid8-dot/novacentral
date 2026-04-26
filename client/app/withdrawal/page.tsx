@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from "react";
 import API, { getApiErrorMessage } from "../../lib/api";
-import { getUser } from "../../lib/auth";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import ProtectedRoute from "../../components/ProtectedRoute";
@@ -42,8 +41,6 @@ export default function Withdrawal() {
 
   // 🔐 USER LOAD
   useEffect(() => {
-    const cached = getUser();
-    if (cached) setUser(cached);
     fetchCurrentUser().then((fresh) => {
       if (fresh) setUser(fresh);
     });

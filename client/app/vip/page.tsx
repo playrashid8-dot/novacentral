@@ -2,12 +2,19 @@
 
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { getUser } from "../../lib/auth";
+import { useEffect, useState } from "react";
+import { fetchCurrentUser } from "../../lib/session";
 import ProtectedRoute from "../../components/ProtectedRoute";
 
 export default function VIP() {
   const router = useRouter();
-  const user = getUser();
+  const [user, setUser]: any = useState(null);
+
+  useEffect(() => {
+    fetchCurrentUser().then((fresh) => {
+      if (fresh) setUser(fresh);
+    });
+  }, []);
 
   const vipLevels = [
     {

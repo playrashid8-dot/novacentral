@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import API, { getApiErrorMessage } from "../../lib/api";
-import { saveUser } from "../../lib/auth";
 
 /* ==============================
    🔥 WRAPPER (FIX BUILD ERROR)
@@ -79,18 +78,13 @@ function SignupInner() {
     try {
       setLoading(true);
 
-      const res = await API.post("/auth/register", {
+      await API.post("/auth/register", {
         username: cleanUsername,
         email: cleanEmail,
         password: cleanPassword,
         number: cleanPhone,
         referralCode: referral.trim(),
       });
-
-      const saved = saveUser(res.data);
-      if (!saved) {
-        throw new Error("Invalid auth response from server");
-      }
 
       showToast("Account created 🚀");
 
