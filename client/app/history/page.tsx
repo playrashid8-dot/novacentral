@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import API from "../../lib/api";
 import { logout } from "../../lib/auth";
 import BottomNav from "../../components/BottomNav";
 import ProtectedRoute from "../../components/ProtectedRoute";
 
 export default function History() {
+  const router = useRouter();
+
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
