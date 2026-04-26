@@ -16,15 +16,15 @@ const router = express.Router();
 ============================== */
 const isAdmin = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user._id);
 
     if (!user || user.email !== process.env.ADMIN_EMAIL) {
-      return res.status(403).json({ msg: "Admin access only" });
+      return res.status(403).json({ success: false, msg: "Admin access only" });
     }
 
     next();
   } catch (err) {
-    res.status(500).json({ msg: "Admin check error" });
+    res.status(500).json({ success: false, msg: err.message });
   }
 };
 

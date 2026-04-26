@@ -3,19 +3,20 @@ import User from "../models/User.js";
 
 const auth = async (req, res, next) => {
   try {
+    console.log("Incoming cookies:", req.cookies);
+    const cookieToken = req.cookies?.token;
     const header = req.headers.authorization;
-
-    // ❌ NO HEADER
-    if (!header) {
-      return res.status(401).json({ msg: "No token, authorization denied" });
-    }
-
-    // ❌ INVALID FORMAT
-    if (!header.startsWith("Bearer ")) {
-      return res.status(401).json({ msg: "Invalid token format" });
-    }
-
-    const token = header.split(" ")[1];
+    const headerToken =
+      header && header.startsWith("Bearer ") ? header.split(" ")[1] : null;
+    const token = cookieToken || headerToken;
+    const tokenSource = cookieToken ? "cookie" : headerToken ? "header" : "none";
+    console.log("AUTH CHECK:", {
+      path: req.originalUrl,
+      tokenSource,
+      hasCookieToken: Boolean(cookieToken),
+      hasHeaderToken: Boolean(headerToken),
+      cookieKeys: Object.keys(req.cookies || {}),
+    });
 
     // ❌ EMPTY TOKEN
     if (!token) {
@@ -40,7 +41,8 @@ const auth = async (req, res, next) => {
 
     // ✅ ATTACH USER (MINIMAL DATA)
     req.user = {
-      id: user._id,
+      _id: user._id,
+      id: user._id, // legacy compatibility
       vipLevel: user.vipLevel,
     };
 
@@ -51,6 +53,7 @@ const auth = async (req, res, next) => {
 
     // 🔥 TOKEN EXPIRED
     if (err.name === "TokenExpiredError") {
+      console.error("AUTH TOKEN EXPIRED");
       return res.status(401).json({ msg: "Token expired" });
     }
 

@@ -1,4 +1,5 @@
-const TOKEN_KEY = "token";
+import API from "./api";
+
 const USER_KEY = "user";
 
 const getStorage = () => {
@@ -6,25 +7,17 @@ const getStorage = () => {
   return window.localStorage;
 };
 
-const extractToken = (data) =>
-  data?.token || data?.accessToken || data?.jwt || data?.data?.token || null;
-
 const extractUser = (data) => data?.user || data?.data?.user || null;
 
-// 🔐 SAVE USER + TOKEN
+// 🔐 SAVE USER PROFILE (JWT stays in httpOnly cookie)
 export const saveUser = (data) => {
   const storage = getStorage();
   if (!storage) return false;
 
-  const token = extractToken(data);
-  if (!token || typeof token !== "string") return false;
-
-  storage.setItem(TOKEN_KEY, token);
-
   const user = extractUser(data);
-  if (user) {
-    storage.setItem(USER_KEY, JSON.stringify(user));
-  }
+  if (!user) return false;
+
+  storage.setItem(USER_KEY, JSON.stringify(user));
 
   return true;
 };
@@ -42,55 +35,22 @@ export const getUser = () => {
   }
 };
 
-// 🔑 GET TOKEN
-export const getToken = () => {
-  const storage = getStorage();
-  if (!storage) return null;
-
-  const token = storage.getItem(TOKEN_KEY);
-  return token && typeof token === "string" ? token : null;
-};
-
-// 🔐 PARSE JWT
-const parseJwt = (token) => {
-  try {
-    const base64 = token.split(".")[1]
-      .replace(/-/g, "+")
-      .replace(/_/g, "/");
-
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split("")
-        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
-    );
-
-    return JSON.parse(jsonPayload);
-  } catch {
-    return null;
-  }
-};
-
 // 🚫 prevent multiple logout redirects
 let isLoggingOut = false;
 
-// 🔒 CHECK AUTH
-export const isAuth = () => {
+// 🔒 CHECK AUTH (server verifies httpOnly cookie)
+export const isAuth = async () => {
   if (typeof window === "undefined") return false;
 
-  const token = getToken();
-  if (!token) return false;
-
-  const payload = parseJwt(token);
-  if (!payload) return false;
-
-  // ⏳ EXPIRED TOKEN
-  if (payload.exp && payload.exp * 1000 < Date.now()) {
-    logout("Session expired 🔒");
+  try {
+    const res = await API.get("/user/me");
+    if (res?.data?.user) {
+      localStorage.setItem(USER_KEY, JSON.stringify(res.data.user));
+    }
+    return true;
+  } catch {
     return false;
   }
-
-  return true;
 };
 
 // 🛡️ ADMIN CHECK
@@ -107,8 +67,11 @@ export const logout = (message) => {
   if (isLoggingOut) return;
   isLoggingOut = true;
 
-  storage.removeItem(TOKEN_KEY);
   storage.removeItem(USER_KEY);
+
+  API.post("/auth/logout").catch(() => {
+    // No-op: local cleanup + redirect should still complete.
+  });
 
   if (message) {
     showToast(message);
@@ -119,13 +82,19 @@ export const logout = (message) => {
   }, 500);
 };
 
+export const resetLogoutState = () => {
+  isLoggingOut = false;
+};
+
 // 🛡️ PROTECT ROUTE
 export const protectRoute = (router) => {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined") return Promise.resolve();
 
-  if (!isAuth()) {
-    router.replace("/login");
-  }
+  return isAuth().then((ok) => {
+    if (!ok) {
+      router.replace("/login");
+    }
+  });
 };
 
 // 🔄 UPDATE USER

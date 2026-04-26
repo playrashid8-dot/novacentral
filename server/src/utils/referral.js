@@ -54,6 +54,7 @@ export const distributeReferralIncome = async (userId, amount) => {
           $inc: {
             balance: income,
             totalEarnings: income,
+            referralEarnings: income,
           },
         }
       );

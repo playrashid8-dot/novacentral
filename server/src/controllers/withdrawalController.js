@@ -10,66 +10,116 @@ export const createWithdrawal = async (req, res) => {
     let { amount, walletAddress } = req.body;
 
     amount = Number(amount);
+    walletAddress = walletAddress?.trim();
 
     // ✅ VALIDATION
-    if (!amount || amount < 5) {
-      return res.status(400).json({ msg: "Minimum withdrawal is $5" });
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, msg: "Amount must be a number greater than 0" });
     }
 
-    if (!walletAddress) {
-      return res.status(400).json({ msg: "Wallet address required" });
+    if (!walletAddress || walletAddress.length < 8) {
+      return res
+        .status(400)
+        .json({ success: false, msg: "Valid wallet address required" });
     }
 
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user._id);
 
     if (!user) {
-      return res.status(404).json({ msg: "User not found" });
+      return res.status(404).json({ success: false, msg: "User not found" });
     }
 
     if (user.isBlocked) {
-      return res.status(403).json({ msg: "Account blocked" });
+      return res.status(403).json({ success: false, msg: "Account blocked" });
     }
 
+    const cooldownMs = 96 * 60 * 60 * 1000;
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - cooldownMs);
     // 🔥 ATOMIC BALANCE DEDUCT
     const updated = await User.findOneAndUpdate(
-      { _id: user._id, balance: { $gte: amount } },
-      { $inc: { balance: -amount } },
+      {
+        _id: user._id,
+        isBlocked: { $ne: true },
+        balance: { $gte: amount },
+        $or: [
+          { lastWithdrawalAt: { $exists: false } },
+          { lastWithdrawalAt: null },
+          { lastWithdrawalAt: { $lte: cutoff } },
+        ],
+      },
+      { $inc: { balance: -amount }, $set: { lastWithdrawalAt: now } },
       { new: true }
     );
 
     if (!updated) {
-      return res.status(400).json({ msg: "Insufficient balance" });
+      const refreshed = await User.findById(user._id).select("balance lastWithdrawalAt");
+      const lastAt = refreshed?.lastWithdrawalAt
+        ? new Date(refreshed.lastWithdrawalAt).getTime()
+        : null;
+      const remainingMs = lastAt ? cooldownMs - (Date.now() - lastAt) : 0;
+
+      if (remainingMs > 0) {
+        return res.status(400).json({
+          success: false,
+          msg: "Withdrawal cooldown active",
+          cooldownRemaining: Math.ceil(remainingMs / 1000),
+        });
+      }
+
+      return res.status(400).json({ success: false, msg: "Insufficient balance" });
     }
 
     // ⏱ 96h delay
-    const releaseAt = new Date(Date.now() + 96 * 60 * 60 * 1000);
+    const releaseAt = new Date(Date.now() + cooldownMs);
 
-    const withdrawal = await Withdrawal.create({
-      userId: user._id,
-      amount,
-      walletAddress,
-      releaseAt,
-      status: "pending",
-    });
+    let withdrawal;
+    try {
+      withdrawal = await Withdrawal.create({
+        userId: user._id,
+        amount,
+        walletAddress,
+        releaseAt,
+        status: "pending",
+      });
 
-    // 🔥 CREATE TRANSACTION (HISTORY)
-    await Transaction.create({
-      user: user._id,
-      type: "withdraw",
-      amount,
-      status: "pending",
-      refId: withdrawal._id,
+      // 🔥 CREATE TRANSACTION (HISTORY)
+      await Transaction.findOneAndUpdate(
+        { type: "withdraw", refId: withdrawal._id },
+        {
+          user: user._id,
+          type: "withdraw",
+          amount,
+          status: "pending",
+          refId: withdrawal._id,
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+    } catch (createErr) {
+      await User.updateOne(
+        { _id: user._id },
+        { $inc: { balance: amount }, $set: { lastWithdrawalAt: user.lastWithdrawalAt || null } }
+      );
+      throw createErr;
+    }
+    console.log("USER:", req.user);
+    console.log("WITHDRAW:", withdrawal);
+    console.log("Withdrawal created:", {
+      userId: req.user._id,
+      withdrawalId: withdrawal._id,
+      amount: withdrawal.amount,
     });
 
     res.json({
       success: true,
-      msg: "Withdrawal request submitted",
-      withdrawal,
+      data: { withdrawal },
     });
 
   } catch (err) {
     console.error("CREATE WITHDRAWAL ERROR:", err.message);
-    res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ success: false, msg: err.message });
   }
 };
 
@@ -79,17 +129,17 @@ export const createWithdrawal = async (req, res) => {
 //
 export const getMyWithdrawals = async (req, res) => {
   try {
-    const withdrawals = await Withdrawal.find({ userId: req.user.id })
+    const withdrawals = await Withdrawal.find({ userId: req.user._id })
       .sort({ createdAt: -1 });
 
     res.json({
       success: true,
-      withdrawals,
+      data: { withdrawals },
     });
 
   } catch (err) {
     console.error("GET WITHDRAWALS ERROR:", err.message);
-    res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ success: false, msg: err.message });
   }
 };
 
@@ -106,23 +156,38 @@ export const approveWithdrawal = async (req, res) => {
     );
 
     if (!withdrawal) {
-      return res.status(400).json({ msg: "Already processed or not found" });
+      return res
+        .status(400)
+        .json({ success: false, msg: "Already processed or not found" });
     }
 
     // 🔥 UPDATE TRANSACTION
     await Transaction.findOneAndUpdate(
-      { refId: withdrawal._id },
-      { status: "approved" }
+      { type: "withdraw", refId: withdrawal._id },
+      {
+        user: withdrawal.userId,
+        type: "withdraw",
+        amount: withdrawal.amount,
+        status: "approved",
+        refId: withdrawal._id,
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
     );
+    console.log("USER:", req.user);
+    console.log("WITHDRAW:", withdrawal);
+    console.log("Admin withdrawal approve:", {
+      adminId: req.user._id,
+      withdrawalId: withdrawal._id,
+    });
 
     res.json({
       success: true,
-      msg: "Withdrawal approved",
+      data: { withdrawal },
     });
 
   } catch (err) {
     console.error("APPROVE ERROR:", err.message);
-    res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ success: false, msg: err.message });
   }
 };
 
@@ -139,7 +204,9 @@ export const rejectWithdrawal = async (req, res) => {
     );
 
     if (!withdrawal) {
-      return res.status(400).json({ msg: "Already processed or not found" });
+      return res
+        .status(400)
+        .json({ success: false, msg: "Already processed or not found" });
     }
 
     // 🔁 REFUND
@@ -149,22 +216,38 @@ export const rejectWithdrawal = async (req, res) => {
         $inc: {
           balance: withdrawal.amount,
         },
+        $set: {
+          lastWithdrawalAt: null,
+        },
       }
     );
 
     // 🔥 UPDATE TRANSACTION
     await Transaction.findOneAndUpdate(
-      { refId: withdrawal._id },
-      { status: "rejected" }
+      { type: "withdraw", refId: withdrawal._id },
+      {
+        user: withdrawal.userId,
+        type: "withdraw",
+        amount: withdrawal.amount,
+        status: "rejected",
+        refId: withdrawal._id,
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
     );
+    console.log("USER:", req.user);
+    console.log("WITHDRAW:", withdrawal);
+    console.log("Admin withdrawal reject:", {
+      adminId: req.user._id,
+      withdrawalId: withdrawal._id,
+    });
 
     res.json({
       success: true,
-      msg: "Rejected & refunded",
+      data: { withdrawal },
     });
 
   } catch (err) {
     console.error("REJECT ERROR:", err.message);
-    res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ success: false, msg: err.message });
   }
 };

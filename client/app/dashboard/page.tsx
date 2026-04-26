@@ -4,8 +4,11 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
-import API from "../../lib/api";
-import { getUser, logout, updateUser } from "../../lib/auth";
+import { getApiErrorMessage } from "../../lib/api";
+import { getUser, logout } from "../../lib/auth";
+import { fetchCurrentUser } from "../../lib/session";
+import AppToast from "../../components/AppToast";
+import ProtectedRoute from "../../components/ProtectedRoute";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -14,31 +17,46 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [displayBalance, setDisplayBalance] = useState(0);
   const [cooldown, setCooldown] = useState(0);
+  const [toast, setToast] = useState("");
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), 2500);
+  };
 
   /* 🔐 AUTH */
   useEffect(() => {
-    const u = getUser();
-    if (!u) {
-      router.replace("/login");
-      return;
+    const cachedUser = getUser();
+    if (cachedUser) {
+      setUser(cachedUser);
+      setDisplayBalance(cachedUser.balance || 0);
     }
-    loadUser();
+    loadUser(false);
+
+    const onFocus = () => loadUser(true);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+    };
   }, []);
 
   /* 📡 LOAD USER */
-  const loadUser = async () => {
+  const loadUser = async (silent: boolean) => {
     try {
-      const res = await API.get("/user/me");
-      const data = res.data.user || res.data;
+      if (!silent) setLoading(true);
+      const data = await fetchCurrentUser();
+      if (!data) throw new Error("No user data");
 
       setUser(data);
       setDisplayBalance(data.balance || 0);
-      updateUser(data);
-
-    } catch {
+    } catch (err: any) {
+      if (!silent) {
+        showToast(getApiErrorMessage(err, "Session expired 🔒"));
+      }
       logout();
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -99,7 +117,9 @@ export default function Dashboard() {
   }
 
   return (
+    <ProtectedRoute>
     <div className="min-h-screen max-w-[420px] mx-auto px-4 pb-28 text-white">
+      <AppToast message={toast} />
 
       {/* HEADER */}
       <div className="flex justify-between items-center pt-5">
@@ -167,6 +187,7 @@ export default function Dashboard() {
       {/* 🔻 BOTTOM NAV (UPDATED) */}
       <BottomNav />
     </div>
+    </ProtectedRoute>
   );
 }
 

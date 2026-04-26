@@ -14,7 +14,7 @@ const depositSchema = new mongoose.Schema(
     amount: {
       type: Number,
       required: true,
-      min: 10,
+      min: 0.01,
     },
 
     // 🔐 TX HASH (ANTI-DUPLICATE CORE)

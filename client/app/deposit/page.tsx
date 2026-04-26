@@ -2,9 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import API from "../../lib/api";
+import API, { getApiErrorMessage } from "../../lib/api";
 import { getUser } from "../../lib/auth";
 import { motion } from "framer-motion";
+import ProtectedRoute from "../../components/ProtectedRoute";
+import AppToast from "../../components/AppToast";
+import { fetchCurrentUser } from "../../lib/session";
 
 export default function Deposit() {
   const router = useRouter();
@@ -14,17 +17,22 @@ export default function Deposit() {
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [user, setUser]: any = useState(null);
+  const [toast, setToast] = useState("");
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), 2500);
+  };
 
   const wallet = "0xEC4Edc0654Ee207F9dB9E1068d3adfE689362B64";
 
   // 🔐 AUTH
   useEffect(() => {
-    const u = getUser();
-    if (!u) {
-      router.replace("/login");
-      return;
-    }
-    setUser(u);
+    const cached = getUser();
+    if (cached) setUser(cached);
+    fetchCurrentUser().then((fresh) => {
+      if (fresh) setUser(fresh);
+    });
   }, []);
 
   // 🚀 SUBMIT
@@ -33,23 +41,23 @@ export default function Deposit() {
 
     const amt = Number(amount);
 
-    if (!amt || amt < 10) {
-      return alert("Minimum deposit is $10");
+    if (!Number.isFinite(amt) || amt <= 0) {
+      return showToast("Amount must be greater than 0");
     }
 
     if (!txHash || txHash.trim().length < 20) {
-      return alert("Invalid TX Hash");
+      return showToast("Invalid TX Hash");
     }
 
     try {
       setLoading(true);
 
-      await API.post("/deposit", {
+      const res = await API.post("/deposit", {
         amount: amt,
         txHash: txHash.trim().toLowerCase(),
       });
 
-      alert("Deposit submitted successfully 🚀");
+      showToast(res?.data?.msg || "Deposit submitted successfully");
 
       setAmount("");
       setTxHash("");
@@ -57,7 +65,7 @@ export default function Deposit() {
       router.push("/dashboard");
 
     } catch (err: any) {
-      alert(err?.response?.data?.msg || "Deposit failed ❌");
+      showToast(getApiErrorMessage(err, "Deposit failed ❌"));
     } finally {
       setLoading(false);
     }
@@ -71,7 +79,9 @@ export default function Deposit() {
   };
 
   return (
+    <ProtectedRoute>
     <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 text-white relative overflow-hidden bg-[#040406]">
+      <AppToast message={toast} />
 
       {/* 🌌 BACKGROUND */}
       <div className="absolute w-[500px] h-[500px] bg-purple-600 opacity-20 blur-[150px] top-[-150px] left-[-150px]" />
@@ -132,6 +142,7 @@ export default function Deposit() {
             {[10, 50, 100].map((val) => (
               <button
                 key={val}
+                disabled={loading}
                 onClick={() => setAmount(String(val))}
                 className="bg-white/5 p-2 rounded-lg text-xs hover:bg-purple-500/20 transition"
               >
@@ -186,5 +197,6 @@ export default function Deposit() {
       </div>
 
     </div>
+    </ProtectedRoute>
   );
 }

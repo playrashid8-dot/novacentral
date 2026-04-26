@@ -15,50 +15,64 @@ export const createDeposit = async (req, res) => {
     txHash = txHash?.trim().toLowerCase();
 
     // ✅ VALIDATION (STRONG)
-    if (!amount || isNaN(amount) || amount < 10) {
-      return res.status(400).json({ msg: "Minimum deposit is $10" });
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, msg: "Amount must be a number greater than 0" });
     }
 
-    if (!txHash || txHash.length < 10) {
-      return res.status(400).json({ msg: "Invalid transaction hash" });
-    }
-
-    // ❌ DUPLICATE TX
-    const existing = await Deposit.findOne({ txHash });
-    if (existing) {
-      return res.status(400).json({ msg: "Transaction already used" });
+    if (!txHash) {
+      return res
+        .status(400)
+        .json({ success: false, msg: "Transaction hash is required" });
     }
 
     // 🔥 CREATE DEPOSIT
-    const deposit = await Deposit.create({
-      userId: req.user.id,
-      amount,
-      txHash,
-      status: "pending",
-    });
+    let deposit;
+    try {
+      deposit = await Deposit.create({
+        userId: req.user._id,
+        amount,
+        txHash,
+        status: "pending",
+      });
+    } catch (createErr) {
+      if (createErr?.code === 11000) {
+        return res
+          .status(409)
+          .json({ success: false, msg: "Transaction hash already used" });
+      }
+      throw createErr;
+    }
 
     // 🔥 CREATE TRANSACTION (SAFE - NO DUPLICATE)
     await Transaction.findOneAndUpdate(
-      { refId: deposit._id },
+      { type: "deposit", refId: deposit._id },
       {
-        user: req.user.id,
+        user: req.user._id,
         type: "deposit",
         amount,
         status: "pending",
         refId: deposit._id,
       },
-      { upsert: true, new: true }
+      { upsert: true, new: true, setDefaultsOnInsert: true }
     );
+    console.log("USER:", req.user);
+    console.log("DEPOSIT:", deposit);
+    console.log("Deposit created:", {
+      userId: req.user._id,
+      depositId: deposit._id,
+      amount: deposit.amount,
+    });
 
     res.json({
       success: true,
-      msg: "Deposit submitted",
-      deposit,
+      data: { deposit },
     });
 
   } catch (err) {
     console.error("CREATE DEPOSIT ERROR:", err.message);
-    res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ success: false, msg: err.message });
   }
 };
 
@@ -76,18 +90,20 @@ export const approveDeposit = async (req, res) => {
     );
 
     if (!deposit) {
-      return res.status(400).json({ msg: "Already processed or not found" });
+      return res
+        .status(400)
+        .json({ success: false, msg: "Already processed or not found" });
     }
 
     // 🔍 USER
     const user = await User.findById(deposit.userId);
 
     if (!user) {
-      return res.status(404).json({ msg: "User not found" });
+      return res.status(404).json({ success: false, msg: "User not found" });
     }
 
     if (user.isBlocked) {
-      return res.status(403).json({ msg: "User is blocked" });
+      return res.status(403).json({ success: false, msg: "User is blocked" });
     }
 
     // 🔥 SAFE BALANCE UPDATE
@@ -106,19 +122,31 @@ export const approveDeposit = async (req, res) => {
 
     // 🔥 UPDATE TRANSACTION (SAFE)
     await Transaction.findOneAndUpdate(
-      { refId: deposit._id },
-      { status: "approved" },
-      { new: true, upsert: true } // ✅ IMPORTANT FIX
+      { type: "deposit", refId: deposit._id },
+      {
+        user: deposit.userId,
+        type: "deposit",
+        amount: deposit.amount,
+        status: "approved",
+        refId: deposit._id,
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
     );
+    console.log("USER:", req.user);
+    console.log("DEPOSIT:", deposit);
+    console.log("Admin deposit approve:", {
+      adminId: req.user._id,
+      depositId: deposit._id,
+    });
 
     res.json({
       success: true,
-      msg: "Deposit approved + referral distributed",
+      data: { deposit },
     });
 
   } catch (err) {
     console.error("APPROVE ERROR:", err.message);
-    res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ success: false, msg: err.message });
   }
 };
 
@@ -135,24 +163,38 @@ export const rejectDeposit = async (req, res) => {
     );
 
     if (!deposit) {
-      return res.status(400).json({ msg: "Already processed or not found" });
+      return res
+        .status(400)
+        .json({ success: false, msg: "Already processed or not found" });
     }
 
     // 🔥 UPDATE TRANSACTION (SAFE)
     await Transaction.findOneAndUpdate(
-      { refId: deposit._id },
-      { status: "rejected" },
-      { new: true, upsert: true } // ✅ IMPORTANT FIX
+      { type: "deposit", refId: deposit._id },
+      {
+        user: deposit.userId,
+        type: "deposit",
+        amount: deposit.amount,
+        status: "rejected",
+        refId: deposit._id,
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
     );
+    console.log("USER:", req.user);
+    console.log("DEPOSIT:", deposit);
+    console.log("Admin deposit reject:", {
+      adminId: req.user._id,
+      depositId: deposit._id,
+    });
 
     res.json({
       success: true,
-      msg: "Deposit rejected",
+      data: { deposit },
     });
 
   } catch (err) {
     console.error("REJECT ERROR:", err.message);
-    res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ success: false, msg: err.message });
   }
 };
 
@@ -162,16 +204,16 @@ export const rejectDeposit = async (req, res) => {
 //
 export const getMyDeposits = async (req, res) => {
   try {
-    const deposits = await Deposit.find({ userId: req.user.id })
+    const deposits = await Deposit.find({ userId: req.user._id })
       .sort({ createdAt: -1 });
 
     res.json({
       success: true,
-      deposits,
+      data: { deposits },
     });
 
   } catch (err) {
     console.error("GET DEPOSITS ERROR:", err.message);
-    res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ success: false, msg: err.message });
   }
 };

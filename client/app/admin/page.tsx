@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import API from "../../lib/api";
+import API, { getApiErrorMessage } from "../../lib/api";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { getUser, isAdmin } from "../../lib/auth";
+import ProtectedRoute from "../../components/ProtectedRoute";
+import AppToast from "../../components/AppToast";
 
 export default function AdminPage() {
   const router = useRouter();
@@ -12,8 +15,20 @@ export default function AdminPage() {
   const [data, setData]: any = useState([]);
   const [stats, setStats]: any = useState(null);
   const [loading, setLoading] = useState(true);
+  const [actionLoadingId, setActionLoadingId] = useState("");
+  const [toast, setToast] = useState("");
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), 2500);
+  };
 
   useEffect(() => {
+    const user = getUser();
+    if (!user || !isAdmin()) {
+      router.replace("/dashboard");
+      return;
+    }
     loadData();
     loadStats();
   }, [tab]);
@@ -31,8 +46,8 @@ export default function AdminPage() {
       const res = await API.get(url);
       setData(res.data.deposits || res.data.withdrawals || res.data.users);
 
-    } catch (err) {
-      alert("Failed to load admin data ❌");
+    } catch (err: any) {
+      showToast(getApiErrorMessage(err, "Failed to load admin data ❌"));
     } finally {
       setLoading(false);
     }
@@ -46,44 +61,68 @@ export default function AdminPage() {
   };
 
   // 🔥 ACTIONS
+  const runAction = async (label: string, action: () => Promise<any>) => {
+    try {
+      await action();
+      showToast(`${label} successful ✅`);
+      loadData();
+      loadStats();
+    } catch (err: any) {
+      showToast(getApiErrorMessage(err, `${label} failed ❌`));
+      loadData();
+      loadStats();
+    }
+  };
+
   const approveDeposit = async (id: string) => {
-    await API.post(`/admin/approve-deposit/${id}`);
-    loadData();
+    if (actionLoadingId) return;
+    setActionLoadingId(id);
+    setData((prev: any[]) => prev.filter((item) => item._id !== id));
+    await runAction("Deposit approval", () => API.post(`/admin/approve-deposit/${id}`));
+    setActionLoadingId("");
   };
 
   const rejectDeposit = async (id: string) => {
-    await API.post(`/admin/reject-deposit/${id}`);
-    loadData();
+    if (actionLoadingId) return;
+    setActionLoadingId(id);
+    setData((prev: any[]) => prev.filter((item) => item._id !== id));
+    await runAction("Deposit rejection", () => API.post(`/admin/reject-deposit/${id}`));
+    setActionLoadingId("");
   };
 
   const approveWithdrawal = async (id: string) => {
-    await API.post(`/admin/approve-withdrawal/${id}`);
-    loadData();
+    if (actionLoadingId) return;
+    setActionLoadingId(id);
+    setData((prev: any[]) => prev.filter((item) => item._id !== id));
+    await runAction("Withdrawal approval", () => API.post(`/admin/approve-withdrawal/${id}`));
+    setActionLoadingId("");
   };
 
   const rejectWithdrawal = async (id: string) => {
-    await API.post(`/admin/reject-withdrawal/${id}`);
-    loadData();
+    if (actionLoadingId) return;
+    setActionLoadingId(id);
+    setData((prev: any[]) => prev.filter((item) => item._id !== id));
+    await runAction("Withdrawal rejection", () => API.post(`/admin/reject-withdrawal/${id}`));
+    setActionLoadingId("");
   };
 
   const blockUser = async (id: string) => {
-    await API.post(`/admin/block/${id}`);
-    loadData();
+    await runAction("User block", () => API.post(`/admin/block/${id}`));
   };
 
   const unblockUser = async (id: string) => {
-    await API.post(`/admin/unblock/${id}`);
-    loadData();
+    await runAction("User unblock", () => API.post(`/admin/unblock/${id}`));
   };
 
   const resetWallet = async (id: string) => {
     if (!confirm("Reset wallet?")) return;
-    await API.post(`/admin/reset-wallet/${id}`);
-    loadData();
+    await runAction("Wallet reset", () => API.post(`/admin/reset-wallet/${id}`));
   };
 
   return (
+    <ProtectedRoute>
     <div className="min-h-screen bg-[#040406] text-white px-4 py-6">
+      <AppToast message={toast} />
 
       {/* HEADER */}
       <div className="flex justify-between items-center mb-6">
@@ -145,15 +184,35 @@ export default function AdminPage() {
               {/* ACTIONS */}
               {tab === "deposits" && (
                 <div className="flex gap-2 mt-3">
-                  <Btn text="Approve" color="bg-green-500" onClick={()=>approveDeposit(item._id)} />
-                  <Btn text="Reject" color="bg-red-500" onClick={()=>rejectDeposit(item._id)} />
+                  <Btn
+                    text="Approve"
+                    color="bg-green-500"
+                    disabled={Boolean(actionLoadingId)}
+                    onClick={() => approveDeposit(item._id)}
+                  />
+                  <Btn
+                    text="Reject"
+                    color="bg-red-500"
+                    disabled={Boolean(actionLoadingId)}
+                    onClick={() => rejectDeposit(item._id)}
+                  />
                 </div>
               )}
 
               {tab === "withdrawals" && (
                 <div className="flex gap-2 mt-3">
-                  <Btn text="Approve" color="bg-green-500" onClick={()=>approveWithdrawal(item._id)} />
-                  <Btn text="Reject" color="bg-red-500" onClick={()=>rejectWithdrawal(item._id)} />
+                  <Btn
+                    text="Approve"
+                    color="bg-green-500"
+                    disabled={Boolean(actionLoadingId)}
+                    onClick={() => approveWithdrawal(item._id)}
+                  />
+                  <Btn
+                    text="Reject"
+                    color="bg-red-500"
+                    disabled={Boolean(actionLoadingId)}
+                    onClick={() => rejectWithdrawal(item._id)}
+                  />
                 </div>
               )}
 
@@ -172,6 +231,7 @@ export default function AdminPage() {
       )}
 
     </div>
+    </ProtectedRoute>
   );
 }
 
@@ -186,11 +246,12 @@ function Stat({ title, value }: any) {
 }
 
 /* 🔹 BUTTON */
-function Btn({ text, color, onClick }: any) {
+function Btn({ text, color, onClick, disabled = false }: any) {
   return (
     <button
       onClick={onClick}
-      className={`${color} px-3 py-1 rounded text-xs`}
+      disabled={disabled}
+      className={`${color} px-3 py-1 rounded text-xs disabled:opacity-60 disabled:cursor-not-allowed`}
     >
       {text}
     </button>

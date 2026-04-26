@@ -27,6 +27,11 @@ const userSchema = new mongoose.Schema(
       required: true,
       select: false,
     },
+    number: {
+      type: String,
+      default: "",
+      trim: true,
+    },
 
     // 💰 WALLET
     balance: {
@@ -96,6 +101,11 @@ const userSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    referralEarnings: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
 
     teamCount: {
       type: Number,
@@ -123,6 +133,10 @@ const userSchema = new mongoose.Schema(
     },
 
     lastLogin: {
+      type: Date,
+      default: null,
+    },
+    lastWithdrawalAt: {
       type: Date,
       default: null,
     },

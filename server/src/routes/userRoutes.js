@@ -10,6 +10,12 @@ const router = express.Router();
 ============================== */
 router.get("/me", auth, async (req, res) => {
   try {
+    console.log("GET /user/me COOKIE DEBUG:", {
+      hasTokenCookie: Boolean(req.cookies?.token),
+      cookieKeys: Object.keys(req.cookies || {}),
+      userId: req.user?.id,
+    });
+
     const user = await User.findById(req.user.id).select("-password");
 
     if (!user) {
@@ -117,6 +123,35 @@ router.get("/dashboard", auth, async (req, res) => {
 
   } catch (err) {
     console.error("DASHBOARD ERROR:", err.message);
+    res.status(500).json({ msg: "Server error" });
+  }
+});
+
+/* ==============================
+   👥 REFERRAL STATS
+============================== */
+router.get("/referral-stats", auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select(
+      "referralCode referralEarnings directCount teamCount teamVolume"
+    );
+
+    if (!user) {
+      return res.status(404).json({ msg: "User not found" });
+    }
+
+    res.json({
+      success: true,
+      stats: {
+        referralCode: user.referralCode,
+        referralEarnings: user.referralEarnings || 0,
+        directCount: user.directCount || 0,
+        teamCount: user.teamCount || 0,
+        teamVolume: user.teamVolume || 0,
+      },
+    });
+  } catch (err) {
+    console.error("GET /referral-stats ERROR:", err.message);
     res.status(500).json({ msg: "Server error" });
   }
 });

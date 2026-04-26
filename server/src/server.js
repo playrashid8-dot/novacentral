@@ -1,6 +1,7 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
@@ -37,19 +38,17 @@ connectDB();
    🔐 GLOBAL SECURITY
 ============================== */
 
-// ✅ CORS (PRODUCTION SAFE)
+// ✅ CORS
 app.use(
   cors({
-    origin: [
-      "http://localhost:3000",
-      "https://novacentral.vercel.app",
-    ],
+    origin: "http://localhost:3000",
     credentials: true,
   })
 );
 
 // ✅ BODY PARSER (LIMITED SIZE)
 app.use(express.json({ limit: "10kb" }));
+app.use(cookieParser());
 
 // ✅ HELMET (SECURITY HEADERS)
 app.use(helmet());

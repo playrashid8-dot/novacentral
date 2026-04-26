@@ -2,9 +2,11 @@
 
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
-import API from "../../lib/api";
+import API, { getApiErrorMessage } from "../../lib/api";
 import { getUser } from "../../lib/auth";
 import { useRouter } from "next/navigation";
+import ProtectedRoute from "../../components/ProtectedRoute";
+import AppToast from "../../components/AppToast";
 
 export default function Investment() {
   const router = useRouter();
@@ -13,6 +15,12 @@ export default function Investment() {
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
   const [amount, setAmount] = useState("");
   const [user, setUser]: any = useState(null);
+  const [toast, setToast] = useState("");
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), 2500);
+  };
 
   const plans = [
     { name: "Basic", key: "basic", days: 30, roi: 1, color: "from-purple-500 to-indigo-500" },
@@ -35,8 +43,8 @@ export default function Investment() {
   const confirmInvest = async () => {
     const amt = Number(amount);
 
-    if (!amt || amt < 10) return alert("Minimum investment is $10");
-    if (amt > (user?.balance || 0)) return alert("Insufficient balance");
+    if (!amt || amt < 10) return showToast("Minimum investment is $10");
+    if (amt > (user?.balance || 0)) return showToast("Insufficient balance");
 
     try {
       setLoadingPlan(selectedPlan.key);
@@ -46,7 +54,7 @@ export default function Investment() {
         plan: selectedPlan.key,
       });
 
-      alert("Investment started 🚀");
+      showToast("Investment started 🚀");
 
       setSelectedPlan(null);
       setAmount("");
@@ -54,14 +62,16 @@ export default function Investment() {
       router.refresh?.();
 
     } catch (err: any) {
-      alert(err?.response?.data?.msg || "Investment failed ❌");
+      showToast(getApiErrorMessage(err, "Investment failed ❌"));
     } finally {
       setLoadingPlan(null);
     }
   };
 
   return (
+    <ProtectedRoute>
     <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 text-white relative bg-[#040406]">
+      <AppToast message={toast} />
 
       {/* 🌌 BACKGROUND */}
       <div className="absolute w-[500px] h-[500px] bg-purple-600 opacity-20 blur-[150px] top-[-150px] left-[-150px]" />
@@ -203,5 +213,6 @@ export default function Investment() {
       )}
 
     </div>
+    </ProtectedRoute>
   );
 }

@@ -1,39 +1,36 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import API from "../../lib/api";
+import API, { getApiErrorMessage } from "../../lib/api";
 import { getUser } from "../../lib/auth";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import ProtectedRoute from "../../components/ProtectedRoute";
+import AppToast from "../../components/AppToast";
+import { fetchCurrentUser } from "../../lib/session";
 
 export default function Withdrawal() {
   const router = useRouter();
 
   const [amount, setAmount] = useState("");
+  const [walletAddress, setWalletAddress] = useState("");
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [user, setUser]: any = useState(null);
+  const [toast, setToast] = useState("");
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), 2500);
+  };
 
   // 🔐 USER LOAD
   useEffect(() => {
-    const u = getUser();
-    if (!u) {
-      router.replace("/login");
-      return;
-    }
-    setUser(u);
-  }, []);
-
-  // ⏱️ LOAD COOLDOWN
-  useEffect(() => {
-    const saved = localStorage.getItem("withdrawTime");
-
-    if (saved) {
-      const diff = Math.floor((Date.now() - Number(saved)) / 1000);
-      const remaining = 96 * 3600 - diff;
-
-      if (remaining > 0) setCooldown(remaining);
-    }
+    const cached = getUser();
+    if (cached) setUser(cached);
+    fetchCurrentUser().then((fresh) => {
+      if (fresh) setUser(fresh);
+    });
   }, []);
 
   // ⏱️ TIMER
@@ -60,39 +57,50 @@ export default function Withdrawal() {
 
     const amt = Number(amount);
 
-    if (!amt || amt < 10) {
-      return alert("Minimum withdraw is $10");
+    if (!Number.isFinite(amt) || amt <= 0) {
+      return showToast("Amount must be greater than 0");
     }
 
     if (amt > (user?.balance || 0)) {
-      return alert("Insufficient balance");
+      return showToast("Insufficient balance");
     }
 
     if (cooldown > 0) {
-      return alert("Withdrawal locked ⏳");
+      return showToast("Withdrawal locked ⏳");
+    }
+
+    if (!walletAddress || walletAddress.trim().length < 8) {
+      return showToast("Enter a valid wallet address");
     }
 
     try {
       setLoading(true);
 
-      await API.post("/withdraw", { amount: amt });
+      const res = await API.post("/withdrawal", {
+        amount: amt,
+        walletAddress: walletAddress.trim(),
+      });
 
-      alert("Withdrawal requested ✅");
-
-      // 🔒 SAVE TIME
-      localStorage.setItem("withdrawTime", Date.now().toString());
+      showToast(res?.data?.msg || "Withdrawal requested");
+      setCooldown(96 * 3600);
 
       router.push("/dashboard");
 
     } catch (err: any) {
-      alert(err?.response?.data?.msg || "Failed ❌");
+      const serverCooldown = Number(err?.response?.data?.cooldownRemaining || 0);
+      if (serverCooldown > 0) {
+        setCooldown(serverCooldown);
+      }
+      showToast(getApiErrorMessage(err, "Failed ❌"));
     } finally {
       setLoading(false);
     }
   };
 
   return (
+    <ProtectedRoute>
     <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 text-white relative bg-[#040406]">
+      <AppToast message={toast} />
 
       {/* 🌌 BACKGROUND */}
       <div className="absolute w-[500px] h-[500px] bg-purple-600 opacity-20 blur-[150px] top-[-150px] left-[-150px]" />
@@ -140,6 +148,7 @@ export default function Withdrawal() {
             {[10, 50, 100].map((val) => (
               <button
                 key={val}
+                disabled={loading || cooldown > 0}
                 onClick={() => setAmount(String(val))}
                 className="bg-white/5 p-2 rounded-lg text-xs"
               >
@@ -155,6 +164,14 @@ export default function Withdrawal() {
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-sm"
+          />
+
+          <input
+            type="text"
+            placeholder="Wallet Address"
+            value={walletAddress}
+            onChange={(e) => setWalletAddress(e.target.value)}
+            className="w-full mt-3 bg-white/5 border border-white/10 p-3 rounded-xl text-sm"
           />
 
           {/* BUTTON */}
@@ -189,5 +206,6 @@ export default function Withdrawal() {
       </div>
 
     </div>
+    </ProtectedRoute>
   );
 }

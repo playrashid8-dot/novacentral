@@ -1,5 +1,5 @@
 import axios from "axios";
-import { getToken, logout } from "./auth";
+import { logout } from "./auth";
 
 // 🔗 BASE URL
 const BASE_URL =
@@ -9,6 +9,7 @@ const BASE_URL =
 const API = axios.create({
   baseURL: BASE_URL,
   timeout: 15000,
+  withCredentials: true,
   headers: {
     "Content-Type": "application/json",
   },
@@ -16,21 +17,6 @@ const API = axios.create({
 
 // 🚫 prevent multiple redirects
 let isRedirecting = false;
-
-/* ==============================
-   🔐 REQUEST INTERCEPTOR
-============================== */
-API.interceptors.request.use(
-  (req) => {
-    const token = getToken();
-    if (token) {
-      req.headers.Authorization = `Bearer ${token}`;
-    }
-
-    return req;
-  },
-  (error) => Promise.reject(error)
-);
 
 /* ==============================
    🚨 RESPONSE INTERCEPTOR

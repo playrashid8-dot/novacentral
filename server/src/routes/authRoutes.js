@@ -1,6 +1,6 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
-import { register, login } from "../controllers/authController.js";
+import { register, login, logout } from "../controllers/authController.js";
 
 const router = express.Router();
 
@@ -39,6 +39,11 @@ router.post("/register", registerLimiter, register);
    🔐 LOGIN
 ============================== */
 router.post("/login", loginLimiter, login);
+
+/* ==============================
+   🚪 LOGOUT
+============================== */
+router.post("/logout", logout);
 
 /* ==============================
    ❤️ HEALTH CHECK

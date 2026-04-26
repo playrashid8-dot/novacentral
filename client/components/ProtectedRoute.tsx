@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { isAuth } from "../lib/auth";
 import { motion } from "framer-motion";
@@ -12,21 +12,43 @@ export default function ProtectedRoute({
 }) {
   const router = useRouter();
   const [checking, setChecking] = useState(true);
+  const [redirecting, setRedirecting] = useState(false);
 
   useEffect(() => {
-    if (!isAuth()) {
-      router.replace("/login");
-    } else {
-      setChecking(false);
-    }
+    let mounted = true;
+
+    const verifyAuth = async () => {
+      try {
+        const ok = await isAuth();
+
+        if (!mounted) return;
+
+        if (!ok) {
+          setRedirecting(true);
+          router.replace("/login");
+        } else {
+          setChecking(false);
+        }
+      } catch (err) {
+        console.error("Auth check failed:", err);
+        setRedirecting(true);
+        router.replace("/login");
+      }
+    };
+
+    verifyAuth();
+
+    return () => {
+      mounted = false;
+    };
   }, [router]);
 
   // 🔥 PREMIUM LOADER
-  if (checking) {
+  if (checking || redirecting) {
     return (
       <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-[#040406] text-white">
 
-        {/* 🌌 BACKGROUND */}
+        {/* 🌌 BACKGROUND GLOW */}
         <div className="absolute w-[500px] h-[500px] bg-purple-600 opacity-20 blur-[150px] top-[-150px] left-[-150px]" />
         <div className="absolute w-[500px] h-[500px] bg-indigo-600 opacity-20 blur-[150px] bottom-[-150px] right-[-150px]" />
 
@@ -34,6 +56,7 @@ export default function ProtectedRoute({
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.3 }}
           className="flex flex-col items-center gap-4"
         >
           <div className="w-12 h-12 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />

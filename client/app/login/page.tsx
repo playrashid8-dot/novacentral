@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import API, { getApiErrorMessage } from "../../lib/api";
-import { saveUser } from "../../lib/auth";
+import { saveUser, resetLogoutState } from "../../lib/auth";
 
 export default function Login() {
   const router = useRouter();
@@ -38,6 +38,7 @@ export default function Login() {
 
     try {
       setLoading(true);
+      resetLogoutState();
 
       const res = await API.post("/auth/login", {
         username: cleanUsername,
@@ -50,7 +51,7 @@ export default function Login() {
       }
 
       showToast("Login successful ✅");
-      router.push("/dashboard");
+      router.replace("/dashboard");
 
     } catch (err: any) {
       showToast(getApiErrorMessage(err, "Login failed ❌"));

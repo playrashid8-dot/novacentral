@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { getUser } from "../../lib/auth";
+import ProtectedRoute from "../../components/ProtectedRoute";
 
 export default function VIP() {
   const router = useRouter();
@@ -33,6 +34,7 @@ export default function VIP() {
   ];
 
   return (
+    <ProtectedRoute>
     <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 text-white relative bg-[#040406]">
 
       {/* 🌌 BACKGROUND */}
@@ -134,5 +136,6 @@ export default function VIP() {
       </div>
 
     </div>
+    </ProtectedRoute>
   );
 }

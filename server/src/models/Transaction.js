@@ -46,6 +46,8 @@ const transactionSchema = new mongoose.Schema(
   }
 );
 
+transactionSchema.index({ type: 1, refId: 1 }, { unique: true, sparse: true });
+
 // ❌ duplicate model error fix (important for dev)
 const Transaction =
   mongoose.models.Transaction ||

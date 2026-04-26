@@ -16,21 +16,25 @@ import {
 } from "../controllers/withdrawalController.js";
 
 const router = express.Router();
+const sendAdminError = (res, err, context) => {
+  console.error(`${context}:`, err.message);
+  return res.status(500).json({ success: false, msg: err.message });
+};
 
 /* ==============================
    🔐 ADMIN CHECK
 ============================== */
 const isAdmin = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user._id);
 
     if (!user || user.email !== process.env.ADMIN_EMAIL) {
-      return res.status(403).json({ msg: "Admin access only" });
+      return res.status(403).json({ success: false, msg: "Admin access only" });
     }
 
     next();
   } catch (err) {
-    res.status(500).json({ msg: "Admin check error" });
+    res.status(500).json({ success: false, msg: err.message });
   }
 };
 
@@ -38,19 +42,25 @@ const isAdmin = async (req, res, next) => {
    📥 DEPOSITS
 ============================== */
 router.get("/deposits", auth, isAdmin, async (req, res) => {
-  const deposits = await Deposit.find()
-    .populate("userId", "username email")
-    .sort({ createdAt: -1 });
-
-  res.json({ success: true, deposits });
+  try {
+    const deposits = await Deposit.find()
+      .populate("userId", "username email")
+      .sort({ createdAt: -1 });
+    res.json({ success: true, deposits });
+  } catch (err) {
+    sendAdminError(res, err, "ADMIN DEPOSITS ERROR");
+  }
 });
 
 router.get("/deposits/pending", auth, isAdmin, async (req, res) => {
-  const deposits = await Deposit.find({ status: "pending" })
-    .populate("userId", "username email")
-    .sort({ createdAt: -1 });
-
-  res.json({ success: true, deposits });
+  try {
+    const deposits = await Deposit.find({ status: "pending" })
+      .populate("userId", "username email")
+      .sort({ createdAt: -1 });
+    res.json({ success: true, deposits });
+  } catch (err) {
+    sendAdminError(res, err, "ADMIN PENDING DEPOSITS ERROR");
+  }
 });
 
 router.post("/approve-deposit/:id", auth, isAdmin, approveDeposit);
@@ -60,19 +70,25 @@ router.post("/reject-deposit/:id", auth, isAdmin, rejectDeposit);
    💸 WITHDRAWALS
 ============================== */
 router.get("/withdrawals", auth, isAdmin, async (req, res) => {
-  const withdrawals = await Withdrawal.find()
-    .populate("userId", "username email")
-    .sort({ createdAt: -1 });
-
-  res.json({ success: true, withdrawals });
+  try {
+    const withdrawals = await Withdrawal.find()
+      .populate("userId", "username email")
+      .sort({ createdAt: -1 });
+    res.json({ success: true, withdrawals });
+  } catch (err) {
+    sendAdminError(res, err, "ADMIN WITHDRAWALS ERROR");
+  }
 });
 
 router.get("/withdrawals/pending", auth, isAdmin, async (req, res) => {
-  const withdrawals = await Withdrawal.find({ status: "pending" })
-    .populate("userId", "username email")
-    .sort({ createdAt: -1 });
-
-  res.json({ success: true, withdrawals });
+  try {
+    const withdrawals = await Withdrawal.find({ status: "pending" })
+      .populate("userId", "username email")
+      .sort({ createdAt: -1 });
+    res.json({ success: true, withdrawals });
+  } catch (err) {
+    sendAdminError(res, err, "ADMIN PENDING WITHDRAWALS ERROR");
+  }
 });
 
 router.post("/approve-withdrawal/:id", auth, isAdmin, approveWithdrawal);
@@ -84,64 +100,87 @@ router.post("/reject-withdrawal/:id", auth, isAdmin, rejectWithdrawal);
 
 // 📄 all users
 router.get("/users", auth, isAdmin, async (req, res) => {
-  const users = await User.find().select("-password").sort({ createdAt: -1 });
-
-  res.json({ success: true, users });
+  try {
+    const users = await User.find().select("-password").sort({ createdAt: -1 });
+    res.json({ success: true, users });
+  } catch (err) {
+    sendAdminError(res, err, "ADMIN USERS ERROR");
+  }
 });
 
 // 🔒 block
 router.post("/block/:id", auth, isAdmin, async (req, res) => {
-  await User.findByIdAndUpdate(req.params.id, { isBlocked: true });
-
-  res.json({ success: true, msg: "User blocked" });
+  try {
+    const user = await User.findByIdAndUpdate(req.params.id, { isBlocked: true }, { new: true });
+    if (!user) return res.status(404).json({ msg: "User not found" });
+    res.json({ success: true, msg: "User blocked" });
+  } catch (err) {
+    sendAdminError(res, err, "ADMIN BLOCK ERROR");
+  }
 });
 
 // 🔓 unblock
 router.post("/unblock/:id", auth, isAdmin, async (req, res) => {
-  await User.findByIdAndUpdate(req.params.id, { isBlocked: false });
-
-  res.json({ success: true, msg: "User unblocked" });
+  try {
+    const user = await User.findByIdAndUpdate(req.params.id, { isBlocked: false }, { new: true });
+    if (!user) return res.status(404).json({ msg: "User not found" });
+    res.json({ success: true, msg: "User unblocked" });
+  } catch (err) {
+    sendAdminError(res, err, "ADMIN UNBLOCK ERROR");
+  }
 });
 
 // 💰 reset wallet (dangerous → admin only)
 router.post("/reset-wallet/:id", auth, isAdmin, async (req, res) => {
-  await User.findByIdAndUpdate(req.params.id, {
-    balance: 0,
-    totalEarnings: 0,
-    totalWithdraw: 0,
-  });
-
-  res.json({ success: true, msg: "Wallet reset" });
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      {
+        balance: 0,
+        totalEarnings: 0,
+        totalWithdraw: 0,
+      },
+      { new: true }
+    );
+    if (!user) return res.status(404).json({ msg: "User not found" });
+    res.json({ success: true, msg: "Wallet reset" });
+  } catch (err) {
+    sendAdminError(res, err, "ADMIN RESET WALLET ERROR");
+  }
 });
 
 /* ==============================
    📊 ADMIN STATS
 ============================== */
 router.get("/stats", auth, isAdmin, async (req, res) => {
-  const totalUsers = await User.countDocuments();
-  const totalDeposits = await Deposit.countDocuments({ status: "approved" });
-  const totalWithdrawals = await Withdrawal.countDocuments({ status: "approved" });
+  try {
+    const totalUsers = await User.countDocuments();
+    const totalDeposits = await Deposit.countDocuments({ status: "approved" });
+    const totalWithdrawals = await Withdrawal.countDocuments({ status: "approved" });
 
-  const users = await User.find();
+    const users = await User.find();
 
-  let totalBalance = 0;
-  let totalEarnings = 0;
+    let totalBalance = 0;
+    let totalEarnings = 0;
 
-  users.forEach((u) => {
-    totalBalance += u.balance;
-    totalEarnings += u.totalEarnings;
-  });
+    users.forEach((u) => {
+      totalBalance += u.balance;
+      totalEarnings += u.totalEarnings;
+    });
 
-  res.json({
-    success: true,
-    stats: {
-      totalUsers,
-      totalDeposits,
-      totalWithdrawals,
-      totalBalance,
-      totalEarnings,
-    },
-  });
+    res.json({
+      success: true,
+      stats: {
+        totalUsers,
+        totalDeposits,
+        totalWithdrawals,
+        totalBalance,
+        totalEarnings,
+      },
+    });
+  } catch (err) {
+    sendAdminError(res, err, "ADMIN STATS ERROR");
+  }
 });
 
 export default router;

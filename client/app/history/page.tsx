@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import API from "../../lib/api";
 import { getUser, logout } from "../../lib/auth";
 import BottomNav from "../../components/BottomNav";
+import ProtectedRoute from "../../components/ProtectedRoute";
 
 export default function History() {
   const router = useRouter();
@@ -42,6 +43,7 @@ export default function History() {
   }
 
   return (
+    <ProtectedRoute>
     <div className="min-h-screen max-w-[420px] mx-auto px-4 pb-28 text-white">
 
       {/* HEADER */}
@@ -99,6 +101,7 @@ export default function History() {
 
       <BottomNav />
     </div>
+    </ProtectedRoute>
   );
 }
 

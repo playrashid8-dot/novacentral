@@ -1,15 +1,39 @@
 "use client";
 
 import { getUser } from "../../lib/auth";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import API, { getApiErrorMessage } from "../../lib/api";
+import ProtectedRoute from "../../components/ProtectedRoute";
+import AppToast from "../../components/AppToast";
 
 export default function Referral() {
   const user = getUser();
 
   const [copied, setCopied] = useState(false);
+  const [toast, setToast] = useState("");
+  const [stats, setStats] = useState<any>(null);
 
-  const link = `https://yourdomain.com/signup?ref=${user?._id}`;
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), 2500);
+  };
+
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        const res = await API.get("/user/referral-stats");
+        setStats(res.data?.stats || null);
+      } catch (err: any) {
+        showToast(getApiErrorMessage(err, "Failed to load referral stats ❌"));
+      }
+    };
+    loadStats();
+  }, []);
+
+  const origin =
+    typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+  const link = `${origin}/signup?ref=${stats?.referralCode || user?.referralCode || ""}`;
 
   const copyLink = async () => {
     await navigator.clipboard.writeText(link);
@@ -18,7 +42,9 @@ export default function Referral() {
   };
 
   return (
+    <ProtectedRoute>
     <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 text-white relative bg-[#040406]">
+      <AppToast message={toast} />
 
       {/* 🌌 BACKGROUND */}
       <div className="absolute w-[500px] h-[500px] bg-purple-600 opacity-20 blur-[150px] top-[-150px] left-[-150px]" />
@@ -37,7 +63,7 @@ export default function Referral() {
       >
         <p className="text-xs text-gray-400">Total Referral Earnings</p>
         <h2 className="text-3xl font-bold text-green-400 mt-1">
-          ${Number(user?.referralEarnings || 0).toFixed(2)}
+          ${Number(stats?.referralEarnings || user?.referralEarnings || 0).toFixed(2)}
         </h2>
       </motion.div>
 
@@ -66,10 +92,10 @@ export default function Referral() {
       {/* 📊 STATS */}
       <div className="grid grid-cols-2 gap-3">
 
-        <Stat title="Team Size" value={user?.teamCount || 0} />
-        <Stat title="Active Users" value={user?.activeTeam || 0} />
-        <Stat title="Level Income" value={`$${user?.levelIncome || 0}`} />
-        <Stat title="Direct Bonus" value={`$${user?.directBonus || 0}`} />
+        <Stat title="Team Size" value={stats?.teamCount || 0} />
+        <Stat title="Direct Referrals" value={stats?.directCount || 0} />
+        <Stat title="Team Volume" value={`$${Number(stats?.teamVolume || 0).toFixed(2)}`} />
+        <Stat title="Referral Code" value={stats?.referralCode || user?.referralCode || "-"} />
 
       </div>
 
@@ -90,6 +116,7 @@ export default function Referral() {
       </div>
 
     </div>
+    </ProtectedRoute>
   );
 }
 

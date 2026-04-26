@@ -4,12 +4,14 @@ import { getUser, logout } from "../../lib/auth";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Image from "next/image";
+import ProtectedRoute from "../../components/ProtectedRoute";
 
 export default function Profile() {
   const router = useRouter();
   const user = getUser();
 
   return (
+    <ProtectedRoute>
     <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 text-white relative bg-[#040406]">
 
       {/* 🌌 BACKGROUND */}
@@ -114,5 +116,6 @@ export default function Profile() {
       </button>
 
     </div>
+    </ProtectedRoute>
   );
 }
