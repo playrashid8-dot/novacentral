@@ -1,21 +1,41 @@
+const TOKEN_KEY = "token";
+const USER_KEY = "user";
+
+const getStorage = () => {
+  if (typeof window === "undefined") return null;
+  return window.localStorage;
+};
+
+const extractToken = (data) =>
+  data?.token || data?.accessToken || data?.jwt || data?.data?.token || null;
+
+const extractUser = (data) => data?.user || data?.data?.user || null;
+
 // 🔐 SAVE USER + TOKEN
 export const saveUser = (data) => {
-  if (typeof window === "undefined") return;
-  if (!data?.token) return;
+  const storage = getStorage();
+  if (!storage) return false;
 
-  localStorage.setItem("token", data.token);
+  const token = extractToken(data);
+  if (!token || typeof token !== "string") return false;
 
-  if (data.user) {
-    localStorage.setItem("user", JSON.stringify(data.user));
+  storage.setItem(TOKEN_KEY, token);
+
+  const user = extractUser(data);
+  if (user) {
+    storage.setItem(USER_KEY, JSON.stringify(user));
   }
+
+  return true;
 };
 
 // 👤 GET USER
 export const getUser = () => {
-  if (typeof window === "undefined") return null;
+  const storage = getStorage();
+  if (!storage) return null;
 
   try {
-    const user = localStorage.getItem("user");
+    const user = storage.getItem(USER_KEY);
     return user ? JSON.parse(user) : null;
   } catch {
     return null;
@@ -24,8 +44,11 @@ export const getUser = () => {
 
 // 🔑 GET TOKEN
 export const getToken = () => {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("token");
+  const storage = getStorage();
+  if (!storage) return null;
+
+  const token = storage.getItem(TOKEN_KEY);
+  return token && typeof token === "string" ? token : null;
 };
 
 // 🔐 PARSE JWT
@@ -78,13 +101,14 @@ export const isAdmin = () => {
 
 // 🚪 LOGOUT
 export const logout = (message) => {
-  if (typeof window === "undefined") return;
+  const storage = getStorage();
+  if (!storage) return;
 
   if (isLoggingOut) return;
   isLoggingOut = true;
 
-  localStorage.removeItem("token");
-  localStorage.removeItem("user");
+  storage.removeItem(TOKEN_KEY);
+  storage.removeItem(USER_KEY);
 
   if (message) {
     showToast(message);
@@ -106,14 +130,15 @@ export const protectRoute = (router) => {
 
 // 🔄 UPDATE USER
 export const updateUser = (newData) => {
-  if (typeof window === "undefined") return;
+  const storage = getStorage();
+  if (!storage) return;
 
   const user = getUser();
   if (!user) return;
 
   const updated = { ...user, ...newData };
 
-  localStorage.setItem("user", JSON.stringify(updated));
+  storage.setItem(USER_KEY, JSON.stringify(updated));
 };
 
 // 🔥 SIMPLE TOAST

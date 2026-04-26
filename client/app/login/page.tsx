@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Image from "next/image";
-import API from "../../lib/api";
+import API, { getApiErrorMessage } from "../../lib/api";
 import { saveUser } from "../../lib/auth";
 
 export default function Login() {
@@ -13,25 +13,47 @@ export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState("");
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), 2500);
+  };
 
   const handleLogin = async () => {
-    if (!username || !password) {
-      return alert("All fields required ⚠️");
+    const cleanUsername = username.trim();
+    const cleanPassword = password.trim();
+
+    if (!cleanUsername || !cleanPassword) {
+      return showToast("All fields required ⚠️");
+    }
+
+    if (cleanUsername.length < 3) {
+      return showToast("Username must be at least 3 characters ⚠️");
+    }
+
+    if (cleanPassword.length < 8) {
+      return showToast("Password must be at least 8 characters 🔒");
     }
 
     try {
       setLoading(true);
 
       const res = await API.post("/auth/login", {
-        username, // 🔥 IMPORTANT (email hata diya)
-        password,
+        username: cleanUsername,
+        password: cleanPassword,
       });
 
-      saveUser(res.data);
+      const saved = saveUser(res.data);
+      if (!saved) {
+        throw new Error("Invalid auth response from server");
+      }
+
+      showToast("Login successful ✅");
       router.push("/dashboard");
 
     } catch (err: any) {
-      alert(err?.response?.data?.message || "Login failed ❌");
+      showToast(getApiErrorMessage(err, "Login failed ❌"));
     } finally {
       setLoading(false);
     }
@@ -39,6 +61,11 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 relative overflow-hidden bg-[#040406] text-white">
+      {toast && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 bg-purple-600 px-4 py-2 rounded-xl text-sm shadow-lg z-50">
+          {toast}
+        </div>
+      )}
 
       {/* 🌌 BACKGROUND */}
       <div className="absolute w-[500px] h-[500px] bg-purple-600 opacity-20 blur-[150px] top-[-150px] left-[-150px]" />

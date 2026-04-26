@@ -4,7 +4,7 @@ import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import Image from "next/image";
-import API from "../../lib/api";
+import API, { getApiErrorMessage } from "../../lib/api";
 import { saveUser } from "../../lib/auth";
 
 /* ==============================
@@ -34,6 +34,9 @@ function SignupInner() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState("");
 
+  const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  const normalizePhone = (value: string) => value.replace(/[^\d+]/g, "");
+
   /* 🔗 AUTO REF */
   useEffect(() => {
     const ref = params.get("ref");
@@ -48,26 +51,46 @@ function SignupInner() {
 
   /* 🚀 SIGNUP */
   const handleSignup = async () => {
-    if (!username || !email || !password || !number) {
+    const cleanUsername = username.trim();
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPhone = normalizePhone(number.trim());
+    const cleanPassword = password.trim();
+
+    if (!cleanUsername || !cleanEmail || !cleanPassword || !cleanPhone) {
       return showToast("All fields required ⚠️");
     }
 
-    if (password.length < 6) {
-      return showToast("Password must be 6+ characters 🔒");
+    if (cleanUsername.length < 3) {
+      return showToast("Username must be at least 3 characters ⚠️");
+    }
+
+    if (!isValidEmail(cleanEmail)) {
+      return showToast("Enter a valid email address ⚠️");
+    }
+
+    if (!/^\+?\d{10,15}$/.test(cleanPhone)) {
+      return showToast("Enter a valid phone number ⚠️");
+    }
+
+    if (cleanPassword.length < 8) {
+      return showToast("Password must be at least 8 characters 🔒");
     }
 
     try {
       setLoading(true);
 
       const res = await API.post("/auth/register", {
-        username,
-        email,
-        password,
-        number,
-        referralCode: referral,
+        username: cleanUsername,
+        email: cleanEmail,
+        password: cleanPassword,
+        number: cleanPhone,
+        referralCode: referral.trim(),
       });
 
-      saveUser(res.data);
+      const saved = saveUser(res.data);
+      if (!saved) {
+        throw new Error("Invalid auth response from server");
+      }
 
       showToast("Account created 🚀");
 
@@ -76,7 +99,7 @@ function SignupInner() {
       }, 800);
 
     } catch (err: any) {
-      showToast(err?.response?.data?.message || "Signup failed ❌");
+      showToast(getApiErrorMessage(err, "Signup failed ❌"));
     } finally {
       setLoading(false);
     }

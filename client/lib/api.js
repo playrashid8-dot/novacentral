@@ -1,4 +1,5 @@
 import axios from "axios";
+import { getToken, logout } from "./auth";
 
 // 🔗 BASE URL
 const BASE_URL =
@@ -21,12 +22,9 @@ let isRedirecting = false;
 ============================== */
 API.interceptors.request.use(
   (req) => {
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("token");
-
-      if (token) {
-        req.headers.Authorization = `Bearer ${token}`;
-      }
+    const token = getToken();
+    if (token) {
+      req.headers.Authorization = `Bearer ${token}`;
     }
 
     return req;
@@ -59,13 +57,7 @@ API.interceptors.response.use(
       if (typeof window !== "undefined" && !isRedirecting) {
         isRedirecting = true;
 
-        localStorage.clear();
-
-        showToast("Session expired 🔒");
-
-        setTimeout(() => {
-          window.location.href = "/login";
-        }, 800);
+        logout("Session expired 🔒");
       }
     }
 
@@ -90,6 +82,21 @@ API.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+export const getApiErrorMessage = (error, fallback = "Something went wrong ❌") => {
+  if (!error) return fallback;
+
+  if (!error.response) {
+    return "Server not reachable ❌";
+  }
+
+  return (
+    error.response?.data?.message ||
+    error.response?.data?.msg ||
+    error.message ||
+    fallback
+  );
+};
 
 export default API;
 
