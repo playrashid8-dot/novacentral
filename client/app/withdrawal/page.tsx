@@ -55,6 +55,10 @@ export default function Withdrawal() {
 
     const amt = Number(amount);
 
+    // #region agent log
+    fetch('http://127.0.0.1:7530/ingest/4afefbe1-47e6-4222-af48-f1c6fffa8a8e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f312c4'},body:JSON.stringify({sessionId:'f312c4',runId:'initial',hypothesisId:'H4,H5',location:'client/app/withdrawal/page.tsx:59',message:'Withdrawal validation evaluated',data:{amountRaw:amount,amount:amt,amountIsFinite:Number.isFinite(amt),belowTen:amt<10,currentValidationBlocks:!Number.isFinite(amt)||amt<=0,hasBalance:Boolean(user?.balance),walletLength:walletAddress.trim().length},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     if (!Number.isFinite(amt) || amt <= 0) {
       return showToast("Amount must be greater than 0");
     }
@@ -70,6 +74,10 @@ export default function Withdrawal() {
     try {
       setLoading(true);
       const idempotencyKey = getSubmissionIdempotencyKey();
+
+      // #region agent log
+      fetch('http://127.0.0.1:7530/ingest/4afefbe1-47e6-4222-af48-f1c6fffa8a8e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f312c4'},body:JSON.stringify({sessionId:'f312c4',runId:'initial',hypothesisId:'H4',location:'client/app/withdrawal/page.tsx:77',message:'Withdrawal reached API submit path',data:{amount:amt,belowTen:amt<10,hasIdempotencyKey:Boolean(idempotencyKey)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
 
       const res = await API.post(
         "/withdrawal",

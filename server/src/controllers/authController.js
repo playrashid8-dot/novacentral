@@ -8,8 +8,6 @@ const getCookieOptions = () => ({
   httpOnly: true,
   secure: false,
   sameSite: "lax",
-  maxAge: 7 * 24 * 60 * 60 * 1000,
-  path: "/",
 });
 
 const setAuthCookie = (res, token) => {
@@ -146,24 +144,29 @@ export const register = async (req, res) => {
 };
 
 //
-// 🔐 LOGIN (USERNAME BASED)
+// 🔐 LOGIN (USERNAME OR EMAIL)
 //
 export const login = async (req, res) => {
   try {
-    let { username, password } = req.body;
+    let { identifier, username, email, password } = req.body;
 
-    username = username?.toLowerCase().trim();
+    identifier = (identifier || username || email)?.trim();
 
-    if (!username || !password) {
-      return sendAuthResponse(res, 400, false, "Enter username & password");
+    if (!identifier || !password) {
+      return sendAuthResponse(res, 400, false, "Enter identifier & password");
     }
 
-    if (username.length < 3 || password.length < 8) {
+    if (identifier.length < 3 || password.length < 8) {
       return sendAuthResponse(res, 400, false, "Invalid credentials");
     }
 
     // 🔍 FIND USER (WITH PASSWORD)
-    const user = await User.findOne({ username }).select("+password");
+    const user = await User.findOne({
+      $or: [
+        { email: identifier.toLowerCase() },
+        { username: identifier },
+      ],
+    }).select("+password");
 
     if (!user) {
       return sendAuthResponse(res, 400, false, "Invalid credentials");

@@ -25,10 +25,22 @@ export default function ProtectedRoute({
 
         if (!mounted) return;
 
+        const admin = isAdmin();
+
+        // #region agent log
+        fetch('http://127.0.0.1:7530/ingest/4afefbe1-47e6-4222-af48-f1c6fffa8a8e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f312c4'},body:JSON.stringify({sessionId:'f312c4',runId:'initial',hypothesisId:'H1,H2',location:'client/components/ProtectedRoute.tsx:31',message:'ProtectedRoute auth decision inputs',data:{ok,adminOnly,admin,checkingBefore:checking,redirectingBefore:redirecting},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+
         if (!ok) {
+          // #region agent log
+          fetch('http://127.0.0.1:7530/ingest/4afefbe1-47e6-4222-af48-f1c6fffa8a8e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f312c4'},body:JSON.stringify({sessionId:'f312c4',runId:'initial',hypothesisId:'H2',location:'client/components/ProtectedRoute.tsx:35',message:'ProtectedRoute unauth redirect branch',data:{checkingWillRemainTrue:true,redirectTo:'/login'},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
           setRedirecting(true);
           router.replace("/login");
-        } else if (adminOnly && !isAdmin()) {
+        } else if (adminOnly && !admin) {
+          // #region agent log
+          fetch('http://127.0.0.1:7530/ingest/4afefbe1-47e6-4222-af48-f1c6fffa8a8e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f312c4'},body:JSON.stringify({sessionId:'f312c4',runId:'initial',hypothesisId:'H1',location:'client/components/ProtectedRoute.tsx:41',message:'ProtectedRoute non-admin redirect branch',data:{checkingWillRemainTrue:true,redirectTo:'/dashboard'},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
           setRedirecting(true);
           router.replace("/dashboard");
         } else {

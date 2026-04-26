@@ -18,7 +18,7 @@ import {
 const router = express.Router();
 const sendAdminError = (res, err, context) => {
   console.error(`${context}:`, err.message);
-  return res.status(500).json({ success: false, msg: err.message });
+  return res.status(500).json({ success: false, msg: err.message, data: null });
 };
 
 /* ==============================
@@ -26,24 +26,17 @@ const sendAdminError = (res, err, context) => {
 ============================== */
 const isAdmin = async (req, res, next) => {
   try {
-    console.log("USER:", req.user);
-    console.log("ACTION:", "admin.check");
-
-    if (!req.user?._id || req.user.role !== "admin") {
-      return res.status(403).json({ success: false, msg: "Admin access only" });
-    }
-
-    const adminEmail = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
-    const user = await User.findById(req.user._id).select("_id email");
-
-    if (!user || user.email !== adminEmail) {
-      return res.status(403).json({ success: false, msg: "Admin access only" });
+    if (!req.user?._id || req.user.isAdmin !== true) {
+      return res.status(403).json({
+        success: false,
+        msg: "Admin access only",
+        data: null,
+      });
     }
 
     next();
   } catch (err) {
-    console.log("ERROR:", err.message);
-    res.status(500).json({ success: false, msg: err.message });
+    res.status(500).json({ success: false, msg: err.message, data: null });
   }
 };
 

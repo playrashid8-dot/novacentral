@@ -13,7 +13,9 @@ const registerLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: {
+    success: false,
     msg: "Too many registrations, try later",
+    data: null,
   },
 });
 
@@ -26,7 +28,9 @@ const loginLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: {
+    success: false,
     msg: "Too many login attempts, try later",
+    data: null,
   },
 });
 
@@ -52,7 +56,7 @@ router.get("/health", (req, res) => {
   res.json({
     success: true,
     msg: "Auth API running 🚀",
-    time: new Date(),
+    data: { time: new Date() },
   });
 });
 
