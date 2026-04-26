@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import API, { getApiErrorMessage } from "../../lib/api";
 import { getUser } from "../../lib/auth";
 import { useRouter } from "next/navigation";
@@ -17,6 +17,7 @@ export default function Withdrawal() {
   const [loading, setLoading] = useState(false);
   const [user, setUser]: any = useState(null);
   const [toast, setToast] = useState("");
+  const idempotencyKeyRef = useRef("");
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -27,6 +28,17 @@ export default function Withdrawal() {
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random()}`;
+
+  const getSubmissionIdempotencyKey = () => {
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current = createIdempotencyKey();
+    }
+    return idempotencyKeyRef.current;
+  };
+
+  const resetSubmissionIdempotencyKey = () => {
+    idempotencyKeyRef.current = "";
+  };
 
   // 🔐 USER LOAD
   useEffect(() => {
@@ -57,6 +69,7 @@ export default function Withdrawal() {
 
     try {
       setLoading(true);
+      const idempotencyKey = getSubmissionIdempotencyKey();
 
       const res = await API.post(
         "/withdrawal",
@@ -65,11 +78,12 @@ export default function Withdrawal() {
           walletAddress: walletAddress.trim(),
         },
         {
-          headers: { "Idempotency-Key": createIdempotencyKey() },
+          headers: { "Idempotency-Key": idempotencyKey },
         }
       );
 
       showToast(res?.data?.msg || "Withdrawal requested");
+      resetSubmissionIdempotencyKey();
 
       router.push("/dashboard");
 
@@ -125,7 +139,10 @@ export default function Withdrawal() {
               <button
                 key={val}
                 disabled={loading}
-                onClick={() => setAmount(String(val))}
+                onClick={() => {
+                  resetSubmissionIdempotencyKey();
+                  setAmount(String(val));
+                }}
                 className="bg-white/5 p-2 rounded-lg text-xs"
               >
                 ${val}
@@ -139,7 +156,10 @@ export default function Withdrawal() {
             placeholder="Enter Amount"
             value={amount}
             disabled={loading}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={(e) => {
+              resetSubmissionIdempotencyKey();
+              setAmount(e.target.value);
+            }}
             className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-sm"
           />
 
@@ -148,7 +168,10 @@ export default function Withdrawal() {
             placeholder="Wallet Address"
             value={walletAddress}
             disabled={loading}
-            onChange={(e) => setWalletAddress(e.target.value)}
+            onChange={(e) => {
+              resetSubmissionIdempotencyKey();
+              setWalletAddress(e.target.value);
+            }}
             className="w-full mt-3 bg-white/5 border border-white/10 p-3 rounded-xl text-sm"
           />
 

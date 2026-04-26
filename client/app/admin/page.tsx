@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import API, { getApiErrorMessage } from "../../lib/api";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { getUser, isAdmin } from "../../lib/auth";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import AppToast from "../../components/AppToast";
 
@@ -24,11 +23,6 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
-    const user = getUser();
-    if (!user || !isAdmin()) {
-      router.replace("/dashboard");
-      return;
-    }
     loadData();
     loadStats();
   }, [tab]);
@@ -120,7 +114,7 @@ export default function AdminPage() {
   };
 
   return (
-    <ProtectedRoute>
+    <ProtectedRoute adminOnly>
     <div className="min-h-screen bg-[#040406] text-white px-4 py-6">
       <AppToast message={toast} />
 

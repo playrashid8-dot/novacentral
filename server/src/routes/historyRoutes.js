@@ -9,7 +9,7 @@ const router = express.Router();
 ============================== */
 router.get("/", auth, async (req, res) => {
   try {
-    const history = await Transaction.find({ user: req.user.id })
+    const history = await Transaction.find({ user: req.user._id })
       .sort({ createdAt: -1 });
 
     res.json({

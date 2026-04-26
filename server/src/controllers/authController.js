@@ -15,11 +15,13 @@ const getCookieOptions = () => ({
 const setAuthCookie = (res, token) => {
   const options = getCookieOptions();
   res.cookie(TOKEN_COOKIE_NAME, token, options);
-  console.log("SET COOKIE:", token);
 };
 
 const isValidEmail = (email) => /^\S+@\S+\.\S+$/.test(email);
 const isValidPhone = (phone) => /^\+?\d{10,15}$/.test(phone);
+
+const sendAuthResponse = (res, status, success, msg, data = null) =>
+  res.status(status).json({ success, msg, data });
 
 const bumpTeamCounts = async (referredById) => {
   let current = referredById;
@@ -62,23 +64,23 @@ export const register = async (req, res) => {
 
     // ✅ VALIDATION
     if (!username || !email || !password || !number) {
-      return res.status(400).json({ msg: "All fields required" });
+      return sendAuthResponse(res, 400, false, "All fields required");
     }
 
     if (username.length < 3) {
-      return res.status(400).json({ msg: "Username must be at least 3 characters" });
+      return sendAuthResponse(res, 400, false, "Username must be at least 3 characters");
     }
 
     if (!isValidEmail(email)) {
-      return res.status(400).json({ msg: "Invalid email address" });
+      return sendAuthResponse(res, 400, false, "Invalid email address");
     }
 
     if (!isValidPhone(number)) {
-      return res.status(400).json({ msg: "Invalid phone number" });
+      return sendAuthResponse(res, 400, false, "Invalid phone number");
     }
 
     if (password.length < 8) {
-      return res.status(400).json({ msg: "Password must be at least 8 characters" });
+      return sendAuthResponse(res, 400, false, "Password must be at least 8 characters");
     }
 
     // ✅ CHECK DUPLICATE
@@ -87,7 +89,7 @@ export const register = async (req, res) => {
     });
 
     if (existingUser) {
-      return res.status(400).json({ msg: "User already exists" });
+      return sendAuthResponse(res, 400, false, "User already exists");
     }
 
     // 🔐 HASH PASSWORD
@@ -133,14 +135,13 @@ export const register = async (req, res) => {
 
     setAuthCookie(res, token);
 
-    res.json({
-      success: true,
+    return sendAuthResponse(res, 200, true, "Account created successfully", {
       user: safeUser,
     });
 
   } catch (err) {
     console.error("REGISTER ERROR:", err.message);
-    res.status(500).json({ msg: "Server error" });
+    return sendAuthResponse(res, 500, false, "Server error");
   }
 };
 
@@ -154,30 +155,30 @@ export const login = async (req, res) => {
     username = username?.toLowerCase().trim();
 
     if (!username || !password) {
-      return res.status(400).json({ msg: "Enter username & password" });
+      return sendAuthResponse(res, 400, false, "Enter username & password");
     }
 
     if (username.length < 3 || password.length < 8) {
-      return res.status(400).json({ msg: "Invalid credentials" });
+      return sendAuthResponse(res, 400, false, "Invalid credentials");
     }
 
     // 🔍 FIND USER (WITH PASSWORD)
     const user = await User.findOne({ username }).select("+password");
 
     if (!user) {
-      return res.status(400).json({ msg: "Invalid credentials" });
+      return sendAuthResponse(res, 400, false, "Invalid credentials");
     }
 
     // 🔒 BLOCK CHECK
     if (user.isBlocked) {
-      return res.status(403).json({ msg: "Account blocked" });
+      return sendAuthResponse(res, 403, false, "Account blocked");
     }
 
     // 🔑 PASSWORD MATCH
     const match = await bcrypt.compare(password, user.password);
 
     if (!match) {
-      return res.status(400).json({ msg: "Invalid credentials" });
+      return sendAuthResponse(res, 400, false, "Invalid credentials");
     }
 
     // 🔐 TOKEN
@@ -193,14 +194,13 @@ export const login = async (req, res) => {
 
     setAuthCookie(res, token);
 
-    res.json({
-      success: true,
+    return sendAuthResponse(res, 200, true, "Login successful", {
       user: safeUser,
     });
 
   } catch (err) {
     console.error("LOGIN ERROR:", err.message);
-    res.status(500).json({ msg: "Server error" });
+    return sendAuthResponse(res, 500, false, "Server error");
   }
 };
 
@@ -212,11 +212,7 @@ export const logout = async (req, res) => {
     path: "/",
   };
 
-  console.log("CLEAR AUTH COOKIE:", clearOptions);
   res.clearCookie(TOKEN_COOKIE_NAME, clearOptions);
 
-  res.json({
-    success: true,
-    msg: "Logged out successfully",
-  });
+  return sendAuthResponse(res, 200, true, "Logged out successfully");
 };

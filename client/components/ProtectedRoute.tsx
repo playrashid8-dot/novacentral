@@ -2,13 +2,15 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { isAuth } from "../lib/auth";
+import { isAdmin, isAuth } from "../lib/auth";
 import { motion } from "framer-motion";
 
 export default function ProtectedRoute({
   children,
+  adminOnly = false,
 }: {
   children: React.ReactNode;
+  adminOnly?: boolean;
 }) {
   const router = useRouter();
   const [checking, setChecking] = useState(true);
@@ -26,6 +28,9 @@ export default function ProtectedRoute({
         if (!ok) {
           setRedirecting(true);
           router.replace("/login");
+        } else if (adminOnly && !isAdmin()) {
+          setRedirecting(true);
+          router.replace("/dashboard");
         } else {
           setChecking(false);
         }
@@ -41,7 +46,7 @@ export default function ProtectedRoute({
     return () => {
       mounted = false;
     };
-  }, [router]);
+  }, [adminOnly, router]);
 
   // 🔥 PREMIUM LOADER
   if (checking || redirecting) {

@@ -10,13 +10,7 @@ const router = express.Router();
 ============================== */
 router.get("/me", auth, async (req, res) => {
   try {
-    console.log("GET /user/me COOKIE DEBUG:", {
-      hasTokenCookie: Boolean(req.cookies?.token),
-      cookieKeys: Object.keys(req.cookies || {}),
-      userId: req.user?.id,
-    });
-
-    const user = await User.findById(req.user.id).select("-password");
+    const user = await User.findById(req.user._id).select("-password");
 
     if (!user) {
       return res.status(404).json({ msg: "User not found" });
@@ -42,7 +36,7 @@ router.get("/me", auth, async (req, res) => {
 ============================== */
 router.get("/stats", auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select(
+    const user = await User.findById(req.user._id).select(
       "balance totalInvested totalWithdraw totalEarnings todayProfit isBlocked vipLevel directCount"
     );
 
@@ -78,7 +72,7 @@ router.get("/stats", auth, async (req, res) => {
 ============================== */
 router.get("/dashboard", auth, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user._id;
 
     const user = await User.findById(userId).select(
       "balance totalEarnings todayProfit vipLevel directCount"
@@ -132,7 +126,7 @@ router.get("/dashboard", auth, async (req, res) => {
 ============================== */
 router.get("/referral-stats", auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select(
+    const user = await User.findById(req.user._id).select(
       "referralCode referralEarnings directCount teamCount teamVolume"
     );
 

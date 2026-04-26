@@ -115,6 +115,7 @@ app.get("/", (req, res) => {
 ============================== */
 app.use((req, res) => {
   res.status(404).json({
+    success: false,
     msg: "Route not found ❌",
   });
 });
@@ -125,8 +126,9 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
   console.error("❌ Server Error:", err.stack);
 
-  res.status(500).json({
-    msg: "Internal Server Error",
+  res.status(err.status || 500).json({
+    success: false,
+    msg: err.message || "Internal Server Error",
   });
 });
 

@@ -26,14 +26,23 @@ const sendAdminError = (res, err, context) => {
 ============================== */
 const isAdmin = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id);
+    console.log("USER:", req.user);
+    console.log("ACTION:", "admin.check");
 
-    if (!user || user.email !== process.env.ADMIN_EMAIL) {
+    if (!req.user?._id || req.user.role !== "admin") {
+      return res.status(403).json({ success: false, msg: "Admin access only" });
+    }
+
+    const adminEmail = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+    const user = await User.findById(req.user._id).select("_id email");
+
+    if (!user || user.email !== adminEmail) {
       return res.status(403).json({ success: false, msg: "Admin access only" });
     }
 
     next();
   } catch (err) {
+    console.log("ERROR:", err.message);
     res.status(500).json({ success: false, msg: err.message });
   }
 };
@@ -46,7 +55,12 @@ router.get("/deposits", auth, isAdmin, async (req, res) => {
     const deposits = await Deposit.find()
       .populate("userId", "username email")
       .sort({ createdAt: -1 });
-    res.json({ success: true, deposits });
+    res.json({
+      success: true,
+      msg: "Deposits fetched successfully",
+      data: { deposits },
+      deposits,
+    });
   } catch (err) {
     sendAdminError(res, err, "ADMIN DEPOSITS ERROR");
   }
@@ -57,7 +71,12 @@ router.get("/deposits/pending", auth, isAdmin, async (req, res) => {
     const deposits = await Deposit.find({ status: "pending" })
       .populate("userId", "username email")
       .sort({ createdAt: -1 });
-    res.json({ success: true, deposits });
+    res.json({
+      success: true,
+      msg: "Pending deposits fetched successfully",
+      data: { deposits },
+      deposits,
+    });
   } catch (err) {
     sendAdminError(res, err, "ADMIN PENDING DEPOSITS ERROR");
   }
@@ -74,7 +93,12 @@ router.get("/withdrawals", auth, isAdmin, async (req, res) => {
     const withdrawals = await Withdrawal.find()
       .populate("userId", "username email")
       .sort({ createdAt: -1 });
-    res.json({ success: true, withdrawals });
+    res.json({
+      success: true,
+      msg: "Withdrawals fetched successfully",
+      data: { withdrawals },
+      withdrawals,
+    });
   } catch (err) {
     sendAdminError(res, err, "ADMIN WITHDRAWALS ERROR");
   }
@@ -85,7 +109,12 @@ router.get("/withdrawals/pending", auth, isAdmin, async (req, res) => {
     const withdrawals = await Withdrawal.find({ status: "pending" })
       .populate("userId", "username email")
       .sort({ createdAt: -1 });
-    res.json({ success: true, withdrawals });
+    res.json({
+      success: true,
+      msg: "Pending withdrawals fetched successfully",
+      data: { withdrawals },
+      withdrawals,
+    });
   } catch (err) {
     sendAdminError(res, err, "ADMIN PENDING WITHDRAWALS ERROR");
   }

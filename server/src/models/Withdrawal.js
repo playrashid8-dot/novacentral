@@ -71,6 +71,7 @@ const withdrawalSchema = new mongoose.Schema(
 // 🔥 INDEXES (FAST ADMIN PANEL)
 //
 withdrawalSchema.index({ userId: 1, status: 1 });
+withdrawalSchema.index({ userId: 1, createdAt: -1 });
 withdrawalSchema.index({ createdAt: -1 });
 withdrawalSchema.index(
   { userId: 1, idempotencyKey: 1 },
@@ -80,11 +81,10 @@ withdrawalSchema.index(
   }
 );
 
-withdrawalSchema.pre("save", function (next) {
+withdrawalSchema.pre("save", function () {
   if (this.idempotencyKey) {
     this.idempotencyKey = this.idempotencyKey.trim();
   }
-  next();
 });
 
 //

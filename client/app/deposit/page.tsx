@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import API, { getApiErrorMessage } from "../../lib/api";
 import { getUser } from "../../lib/auth";
@@ -18,6 +18,7 @@ export default function Deposit() {
   const [copied, setCopied] = useState(false);
   const [user, setUser]: any = useState(null);
   const [toast, setToast] = useState("");
+  const idempotencyKeyRef = useRef("");
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -28,6 +29,17 @@ export default function Deposit() {
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random()}`;
+
+  const getSubmissionIdempotencyKey = () => {
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current = createIdempotencyKey();
+    }
+    return idempotencyKeyRef.current;
+  };
+
+  const resetSubmissionIdempotencyKey = () => {
+    idempotencyKeyRef.current = "";
+  };
 
   const wallet = "0xEC4Edc0654Ee207F9dB9E1068d3adfE689362B64";
 
@@ -56,6 +68,7 @@ export default function Deposit() {
 
     try {
       setLoading(true);
+      const idempotencyKey = getSubmissionIdempotencyKey();
 
       const res = await API.post(
         "/deposit",
@@ -64,7 +77,7 @@ export default function Deposit() {
           txHash: txHash.trim().toLowerCase(),
         },
         {
-          headers: { "Idempotency-Key": createIdempotencyKey() },
+          headers: { "Idempotency-Key": idempotencyKey },
         }
       );
 
@@ -72,6 +85,7 @@ export default function Deposit() {
 
       setAmount("");
       setTxHash("");
+      resetSubmissionIdempotencyKey();
 
       router.push("/dashboard");
 
@@ -154,7 +168,10 @@ export default function Deposit() {
               <button
                 key={val}
                 disabled={loading}
-                onClick={() => setAmount(String(val))}
+                onClick={() => {
+                  resetSubmissionIdempotencyKey();
+                  setAmount(String(val));
+                }}
                 className="bg-white/5 p-2 rounded-lg text-xs hover:bg-purple-500/20 transition"
               >
                 ${val}
@@ -168,7 +185,10 @@ export default function Deposit() {
             placeholder="Enter Amount ($)"
             value={amount}
             disabled={loading}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={(e) => {
+              resetSubmissionIdempotencyKey();
+              setAmount(e.target.value);
+            }}
             className="w-full mt-4 bg-white/5 border border-white/10 focus:border-purple-500 outline-none p-3 rounded-xl text-sm"
           />
 
@@ -178,7 +198,10 @@ export default function Deposit() {
             placeholder="Transaction Hash"
             value={txHash}
             disabled={loading}
-            onChange={(e) => setTxHash(e.target.value)}
+            onChange={(e) => {
+              resetSubmissionIdempotencyKey();
+              setTxHash(e.target.value);
+            }}
             className="w-full mt-3 bg-white/5 border border-white/10 focus:border-purple-500 outline-none p-3 rounded-xl text-sm"
           />
 

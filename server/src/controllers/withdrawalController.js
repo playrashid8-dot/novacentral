@@ -7,25 +7,17 @@ import mongoose from "mongoose";
 
 const getIdempotencyKey = (req) => req.get("Idempotency-Key")?.trim() || null;
 
-const sendStoredIdempotencyResponse = (res, record) => {
-  if (!record?.idempotencyResponse?.body) return false;
-  res
-    .status(record.idempotencyResponse.statusCode || 200)
-    .json(record.idempotencyResponse.body);
-  return true;
-};
-
 const logControllerError = (action, req, err) => {
-  console.error("USER:", req.user?._id);
-  console.error("ACTION:", action);
-  console.error("ERROR:", err.message);
+  console.log("USER ID:", req.user?._id);
+  console.log("ACTION:", action);
+  console.log("ERROR:", err.message);
 };
 
 //
 // 🔥 CREATE WITHDRAWAL
 //
 export const createWithdrawal = async (req, res) => {
-  const session = await mongoose.startSession();
+  let session;
 
   try {
     let { amount, walletAddress } = req.body;
@@ -35,16 +27,28 @@ export const createWithdrawal = async (req, res) => {
     walletAddress = walletAddress?.trim();
 
     // ✅ VALIDATION
+    if (!req.user?._id) {
+      return res.status(401).json({
+        success: false,
+        msg: "Unauthorized",
+        data: null,
+      });
+    }
+
     if (!Number.isFinite(amount) || amount <= 0) {
-      return res
-        .status(400)
-        .json({ success: false, msg: "Amount must be a number greater than 0" });
+      return res.status(400).json({
+        success: false,
+        msg: "Amount must be a number greater than 0",
+        data: null,
+      });
     }
 
     if (!walletAddress || walletAddress.length < 8) {
-      return res
-        .status(400)
-        .json({ success: false, msg: "Valid wallet address required" });
+      return res.status(400).json({
+        success: false,
+        msg: "Valid wallet address required",
+        data: null,
+      });
     }
 
     if (idempotencyKey) {
@@ -53,12 +57,15 @@ export const createWithdrawal = async (req, res) => {
         idempotencyKey,
       });
 
-      if (sendStoredIdempotencyResponse(res, previous)) return;
+      if (previous?.idempotencyResponse) {
+        return res.status(200).json(previous.idempotencyResponse);
+      }
+
       if (previous) {
-        return res.json({
+        return res.status(200).json({
           success: true,
-          msg: "Withdrawal requested successfully",
-          data: { withdrawal: previous },
+          msg: "Duplicate request",
+          data: previous,
         });
       }
     }
@@ -66,12 +73,22 @@ export const createWithdrawal = async (req, res) => {
     const user = await User.findById(req.user._id);
 
     if (!user) {
-      return res.status(404).json({ success: false, msg: "User not found" });
+      return res.status(404).json({
+        success: false,
+        msg: "User not found",
+        data: null,
+      });
     }
 
     if (user.isBlocked) {
-      return res.status(403).json({ success: false, msg: "Account blocked" });
+      return res.status(403).json({
+        success: false,
+        msg: "Account blocked",
+        data: null,
+      });
     }
+
+    session = await mongoose.startSession();
 
     const cooldownMs = 96 * 60 * 60 * 1000;
     const now = new Date();
@@ -146,7 +163,7 @@ export const createWithdrawal = async (req, res) => {
             { _id: withdrawal._id },
             {
               $set: {
-                idempotencyResponse: { statusCode: 200, body: responseBody },
+                idempotencyResponse: responseBody,
               },
             },
             { session }
@@ -154,7 +171,7 @@ export const createWithdrawal = async (req, res) => {
         }
       });
 
-      console.log("USER:", req.user);
+      console.log("USER ID:", req.user?._id);
       console.log("ACTION:", "withdrawal.create");
       console.log("WITHDRAW:", {
         userId: req.user._id,
@@ -175,11 +192,15 @@ export const createWithdrawal = async (req, res) => {
           return res.status(400).json({
             success: false,
             msg: "Withdrawal cooldown active",
-            cooldownRemaining: Math.ceil(remainingMs / 1000),
+            data: null,
           });
         }
 
-        return res.status(400).json({ success: false, msg: "Insufficient balance" });
+        return res.status(400).json({
+          success: false,
+          msg: "Insufficient balance",
+          data: null,
+        });
       }
 
       if (createErr?.code === 11000 && idempotencyKey) {
@@ -188,12 +209,15 @@ export const createWithdrawal = async (req, res) => {
           idempotencyKey,
         });
 
-        if (sendStoredIdempotencyResponse(res, previous)) return;
+        if (previous?.idempotencyResponse) {
+          return res.status(200).json(previous.idempotencyResponse);
+        }
+
         if (previous) {
-          return res.json({
+          return res.status(200).json({
             success: true,
-            msg: "Withdrawal requested successfully",
-            data: { withdrawal: previous },
+            msg: "Duplicate request",
+            data: previous,
           });
         }
       }
@@ -203,9 +227,11 @@ export const createWithdrawal = async (req, res) => {
 
   } catch (err) {
     logControllerError("withdrawal.create", req, err);
-    res.status(500).json({ success: false, msg: err.message });
+    res.status(500).json({ success: false, msg: err.message, data: null });
   } finally {
-    session.endSession();
+    if (session) {
+      session.endSession();
+    }
   }
 };
 
@@ -226,7 +252,7 @@ export const getMyWithdrawals = async (req, res) => {
 
   } catch (err) {
     logControllerError("withdrawal.list", req, err);
-    res.status(500).json({ success: false, msg: err.message });
+    res.status(500).json({ success: false, msg: err.message, data: null });
   }
 };
 
@@ -275,10 +301,10 @@ export const approveWithdrawal = async (req, res) => {
     if (!withdrawal) {
       return res
         .status(400)
-        .json({ success: false, msg: "Already processed or not found" });
+        .json({ success: false, msg: "Already processed or not found", data: null });
     }
 
-    console.log("USER:", req.user);
+    console.log("USER ID:", req.user?._id);
     console.log("ACTION:", "withdrawal.approve");
     console.log("WITHDRAW:", {
       adminId: req.user._id,
@@ -293,7 +319,7 @@ export const approveWithdrawal = async (req, res) => {
 
   } catch (err) {
     logControllerError("withdrawal.approve", req, err);
-    res.status(500).json({ success: false, msg: err.message });
+    res.status(500).json({ success: false, msg: err.message, data: null });
   } finally {
     session.endSession();
   }
@@ -375,10 +401,10 @@ export const rejectWithdrawal = async (req, res) => {
     if (!withdrawal) {
       return res
         .status(400)
-        .json({ success: false, msg: "Already processed or not found" });
+        .json({ success: false, msg: "Already processed or not found", data: null });
     }
 
-    console.log("USER:", req.user);
+    console.log("USER ID:", req.user?._id);
     console.log("ACTION:", "withdrawal.reject");
     console.log("WITHDRAW:", {
       adminId: req.user._id,
@@ -393,7 +419,7 @@ export const rejectWithdrawal = async (req, res) => {
 
   } catch (err) {
     logControllerError("withdrawal.reject", req, err);
-    res.status(500).json({ success: false, msg: err.message });
+    res.status(500).json({ success: false, msg: err.message, data: null });
   } finally {
     session.endSession();
   }

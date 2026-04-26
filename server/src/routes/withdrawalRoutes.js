@@ -16,14 +16,23 @@ const router = express.Router();
 ============================== */
 const isAdmin = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id);
+    console.log("USER:", req.user);
+    console.log("ACTION:", "admin.check");
 
-    if (!user || user.email !== process.env.ADMIN_EMAIL) {
+    if (!req.user?._id || req.user.role !== "admin") {
+      return res.status(403).json({ success: false, msg: "Admin access only" });
+    }
+
+    const adminEmail = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+    const user = await User.findById(req.user._id).select("_id email");
+
+    if (!user || user.email !== adminEmail) {
       return res.status(403).json({ success: false, msg: "Admin access only" });
     }
 
     next();
   } catch (err) {
+    console.log("ERROR:", err.message);
     res.status(500).json({ success: false, msg: err.message });
   }
 };

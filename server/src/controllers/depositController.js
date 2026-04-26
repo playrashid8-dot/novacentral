@@ -8,18 +8,29 @@ import mongoose from "mongoose";
 
 const getIdempotencyKey = (req) => req.get("Idempotency-Key")?.trim() || null;
 
-const sendStoredIdempotencyResponse = (res, record) => {
-  if (!record?.idempotencyResponse?.body) return false;
-  res
-    .status(record.idempotencyResponse.statusCode || 200)
-    .json(record.idempotencyResponse.body);
+const sendIdempotencyResponse = (res, record) => {
+  if (!record) return false;
+
+  if (record.idempotencyResponse?.body) {
+    res
+      .status(record.idempotencyResponse.statusCode || 200)
+      .json(record.idempotencyResponse.body);
+    return true;
+  }
+
+  res.json({
+    success: true,
+    msg: "Deposit submitted successfully",
+    data: { deposit: record },
+  });
+
   return true;
 };
 
 const logControllerError = (action, req, err) => {
-  console.error("USER:", req.user?._id);
-  console.error("ACTION:", action);
-  console.error("ERROR:", err.message);
+  console.log("USER:", req.user?._id);
+  console.log("ACTION:", action);
+  console.log("ERROR:", err.message);
 };
 
 //
@@ -27,12 +38,19 @@ const logControllerError = (action, req, err) => {
 //
 export const createDeposit = async (req, res) => {
   try {
+    console.log("USER:", req.user);
+    console.log("BODY:", req.body);
+
     let { amount, txHash } = req.body;
     const idempotencyKey = getIdempotencyKey(req);
 
     // 🔧 NORMALIZE
     amount = Number(amount);
     txHash = txHash?.trim().toLowerCase();
+
+    if (!req.user?._id) {
+      return res.status(401).json({ success: false, msg: "Unauthorized user" });
+    }
 
     // ✅ VALIDATION (STRONG)
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -53,17 +71,20 @@ export const createDeposit = async (req, res) => {
         idempotencyKey,
       });
 
-      if (sendStoredIdempotencyResponse(res, previous)) return;
       if (previous) {
-        return res.json({
-          success: true,
-          msg: "Deposit submitted successfully",
-          data: { deposit: previous },
-        });
+        if (previous.txHash !== txHash) {
+          return res.status(409).json({
+            success: false,
+            msg: "Idempotency key already used for another deposit",
+          });
+        }
+
+        if (sendIdempotencyResponse(res, previous)) return;
       }
     }
 
     const duplicateTx = await Deposit.findOne({ txHash });
+
     if (duplicateTx) {
       return res
         .status(409)
@@ -88,12 +109,12 @@ export const createDeposit = async (req, res) => {
             idempotencyKey,
           });
 
-          if (sendStoredIdempotencyResponse(res, previous)) return;
           if (previous) {
-            return res.json({
-              success: true,
-              msg: "Deposit submitted successfully",
-              data: { deposit: previous },
+            if (previous.txHash === txHash && sendIdempotencyResponse(res, previous)) return;
+
+            return res.status(409).json({
+              success: false,
+              msg: "Idempotency key already used for another deposit",
             });
           }
         }
@@ -142,6 +163,7 @@ export const createDeposit = async (req, res) => {
     res.json(responseBody);
 
   } catch (err) {
+    console.log("ERROR:", err.message);
     logControllerError("deposit.create", req, err);
     res.status(500).json({ success: false, msg: err.message });
   }

@@ -29,7 +29,7 @@ export const createInvestment = async (req, res) => {
     }
 
     // 🔍 USER
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user._id);
 
     if (!user) {
       return res.status(404).json({ msg: "User not found" });
@@ -100,7 +100,7 @@ export const createInvestment = async (req, res) => {
 //
 export const getMyInvestments = async (req, res) => {
   try {
-    const data = await Investment.find({ userId: req.user.id })
+    const data = await Investment.find({ userId: req.user._id })
       .sort({ createdAt: -1 });
 
     res.json({

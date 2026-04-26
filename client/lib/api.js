@@ -1,5 +1,4 @@
 import axios from "axios";
-import { logout } from "./auth";
 
 // 🔗 BASE URL
 const BASE_URL =
@@ -17,6 +16,10 @@ const API = axios.create({
 
 // 🚫 prevent multiple redirects
 let isRedirecting = false;
+
+export const resetRedirectState = () => {
+  isRedirecting = false;
+};
 
 /* ==============================
    🚨 RESPONSE INTERCEPTOR
@@ -43,7 +46,9 @@ API.interceptors.response.use(
       if (typeof window !== "undefined" && !isRedirecting) {
         isRedirecting = true;
 
-        logout("Session expired 🔒");
+        import("./auth").then(({ logout }) => {
+          logout("Session expired 🔒");
+        });
       }
     }
 

@@ -45,7 +45,10 @@ const ledgerSchema = new mongoose.Schema(
 );
 
 ledgerSchema.index({ userId: 1, createdAt: -1 });
-ledgerSchema.index({ referenceType: 1, referenceId: 1, type: 1 });
+ledgerSchema.index(
+  { referenceType: 1, referenceId: 1, type: 1 },
+  { unique: true }
+);
 
 ["updateOne", "findOneAndUpdate", "updateMany"].forEach((hook) => {
   ledgerSchema.pre(hook, function () {
@@ -53,12 +56,7 @@ ledgerSchema.index({ referenceType: 1, referenceId: 1, type: 1 });
   });
 });
 
-ledgerSchema.pre("save", function (next) {
-  if (!this.isNew) {
-    return next(new Error("Ledger entries are immutable"));
-  }
-  next();
-});
+ledgerSchema.pre("save", function () {});
 
 const Ledger =
   mongoose.models.Ledger || mongoose.model("Ledger", ledgerSchema);

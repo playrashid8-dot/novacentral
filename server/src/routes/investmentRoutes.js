@@ -25,7 +25,7 @@ router.get("/my", auth, getMyInvestments);
 router.get("/active", auth, async (req, res) => {
   try {
     const investments = await Investment.find({
-      userId: req.user.id,
+      userId: req.user._id,
       status: "active",
     }).sort({ createdAt: -1 });
 
@@ -46,7 +46,7 @@ router.get("/active", auth, async (req, res) => {
 router.get("/completed", auth, async (req, res) => {
   try {
     const investments = await Investment.find({
-      userId: req.user.id,
+      userId: req.user._id,
       status: "completed",
     }).sort({ createdAt: -1 });
 
@@ -67,7 +67,7 @@ router.get("/completed", auth, async (req, res) => {
 router.get("/summary", auth, async (req, res) => {
   try {
     const investments = await Investment.find({
-      userId: req.user.id,
+      userId: req.user._id,
     });
 
     let totalInvested = 0;

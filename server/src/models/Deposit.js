@@ -73,6 +73,7 @@ const depositSchema = new mongoose.Schema(
 // 🔥 COMPOUND INDEX (ADMIN SPEED BOOST)
 //
 depositSchema.index({ userId: 1, status: 1 });
+depositSchema.index({ userId: 1, createdAt: -1 });
 depositSchema.index({ createdAt: -1 });
 depositSchema.index(
   { userId: 1, idempotencyKey: 1 },
@@ -95,14 +96,13 @@ depositSchema.methods.toJSON = function () {
 //
 // 🔥 PRE-SAVE CLEAN (IMPORTANT)
 //
-depositSchema.pre("save", function (next) {
+depositSchema.pre("save", function () {
   if (this.txHash) {
     this.txHash = this.txHash.toLowerCase().trim();
   }
   if (this.idempotencyKey) {
     this.idempotencyKey = this.idempotencyKey.trim();
   }
-  next();
 });
 
 export default mongoose.model("Deposit", depositSchema);

@@ -1,4 +1,4 @@
-import API from "./api";
+import API, { resetRedirectState } from "./api";
 
 const USER_KEY = "user";
 
@@ -84,6 +84,7 @@ export const logout = (message) => {
 
 export const resetLogoutState = () => {
   isLoggingOut = false;
+  resetRedirectState();
 };
 
 // 🛡️ PROTECT ROUTE
