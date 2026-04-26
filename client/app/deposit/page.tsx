@@ -24,6 +24,11 @@ export default function Deposit() {
     setTimeout(() => setToast(""), 2500);
   };
 
+  const createIdempotencyKey = () =>
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random()}`;
+
   const wallet = "0xEC4Edc0654Ee207F9dB9E1068d3adfE689362B64";
 
   // 🔐 AUTH
@@ -52,10 +57,16 @@ export default function Deposit() {
     try {
       setLoading(true);
 
-      const res = await API.post("/deposit", {
-        amount: amt,
-        txHash: txHash.trim().toLowerCase(),
-      });
+      const res = await API.post(
+        "/deposit",
+        {
+          amount: amt,
+          txHash: txHash.trim().toLowerCase(),
+        },
+        {
+          headers: { "Idempotency-Key": createIdempotencyKey() },
+        }
+      );
 
       showToast(res?.data?.msg || "Deposit submitted successfully");
 
@@ -156,6 +167,7 @@ export default function Deposit() {
             type="number"
             placeholder="Enter Amount ($)"
             value={amount}
+            disabled={loading}
             onChange={(e) => setAmount(e.target.value)}
             className="w-full mt-4 bg-white/5 border border-white/10 focus:border-purple-500 outline-none p-3 rounded-xl text-sm"
           />
@@ -165,6 +177,7 @@ export default function Deposit() {
             type="text"
             placeholder="Transaction Hash"
             value={txHash}
+            disabled={loading}
             onChange={(e) => setTxHash(e.target.value)}
             className="w-full mt-3 bg-white/5 border border-white/10 focus:border-purple-500 outline-none p-3 rounded-xl text-sm"
           />

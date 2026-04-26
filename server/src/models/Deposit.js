@@ -41,6 +41,17 @@ const depositSchema = new mongoose.Schema(
       trim: true,
     },
 
+    idempotencyKey: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+
+    idempotencyResponse: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+
     // 🧾 ADMIN NOTE
     note: {
       type: String,
@@ -63,6 +74,13 @@ const depositSchema = new mongoose.Schema(
 //
 depositSchema.index({ userId: 1, status: 1 });
 depositSchema.index({ createdAt: -1 });
+depositSchema.index(
+  { userId: 1, idempotencyKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { idempotencyKey: { $type: "string" } },
+  }
+);
 
 //
 // 🔥 SAFE JSON RESPONSE
@@ -80,6 +98,9 @@ depositSchema.methods.toJSON = function () {
 depositSchema.pre("save", function (next) {
   if (this.txHash) {
     this.txHash = this.txHash.toLowerCase().trim();
+  }
+  if (this.idempotencyKey) {
+    this.idempotencyKey = this.idempotencyKey.trim();
   }
   next();
 });

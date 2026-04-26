@@ -46,7 +46,13 @@ const transactionSchema = new mongoose.Schema(
   }
 );
 
-transactionSchema.index({ type: 1, refId: 1 }, { unique: true, sparse: true });
+transactionSchema.index(
+  { type: 1, refId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { refId: { $type: "objectId" } },
+  }
+);
 
 // ❌ duplicate model error fix (important for dev)
 const Transaction =

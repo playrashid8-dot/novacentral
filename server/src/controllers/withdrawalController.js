@@ -1,13 +1,35 @@
 import Withdrawal from "../models/Withdrawal.js";
 import User from "../models/User.js";
 import Transaction from "../models/Transaction.js";
+import Ledger from "../models/Ledger.js";
+import AuditLog from "../models/AuditLog.js";
+import mongoose from "mongoose";
+
+const getIdempotencyKey = (req) => req.get("Idempotency-Key")?.trim() || null;
+
+const sendStoredIdempotencyResponse = (res, record) => {
+  if (!record?.idempotencyResponse?.body) return false;
+  res
+    .status(record.idempotencyResponse.statusCode || 200)
+    .json(record.idempotencyResponse.body);
+  return true;
+};
+
+const logControllerError = (action, req, err) => {
+  console.error("USER:", req.user?._id);
+  console.error("ACTION:", action);
+  console.error("ERROR:", err.message);
+};
 
 //
 // 🔥 CREATE WITHDRAWAL
 //
 export const createWithdrawal = async (req, res) => {
+  const session = await mongoose.startSession();
+
   try {
     let { amount, walletAddress } = req.body;
+    const idempotencyKey = getIdempotencyKey(req);
 
     amount = Number(amount);
     walletAddress = walletAddress?.trim();
@@ -25,6 +47,22 @@ export const createWithdrawal = async (req, res) => {
         .json({ success: false, msg: "Valid wallet address required" });
     }
 
+    if (idempotencyKey) {
+      const previous = await Withdrawal.findOne({
+        userId: req.user._id,
+        idempotencyKey,
+      });
+
+      if (sendStoredIdempotencyResponse(res, previous)) return;
+      if (previous) {
+        return res.json({
+          success: true,
+          msg: "Withdrawal requested successfully",
+          data: { withdrawal: previous },
+        });
+      }
+    }
+
     const user = await User.findById(req.user._id);
 
     if (!user) {
@@ -38,88 +76,136 @@ export const createWithdrawal = async (req, res) => {
     const cooldownMs = 96 * 60 * 60 * 1000;
     const now = new Date();
     const cutoff = new Date(now.getTime() - cooldownMs);
-    // 🔥 ATOMIC BALANCE DEDUCT
-    const updated = await User.findOneAndUpdate(
-      {
-        _id: user._id,
-        isBlocked: { $ne: true },
-        balance: { $gte: amount },
-        $or: [
-          { lastWithdrawalAt: { $exists: false } },
-          { lastWithdrawalAt: null },
-          { lastWithdrawalAt: { $lte: cutoff } },
-        ],
-      },
-      { $inc: { balance: -amount }, $set: { lastWithdrawalAt: now } },
-      { new: true }
-    );
-
-    if (!updated) {
-      const refreshed = await User.findById(user._id).select("balance lastWithdrawalAt");
-      const lastAt = refreshed?.lastWithdrawalAt
-        ? new Date(refreshed.lastWithdrawalAt).getTime()
-        : null;
-      const remainingMs = lastAt ? cooldownMs - (Date.now() - lastAt) : 0;
-
-      if (remainingMs > 0) {
-        return res.status(400).json({
-          success: false,
-          msg: "Withdrawal cooldown active",
-          cooldownRemaining: Math.ceil(remainingMs / 1000),
-        });
-      }
-
-      return res.status(400).json({ success: false, msg: "Insufficient balance" });
-    }
-
     // ⏱ 96h delay
     const releaseAt = new Date(Date.now() + cooldownMs);
 
     let withdrawal;
+    let responseBody;
     try {
-      withdrawal = await Withdrawal.create({
-        userId: user._id,
-        amount,
-        walletAddress,
-        releaseAt,
-        status: "pending",
+      await session.withTransaction(async () => {
+        // 🔥 ATOMIC BALANCE DEDUCT
+        const updated = await User.findOneAndUpdate(
+          {
+            _id: user._id,
+            isBlocked: { $ne: true },
+            balance: { $gte: amount },
+            $or: [
+              { lastWithdrawalAt: { $exists: false } },
+              { lastWithdrawalAt: null },
+              { lastWithdrawalAt: { $lte: cutoff } },
+            ],
+          },
+          { $inc: { balance: -amount }, $set: { lastWithdrawalAt: now } },
+          { new: true, session }
+        );
+
+        if (!updated) {
+          throw new Error("WITHDRAWAL_DEDUCT_FAILED");
+        }
+
+        withdrawal = (await Withdrawal.create([{
+          userId: user._id,
+          amount,
+          walletAddress,
+          releaseAt,
+          status: "pending",
+          idempotencyKey,
+        }], { session }))[0];
+
+        // 🔥 CREATE TRANSACTION (HISTORY)
+        await Transaction.findOneAndUpdate(
+          { type: "withdraw", refId: withdrawal._id },
+          {
+            user: user._id,
+            type: "withdraw",
+            amount,
+            status: "pending",
+            refId: withdrawal._id,
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true, session }
+        );
+
+        await Ledger.create([{
+          userId: user._id,
+          type: "debit",
+          amount,
+          balanceBefore: Number(updated.balance || 0) + amount,
+          balanceAfter: Number(updated.balance || 0),
+          referenceId: withdrawal._id,
+          referenceType: "withdrawal",
+        }], { session });
+
+        responseBody = {
+          success: true,
+          msg: "Withdrawal requested successfully",
+          data: { withdrawal },
+        };
+
+        if (idempotencyKey) {
+          await Withdrawal.updateOne(
+            { _id: withdrawal._id },
+            {
+              $set: {
+                idempotencyResponse: { statusCode: 200, body: responseBody },
+              },
+            },
+            { session }
+          );
+        }
       });
 
-      // 🔥 CREATE TRANSACTION (HISTORY)
-      await Transaction.findOneAndUpdate(
-        { type: "withdraw", refId: withdrawal._id },
-        {
-          user: user._id,
-          type: "withdraw",
-          amount,
-          status: "pending",
-          refId: withdrawal._id,
-        },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      );
+      console.log("USER:", req.user);
+      console.log("ACTION:", "withdrawal.create");
+      console.log("WITHDRAW:", {
+        userId: req.user._id,
+        withdrawalId: withdrawal._id,
+        amount: withdrawal.amount,
+      });
+
+      return res.json(responseBody);
     } catch (createErr) {
-      await User.updateOne(
-        { _id: user._id },
-        { $inc: { balance: amount }, $set: { lastWithdrawalAt: user.lastWithdrawalAt || null } }
-      );
+      if (createErr?.message === "WITHDRAWAL_DEDUCT_FAILED") {
+        const refreshed = await User.findById(user._id).select("balance lastWithdrawalAt");
+        const lastAt = refreshed?.lastWithdrawalAt
+          ? new Date(refreshed.lastWithdrawalAt).getTime()
+          : null;
+        const remainingMs = lastAt ? cooldownMs - (Date.now() - lastAt) : 0;
+
+        if (remainingMs > 0) {
+          return res.status(400).json({
+            success: false,
+            msg: "Withdrawal cooldown active",
+            cooldownRemaining: Math.ceil(remainingMs / 1000),
+          });
+        }
+
+        return res.status(400).json({ success: false, msg: "Insufficient balance" });
+      }
+
+      if (createErr?.code === 11000 && idempotencyKey) {
+        const previous = await Withdrawal.findOne({
+          userId: req.user._id,
+          idempotencyKey,
+        });
+
+        if (sendStoredIdempotencyResponse(res, previous)) return;
+        if (previous) {
+          return res.json({
+            success: true,
+            msg: "Withdrawal requested successfully",
+            data: { withdrawal: previous },
+          });
+        }
+      }
+
       throw createErr;
     }
-    console.log("USER:", req.user);
-    console.log("WITHDRAW:", withdrawal);
-    console.log("Withdrawal created:", {
-      userId: req.user._id,
-      withdrawalId: withdrawal._id,
-      amount: withdrawal.amount,
-    });
-
-    res.json({
-      success: true,
-      data: { withdrawal },
-    });
 
   } catch (err) {
-    console.error("CREATE WITHDRAWAL ERROR:", err.message);
+    logControllerError("withdrawal.create", req, err);
     res.status(500).json({ success: false, msg: err.message });
+  } finally {
+    session.endSession();
   }
 };
 
@@ -134,11 +220,12 @@ export const getMyWithdrawals = async (req, res) => {
 
     res.json({
       success: true,
+      msg: "Withdrawals fetched successfully",
       data: { withdrawals },
     });
 
   } catch (err) {
-    console.error("GET WITHDRAWALS ERROR:", err.message);
+    logControllerError("withdrawal.list", req, err);
     res.status(500).json({ success: false, msg: err.message });
   }
 };
@@ -148,12 +235,42 @@ export const getMyWithdrawals = async (req, res) => {
 // 🔥 ADMIN APPROVE
 //
 export const approveWithdrawal = async (req, res) => {
+  const session = await mongoose.startSession();
+
   try {
-    const withdrawal = await Withdrawal.findOneAndUpdate(
-      { _id: req.params.id, status: "pending" },
-      { status: "approved", approvedAt: new Date() },
-      { new: true }
-    );
+    let withdrawal;
+
+    await session.withTransaction(async () => {
+      withdrawal = await Withdrawal.findOneAndUpdate(
+        { _id: req.params.id, status: "pending" },
+        { status: "approved", approvedAt: new Date() },
+        { new: true, session }
+      );
+
+      if (!withdrawal) {
+        return;
+      }
+
+      // 🔥 UPDATE TRANSACTION
+      await Transaction.findOneAndUpdate(
+        { type: "withdraw", refId: withdrawal._id },
+        {
+          user: withdrawal.userId,
+          type: "withdraw",
+          amount: withdrawal.amount,
+          status: "approved",
+          refId: withdrawal._id,
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true, session }
+      );
+
+      await AuditLog.create([{
+        adminId: req.user._id,
+        action: "withdrawal.approve",
+        targetId: withdrawal._id,
+        targetType: "withdrawal",
+      }], { session });
+    });
 
     if (!withdrawal) {
       return res
@@ -161,33 +278,24 @@ export const approveWithdrawal = async (req, res) => {
         .json({ success: false, msg: "Already processed or not found" });
     }
 
-    // 🔥 UPDATE TRANSACTION
-    await Transaction.findOneAndUpdate(
-      { type: "withdraw", refId: withdrawal._id },
-      {
-        user: withdrawal.userId,
-        type: "withdraw",
-        amount: withdrawal.amount,
-        status: "approved",
-        refId: withdrawal._id,
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
     console.log("USER:", req.user);
-    console.log("WITHDRAW:", withdrawal);
-    console.log("Admin withdrawal approve:", {
+    console.log("ACTION:", "withdrawal.approve");
+    console.log("WITHDRAW:", {
       adminId: req.user._id,
       withdrawalId: withdrawal._id,
     });
 
     res.json({
       success: true,
+      msg: "Withdrawal approved successfully",
       data: { withdrawal },
     });
 
   } catch (err) {
-    console.error("APPROVE ERROR:", err.message);
+    logControllerError("withdrawal.approve", req, err);
     res.status(500).json({ success: false, msg: err.message });
+  } finally {
+    session.endSession();
   }
 };
 
@@ -196,12 +304,73 @@ export const approveWithdrawal = async (req, res) => {
 // ❌ ADMIN REJECT (SAFE REFUND)
 //
 export const rejectWithdrawal = async (req, res) => {
+  const session = await mongoose.startSession();
+
   try {
-    const withdrawal = await Withdrawal.findOneAndUpdate(
-      { _id: req.params.id, status: "pending" },
-      { status: "rejected", rejectedAt: new Date() },
-      { new: true }
-    );
+    let withdrawal;
+
+    await session.withTransaction(async () => {
+      withdrawal = await Withdrawal.findOneAndUpdate(
+        { _id: req.params.id, status: "pending" },
+        { status: "rejected", rejectedAt: new Date() },
+        { new: true, session }
+      );
+
+      if (!withdrawal) {
+        return;
+      }
+
+      // 🔁 REFUND
+      const updatedUser = await User.findOneAndUpdate(
+        { _id: withdrawal.userId },
+        {
+          $inc: {
+            balance: withdrawal.amount,
+          },
+          $set: {
+            lastWithdrawalAt: null,
+          },
+        },
+        { new: true, session }
+      );
+
+      if (!updatedUser) {
+        throw new Error("User not found during withdrawal refund");
+      }
+
+      const balanceAfter = Number(updatedUser.balance || 0);
+      const balanceBefore = balanceAfter - Number(withdrawal.amount || 0);
+
+      await Ledger.create([{
+        userId: withdrawal.userId,
+        type: "credit",
+        amount: withdrawal.amount,
+        balanceBefore,
+        balanceAfter,
+        referenceId: withdrawal._id,
+        referenceType: "withdrawal",
+      }], { session });
+
+      // 🔥 UPDATE TRANSACTION
+      await Transaction.findOneAndUpdate(
+        { type: "withdraw", refId: withdrawal._id },
+        {
+          user: withdrawal.userId,
+          type: "withdraw",
+          amount: withdrawal.amount,
+          status: "rejected",
+          refId: withdrawal._id,
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true, session }
+      );
+
+      await AuditLog.create([{
+        adminId: req.user._id,
+        action: "withdrawal.reject",
+        targetId: withdrawal._id,
+        targetType: "withdrawal",
+      }], { session });
+    });
 
     if (!withdrawal) {
       return res
@@ -209,45 +378,23 @@ export const rejectWithdrawal = async (req, res) => {
         .json({ success: false, msg: "Already processed or not found" });
     }
 
-    // 🔁 REFUND
-    await User.updateOne(
-      { _id: withdrawal.userId },
-      {
-        $inc: {
-          balance: withdrawal.amount,
-        },
-        $set: {
-          lastWithdrawalAt: null,
-        },
-      }
-    );
-
-    // 🔥 UPDATE TRANSACTION
-    await Transaction.findOneAndUpdate(
-      { type: "withdraw", refId: withdrawal._id },
-      {
-        user: withdrawal.userId,
-        type: "withdraw",
-        amount: withdrawal.amount,
-        status: "rejected",
-        refId: withdrawal._id,
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
     console.log("USER:", req.user);
-    console.log("WITHDRAW:", withdrawal);
-    console.log("Admin withdrawal reject:", {
+    console.log("ACTION:", "withdrawal.reject");
+    console.log("WITHDRAW:", {
       adminId: req.user._id,
       withdrawalId: withdrawal._id,
     });
 
     res.json({
       success: true,
+      msg: "Withdrawal rejected and refunded successfully",
       data: { withdrawal },
     });
 
   } catch (err) {
-    console.error("REJECT ERROR:", err.message);
+    logControllerError("withdrawal.reject", req, err);
     res.status(500).json({ success: false, msg: err.message });
+  } finally {
+    session.endSession();
   }
 };

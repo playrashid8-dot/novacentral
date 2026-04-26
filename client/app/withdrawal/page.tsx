@@ -15,7 +15,6 @@ export default function Withdrawal() {
   const [amount, setAmount] = useState("");
   const [walletAddress, setWalletAddress] = useState("");
   const [loading, setLoading] = useState(false);
-  const [cooldown, setCooldown] = useState(0);
   const [user, setUser]: any = useState(null);
   const [toast, setToast] = useState("");
 
@@ -23,6 +22,11 @@ export default function Withdrawal() {
     setToast(msg);
     setTimeout(() => setToast(""), 2500);
   };
+
+  const createIdempotencyKey = () =>
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random()}`;
 
   // 🔐 USER LOAD
   useEffect(() => {
@@ -32,24 +36,6 @@ export default function Withdrawal() {
       if (fresh) setUser(fresh);
     });
   }, []);
-
-  // ⏱️ TIMER
-  useEffect(() => {
-    if (cooldown <= 0) return;
-
-    const interval = setInterval(() => {
-      setCooldown((prev) => prev - 1);
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [cooldown]);
-
-  const formatTime = (s: number) => {
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const sec = s % 60;
-    return `${h}h ${m}m ${sec}s`;
-  };
 
   // 🚀 WITHDRAW
   const withdraw = async () => {
@@ -65,10 +51,6 @@ export default function Withdrawal() {
       return showToast("Insufficient balance");
     }
 
-    if (cooldown > 0) {
-      return showToast("Withdrawal locked ⏳");
-    }
-
     if (!walletAddress || walletAddress.trim().length < 8) {
       return showToast("Enter a valid wallet address");
     }
@@ -76,21 +58,22 @@ export default function Withdrawal() {
     try {
       setLoading(true);
 
-      const res = await API.post("/withdrawal", {
-        amount: amt,
-        walletAddress: walletAddress.trim(),
-      });
+      const res = await API.post(
+        "/withdrawal",
+        {
+          amount: amt,
+          walletAddress: walletAddress.trim(),
+        },
+        {
+          headers: { "Idempotency-Key": createIdempotencyKey() },
+        }
+      );
 
       showToast(res?.data?.msg || "Withdrawal requested");
-      setCooldown(96 * 3600);
 
       router.push("/dashboard");
 
     } catch (err: any) {
-      const serverCooldown = Number(err?.response?.data?.cooldownRemaining || 0);
-      if (serverCooldown > 0) {
-        setCooldown(serverCooldown);
-      }
       showToast(getApiErrorMessage(err, "Failed ❌"));
     } finally {
       setLoading(false);
@@ -136,19 +119,12 @@ export default function Withdrawal() {
       >
         <div className="bg-[#0b0b0f] p-5 rounded-2xl">
 
-          {/* COOLDOWN */}
-          {cooldown > 0 && (
-            <div className="mb-3 text-xs text-yellow-400">
-              ⏳ Next withdrawal in {formatTime(cooldown)}
-            </div>
-          )}
-
           {/* QUICK BUTTONS */}
           <div className="grid grid-cols-3 gap-2 mb-3">
             {[10, 50, 100].map((val) => (
               <button
                 key={val}
-                disabled={loading || cooldown > 0}
+                disabled={loading}
                 onClick={() => setAmount(String(val))}
                 className="bg-white/5 p-2 rounded-lg text-xs"
               >
@@ -162,6 +138,7 @@ export default function Withdrawal() {
             type="number"
             placeholder="Enter Amount"
             value={amount}
+            disabled={loading}
             onChange={(e) => setAmount(e.target.value)}
             className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-sm"
           />
@@ -170,6 +147,7 @@ export default function Withdrawal() {
             type="text"
             placeholder="Wallet Address"
             value={walletAddress}
+            disabled={loading}
             onChange={(e) => setWalletAddress(e.target.value)}
             className="w-full mt-3 bg-white/5 border border-white/10 p-3 rounded-xl text-sm"
           />
@@ -177,17 +155,13 @@ export default function Withdrawal() {
           {/* BUTTON */}
           <button
             onClick={withdraw}
-            disabled={loading || cooldown > 0}
+            disabled={loading}
             className="mt-4 w-full bg-gradient-to-r from-purple-500 to-indigo-500 p-3 rounded-xl font-semibold flex justify-center items-center gap-2"
           >
             {loading && (
               <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
             )}
-            {cooldown > 0
-              ? "Locked ⏳"
-              : loading
-              ? "Processing..."
-              : "Withdraw 🚀"}
+            {loading ? "Processing..." : "Withdraw 🚀"}
           </button>
 
         </div>

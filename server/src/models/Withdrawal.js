@@ -47,6 +47,17 @@ const withdrawalSchema = new mongoose.Schema(
       maxlength: 200,
     },
 
+    idempotencyKey: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+
+    idempotencyResponse: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+
     // ⏱ TIMESTAMPS
     approvedAt: Date,
     rejectedAt: Date,
@@ -61,6 +72,20 @@ const withdrawalSchema = new mongoose.Schema(
 //
 withdrawalSchema.index({ userId: 1, status: 1 });
 withdrawalSchema.index({ createdAt: -1 });
+withdrawalSchema.index(
+  { userId: 1, idempotencyKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { idempotencyKey: { $type: "string" } },
+  }
+);
+
+withdrawalSchema.pre("save", function (next) {
+  if (this.idempotencyKey) {
+    this.idempotencyKey = this.idempotencyKey.trim();
+  }
+  next();
+});
 
 //
 // 🔥 SAFE JSON
