@@ -1,25 +1,86 @@
-import { Contract, JsonRpcProvider, Wallet, parseEther } from "ethers";
+import { Contract, Wallet, isAddress, parseEther, parseUnits } from "ethers";
+import hybridConfig from "../../config/hybridConfig.js";
 import User from "../../models/User.js";
 import HybridDeposit from "../models/HybridDeposit.js";
-import { decryptText } from "../utils/crypto.js";
+import { decryptPrivateKey } from "../utils/crypto.js";
 import { BSC_USDT_ABI, HYBRID_TOKEN } from "../utils/constants.js";
+import { getProvider } from "../utils/provider.js";
 
-const isEnabled = (value) => String(value).toLowerCase() === "true";
-
-const getProvider = () => {
-  if (!process.env.HYBRID_BSC_RPC_URL) {
-    throw new Error("HYBRID_BSC_RPC_URL missing");
+const assertSweepConfig = () => {
+  if (!hybridConfig.gasKey) {
+    throw new Error("HYBRID_GAS_FUNDER_PRIVATE_KEY missing");
   }
 
-  return new JsonRpcProvider(process.env.HYBRID_BSC_RPC_URL);
+  if (!hybridConfig.usdtContract) {
+    throw new Error("HYBRID_USDT_CONTRACT missing");
+  }
 };
 
 export const canSweepHybridFunds = () =>
-  isEnabled(process.env.HYBRID_EARN_ENABLED) &&
-  isEnabled(process.env.HYBRID_SWEEP_ENABLED) &&
-  !!process.env.HYBRID_ADMIN_WALLET &&
-  !!process.env.HYBRID_USDT_CONTRACT &&
-  !!process.env.HYBRID_GAS_FUNDER_PRIVATE_KEY;
+  hybridConfig.earnEnabled &&
+  hybridConfig.sweepEnabled &&
+  !!hybridConfig.adminWallet &&
+  !!hybridConfig.usdtContract &&
+  !!hybridConfig.gasKey &&
+  !!hybridConfig.rpcUrl;
+
+export const sendGas = async (address) => {
+  try {
+    assertSweepConfig();
+
+    if (!isAddress(address)) {
+      throw new Error("Valid recipient address is required");
+    }
+
+    const gasFunder = new Wallet(hybridConfig.gasKey, getProvider());
+    const gasAmount = process.env.HYBRID_SWEEP_GAS_AMOUNT || "0.0005";
+    const gasTx = await gasFunder.sendTransaction({
+      to: address,
+      value: parseEther(gasAmount),
+    });
+
+    const receipt = await gasTx.wait();
+
+    return {
+      txHash: String(receipt?.hash || gasTx.hash || "").toLowerCase(),
+    };
+  } catch (error) {
+    throw new Error(`Failed to send sweep gas: ${error.message}`);
+  }
+};
+
+export const sweepUSDT = async (userPrivateKey, amount) => {
+  try {
+    assertSweepConfig();
+
+    const amountValue = typeof amount === "bigint" ? amount : Number(amount);
+
+    if (
+      (typeof amountValue === "bigint" && amountValue <= 0n) ||
+      (typeof amountValue !== "bigint" && (!Number.isFinite(amountValue) || amountValue <= 0))
+    ) {
+      throw new Error("Sweep amount must be greater than zero");
+    }
+
+    const provider = getProvider();
+    const decryptedPrivateKey = decryptPrivateKey(userPrivateKey);
+    const userWallet = new Wallet(decryptedPrivateKey, provider);
+    const tokenContract = new Contract(hybridConfig.usdtContract, BSC_USDT_ABI, userWallet);
+    const tokenAmount =
+      typeof amount === "bigint"
+        ? amount
+        : parseUnits(String(amount), HYBRID_TOKEN.decimals);
+
+    const sweepTx = await tokenContract.transfer(hybridConfig.adminWallet, tokenAmount);
+    const receipt = await sweepTx.wait();
+
+    return {
+      txHash: String(receipt?.hash || sweepTx.hash || "").toLowerCase(),
+    };
+  } catch (error) {
+    throw new Error(`Failed to sweep USDT: ${error.message}`);
+  }
+};
 
 export const sweepHybridDeposit = async (depositId) => {
   if (!canSweepHybridFunds()) {
@@ -39,20 +100,10 @@ export const sweepHybridDeposit = async (depositId) => {
   }
 
   const provider = getProvider();
-  const gasFunder = new Wallet(process.env.HYBRID_GAS_FUNDER_PRIVATE_KEY, provider);
-  const userWallet = new Wallet(decryptText(user.privateKey), provider);
-  const tokenContract = new Contract(
-    process.env.HYBRID_USDT_CONTRACT,
-    BSC_USDT_ABI,
-    userWallet
-  );
+  const userWallet = new Wallet(decryptPrivateKey(user.privateKey), provider);
+  const tokenContract = new Contract(hybridConfig.usdtContract, BSC_USDT_ABI, userWallet);
 
-  const gasAmount = process.env.HYBRID_SWEEP_GAS_AMOUNT || "0.0005";
-  const gasTx = await gasFunder.sendTransaction({
-    to: user.walletAddress,
-    value: parseEther(gasAmount),
-  });
-  await gasTx.wait();
+  await sendGas(user.walletAddress);
 
   const currentBalance = await tokenContract.balanceOf(user.walletAddress);
 
@@ -60,7 +111,7 @@ export const sweepHybridDeposit = async (depositId) => {
     throw new Error("No token balance available to sweep");
   }
 
-  const sweepTx = await tokenContract.transfer(process.env.HYBRID_ADMIN_WALLET, currentBalance);
+  const sweepTx = await tokenContract.transfer(hybridConfig.adminWallet, currentBalance);
   await sweepTx.wait();
 
   await HybridDeposit.findByIdAndUpdate(deposit._id, {

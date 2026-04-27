@@ -1,25 +1,24 @@
 import crypto from "crypto";
+import hybridConfig from "../../config/hybridConfig.js";
 
-const getSecret = () =>
-  process.env.HYBRID_PRIVATE_KEY_ENCRYPTION_SECRET ||
-  process.env.JWT_SECRET;
+const ALGORITHM = "aes-256-gcm";
+const IV_LENGTH = 12;
 
 const getKey = () =>
-  crypto.createHash("sha256").update(String(getSecret() || "")).digest();
+  crypto
+    .createHash("sha256")
+    .update(hybridConfig.encryptionSecret)
+    .digest();
 
-const assertSecretConfigured = () => {
-  if (!getSecret()) {
-    throw new Error("Hybrid private key encryption secret missing");
+export const encryptPrivateKey = (text = "") => {
+  if (!text) {
+    throw new Error("Private key is required for encryption");
   }
-};
 
-export const encryptText = (value = "") => {
-  assertSecretConfigured();
-
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", getKey(), iv);
+  const iv = crypto.randomBytes(IV_LENGTH);
+  const cipher = crypto.createCipheriv(ALGORITHM, getKey(), iv);
   const encrypted = Buffer.concat([
-    cipher.update(String(value), "utf8"),
+    cipher.update(String(text), "utf8"),
     cipher.final(),
   ]);
   const authTag = cipher.getAuthTag();
@@ -27,21 +26,18 @@ export const encryptText = (value = "") => {
   return [iv.toString("hex"), authTag.toString("hex"), encrypted.toString("hex")].join(":");
 };
 
-export const decryptText = (payload = "") => {
-  if (!payload) return "";
-  assertSecretConfigured();
-
-  const [ivHex, authTagHex, encryptedHex] = String(payload).split(":");
-
-  if (!ivHex || !authTagHex || !encryptedHex) {
-    throw new Error("Invalid encrypted payload");
+export const decryptPrivateKey = (hash = "") => {
+  if (!hash) {
+    throw new Error("Encrypted private key is required");
   }
 
-  const decipher = crypto.createDecipheriv(
-    "aes-256-gcm",
-    getKey(),
-    Buffer.from(ivHex, "hex")
-  );
+  const [ivHex, authTagHex, encryptedHex] = String(hash).split(":");
+
+  if (!ivHex || !authTagHex || !encryptedHex) {
+    throw new Error("Invalid encrypted private key payload");
+  }
+
+  const decipher = crypto.createDecipheriv(ALGORITHM, getKey(), Buffer.from(ivHex, "hex"));
   decipher.setAuthTag(Buffer.from(authTagHex, "hex"));
 
   const decrypted = Buffer.concat([
@@ -51,3 +47,6 @@ export const decryptText = (payload = "") => {
 
   return decrypted.toString("utf8");
 };
+
+export const encryptText = encryptPrivateKey;
+export const decryptText = decryptPrivateKey;

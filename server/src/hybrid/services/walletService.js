@@ -1,7 +1,7 @@
-import { HDNodeWallet, Wallet } from "ethers";
+import { HDNodeWallet } from "ethers";
+import hybridConfig from "../../config/hybridConfig.js";
 import HybridSetting from "../models/HybridSetting.js";
-import { encryptText } from "../utils/crypto.js";
-import { HYBRID_BASE_PATH } from "../utils/constants.js";
+import { encryptPrivateKey } from "../utils/crypto.js";
 
 const reserveWalletIndex = async () => {
   const setting = await HybridSetting.findOneAndUpdate(
@@ -19,23 +19,28 @@ const reserveWalletIndex = async () => {
   return Number(setting?.value || 0);
 };
 
-const buildWalletFromMnemonic = async () => {
-  const index = await reserveWalletIndex();
-  const rootWallet = HDNodeWallet.fromPhrase(
-    process.env.HYBRID_MNEMONIC,
+export const generateWallet = (index) => {
+  const walletIndex = Number(index);
+
+  if (!Number.isInteger(walletIndex) || walletIndex < 0) {
+    throw new Error("Wallet index must be a non-negative integer");
+  }
+
+  const wallet = HDNodeWallet.fromPhrase(
+    hybridConfig.mnemonic,
     "",
-    HYBRID_BASE_PATH
+    `m/44'/60'/0'/0/${walletIndex}`
   );
-  const wallet = rootWallet.deriveChild(index);
 
   return {
-    walletAddress: wallet.address,
+    address: wallet.address,
     privateKey: wallet.privateKey,
   };
 };
 
-const buildFallbackWallet = () => {
-  const wallet = Wallet.createRandom();
+const buildWalletFromMnemonic = async () => {
+  const index = await reserveWalletIndex();
+  const wallet = generateWallet(index);
 
   return {
     walletAddress: wallet.address,
@@ -44,12 +49,10 @@ const buildFallbackWallet = () => {
 };
 
 export const createUserWallet = async () => {
-  const wallet = process.env.HYBRID_MNEMONIC
-    ? await buildWalletFromMnemonic()
-    : buildFallbackWallet();
+  const wallet = await buildWalletFromMnemonic();
 
   return {
     walletAddress: wallet.walletAddress,
-    privateKey: encryptText(wallet.privateKey),
+    privateKey: encryptPrivateKey(wallet.privateKey),
   };
 };
