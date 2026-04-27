@@ -20,6 +20,7 @@ export default function Deposit() {
   const [user, setUser]: any = useState(null);
   const [toast, setToast] = useState("");
   const [hybrid, setHybrid]: any = useState(null);
+  const [walletLoading, setWalletLoading] = useState(true);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -28,14 +29,38 @@ export default function Deposit() {
 
   const wallet = hybrid?.walletAddress || user?.walletAddress || "";
 
-  // 🔐 AUTH
+  // 🔐 AUTH + WALLET LOAD
   useEffect(() => {
-    Promise.all([fetchCurrentUser(), fetchHybridSummary().catch(() => null)]).then(
-      ([fresh, hybridData]) => {
-        if (fresh) setUser(fresh);
-        if (hybridData) setHybrid(hybridData);
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout>;
+
+    const loadWallet = async (attempt = 0) => {
+      const [fresh, hybridData] = await Promise.all([
+        fetchCurrentUser().catch(() => null),
+        fetchHybridSummary().catch(() => null),
+      ]);
+
+      if (cancelled) return;
+
+      if (fresh) setUser(fresh);
+      if (hybridData) setHybrid(hybridData);
+
+      const loadedWallet = hybridData?.walletAddress || fresh?.walletAddress || "";
+
+      if (!loadedWallet && attempt < 4) {
+        retryTimer = setTimeout(() => loadWallet(attempt + 1), 2000);
+        return;
       }
-    );
+
+      setWalletLoading(false);
+    };
+
+    loadWallet();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(retryTimer);
+    };
   }, []);
 
   // 🚀 SUBMIT
@@ -134,9 +159,14 @@ export default function Deposit() {
 
           {/* WALLET */}
           <div className="bg-black/40 p-3 rounded-2xl border border-white/10 flex justify-between items-center gap-3">
-            <span className="truncate text-xs text-gray-200">
-              {wallet || "Wallet generating..."}
-            </span>
+            <div className="min-w-0 flex items-center gap-2">
+              {!wallet && walletLoading && (
+                <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-purple-300/30 border-t-purple-300" />
+              )}
+              <span className="truncate text-xs text-gray-200">
+                {wallet || "Generating wallet..."}
+              </span>
+            </div>
 
             <button
               onClick={copyWallet}
