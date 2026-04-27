@@ -1,7 +1,16 @@
 import express from "express";
 import auth from "../middleware/auth.js";
 import User from "../models/User.js";
+import HybridWithdrawal from "../hybrid/models/HybridWithdrawal.js";
 import { getCurrentRoiRate } from "../hybrid/services/roiService.js";
+
+const sumPaidWithdrawalsGross = async (userId) => {
+  const [row] = await HybridWithdrawal.aggregate([
+    { $match: { userId, status: { $in: ["paid", "claimed"] } } },
+    { $group: { _id: null, total: { $sum: "$grossAmount" } } },
+  ]);
+  return Number(row?.total || 0);
+};
 
 const router = express.Router();
 
@@ -13,21 +22,23 @@ router.get("/me", auth, async (req, res) => {
     const user = await User.findById(req.user._id).select("-password");
 
     if (!user) {
-      return res.status(404).json({ msg: "User not found" });
+      return res.status(404).json({ success: false, msg: "User not found", data: null });
     }
 
     if (user.isBlocked) {
-      return res.status(403).json({ msg: "Account blocked" });
+      return res.status(403).json({ success: false, msg: "Account blocked", data: null });
     }
 
     res.json({
       success: true,
+      msg: "User fetched",
+      data: user,
       user,
     });
 
   } catch (err) {
     console.error("GET /me ERROR:", err.message);
-    res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ success: false, msg: "Server error", data: null });
   }
 });
 
@@ -37,42 +48,48 @@ router.get("/me", auth, async (req, res) => {
 router.get("/stats", auth, async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select(
-      "depositBalance rewardBalance pendingWithdraw referralEarnings todayProfit isBlocked level directCount teamCount"
+      "depositBalance rewardBalance pendingWithdraw referralEarnings todayProfit totalEarnings isBlocked level directCount teamCount"
     );
 
     if (!user) {
-      return res.status(404).json({ msg: "User not found" });
+      return res.status(404).json({ success: false, msg: "User not found", data: null });
     }
 
     if (user.isBlocked) {
-      return res.status(403).json({ msg: "Account blocked" });
+      return res.status(403).json({ success: false, msg: "Account blocked", data: null });
     }
 
     const depositBalance = Number(user.depositBalance || 0);
     const rewardBalance = Number(user.rewardBalance || 0);
+    const totalWithdrawPaid = await sumPaidWithdrawalsGross(user._id);
+
+    const stats = {
+      balance: depositBalance + rewardBalance,
+      depositBalance,
+      rewardBalance,
+      pendingWithdraw: Number(user.pendingWithdraw || 0),
+      totalInvested: depositBalance,
+      totalWithdraw: totalWithdrawPaid,
+      totalEarnings: Number(user.totalEarnings || 0),
+      todayProfit: user.todayProfit,
+      lastClaimProfit: user.todayProfit,
+      vipLevel: user.level,
+      level: Number(user.level || 0),
+      roiRate: getCurrentRoiRate(user.level),
+      directCount: user.directCount,
+      teamCount: user.teamCount,
+    };
 
     res.json({
       success: true,
-      stats: {
-        balance: depositBalance + rewardBalance,
-        depositBalance,
-        rewardBalance,
-        pendingWithdraw: Number(user.pendingWithdraw || 0),
-        totalInvested: depositBalance,
-        totalWithdraw: Number(user.pendingWithdraw || 0),
-        totalEarnings: rewardBalance,
-        todayProfit: user.todayProfit,
-        vipLevel: user.level,
-        level: Number(user.level || 0),
-        roiRate: getCurrentRoiRate(user.level),
-        directCount: user.directCount,
-        teamCount: user.teamCount,
-      },
+      msg: "Stats fetched",
+      data: stats,
+      stats,
     });
 
   } catch (err) {
     console.error("GET /stats ERROR:", err.message);
-    res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ success: false, msg: "Server error", data: null });
   }
 });
 
@@ -84,45 +101,53 @@ router.get("/dashboard", auth, async (req, res) => {
     const userId = req.user._id;
 
     const user = await User.findById(userId).select(
-      "depositBalance rewardBalance pendingWithdraw referralEarnings todayProfit level directCount teamCount"
+      "depositBalance rewardBalance pendingWithdraw referralEarnings todayProfit totalEarnings level directCount teamCount"
     );
 
     if (!user) {
-      return res.status(404).json({ msg: "User not found" });
+      return res.status(404).json({ success: false, msg: "User not found", data: null });
     }
 
     if (user.isBlocked) {
-      return res.status(403).json({ msg: "Account blocked" });
+      return res.status(403).json({ success: false, msg: "Account blocked", data: null });
     }
 
     const depositBalance = Number(user.depositBalance || 0);
     const rewardBalance = Number(user.rewardBalance || 0);
+    const totalWithdrawPaid = await sumPaidWithdrawalsGross(userId);
+
+    const dashboard = {
+      balance: depositBalance + rewardBalance,
+      depositBalance,
+      rewardBalance,
+      pendingWithdraw: Number(user.pendingWithdraw || 0),
+      todayProfit: user.todayProfit,
+      lastClaimProfit: user.todayProfit,
+      totalEarned: rewardBalance,
+      totalEarnings: Number(user.totalEarnings || 0),
+      totalWithdraw: totalWithdrawPaid,
+
+      totalInvested: depositBalance,
+      investmentProfit: 0,
+
+      activePlans: 0,
+      directCount: user.directCount,
+      teamCount: user.teamCount,
+      vipLevel: user.level,
+      level: Number(user.level || 0),
+      roiRate: getCurrentRoiRate(user.level),
+    };
 
     res.json({
       success: true,
-      dashboard: {
-        balance: depositBalance + rewardBalance,
-        depositBalance,
-        rewardBalance,
-        pendingWithdraw: Number(user.pendingWithdraw || 0),
-        todayProfit: user.todayProfit,
-        totalEarned: rewardBalance,
-
-        totalInvested: depositBalance,
-        investmentProfit: 0,
-
-        activePlans: 0,
-        directCount: user.directCount,
-        teamCount: user.teamCount,
-        vipLevel: user.level,
-        level: Number(user.level || 0),
-        roiRate: getCurrentRoiRate(user.level),
-      },
+      msg: "Dashboard fetched",
+      data: { dashboard },
+      dashboard,
     });
 
   } catch (err) {
     console.error("DASHBOARD ERROR:", err.message);
-    res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ success: false, msg: "Server error", data: null });
   }
 });
 
@@ -136,22 +161,26 @@ router.get("/referral-stats", auth, async (req, res) => {
     );
 
     if (!user) {
-      return res.status(404).json({ msg: "User not found" });
+      return res.status(404).json({ success: false, msg: "User not found", data: null });
     }
+
+    const stats = {
+      referralCode: user.referralCode,
+      referralEarnings: user.referralEarnings || 0,
+      directCount: user.directCount || 0,
+      teamCount: user.teamCount || 0,
+      teamVolume: user.teamVolume || 0,
+    };
 
     res.json({
       success: true,
-      stats: {
-        referralCode: user.referralCode,
-        referralEarnings: user.referralEarnings || 0,
-        directCount: user.directCount || 0,
-        teamCount: user.teamCount || 0,
-        teamVolume: user.teamVolume || 0,
-      },
+      msg: "Stats fetched",
+      data: stats,
+      stats,
     });
   } catch (err) {
     console.error("GET /referral-stats ERROR:", err.message);
-    res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ success: false, msg: "Server error", data: null });
   }
 });
 

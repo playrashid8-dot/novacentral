@@ -213,6 +213,9 @@ router.post("/reset-wallet/:id", auth, isAdmin, async (req, res) => {
         balance: 0,
         totalEarnings: 0,
         totalWithdraw: 0,
+        depositBalance: 0,
+        rewardBalance: 0,
+        pendingWithdraw: 0,
       },
       { new: true }
     );
@@ -229,7 +232,9 @@ router.post("/reset-wallet/:id", auth, isAdmin, async (req, res) => {
 router.get("/stats", auth, isAdmin, async (req, res) => {
   try {
     const totalUsers = await User.countDocuments();
-    const totalDeposits = await HybridDeposit.countDocuments({ status: "credited" });
+    const totalDeposits = await HybridDeposit.countDocuments({
+      status: { $in: ["credited", "swept"] },
+    });
     const totalWithdrawals = await HybridWithdrawal.countDocuments({ status: "paid" });
 
     const users = await User.find();

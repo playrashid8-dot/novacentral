@@ -53,8 +53,14 @@ export default function Withdrawal() {
   const pendingWithdrawal =
     withdrawals.find((item) => activePendingStatuses.includes(item.status)) || null;
   const latestWithdrawal = withdrawals[0] || null;
-  const cooldownTarget = latestWithdrawal?.createdAt
-    ? new Date(latestWithdrawal.createdAt).getTime() + 96 * 60 * 60 * 1000
+  const timerSource =
+    pendingWithdrawal?.availableAt != null
+      ? pendingWithdrawal
+      : latestWithdrawal?.availableAt != null
+        ? latestWithdrawal
+        : null;
+  const cooldownTarget = timerSource?.availableAt
+    ? new Date(timerSource.availableAt).getTime()
     : 0;
 
   useEffect(() => {
@@ -152,7 +158,7 @@ export default function Withdrawal() {
         <CountdownTimer
           targetTime={cooldownTarget ? new Date(cooldownTarget).toISOString() : null}
           label="96h Timer"
-          completeText={latestWithdrawal ? "Window Complete" : "No Cooldown"}
+          completeText={timerSource ? "Window Complete" : "No Cooldown"}
           className="p-4"
         />
       </div>

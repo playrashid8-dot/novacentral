@@ -360,7 +360,10 @@ export default function Dashboard() {
         </div>
         <div className="space-y-3">
           <Activity title="Balance Updated" value={`$${displayBalance.toFixed(2)}`} />
-          <Activity title="Today ROI" value={`$${Number(user?.todayProfit || 0).toFixed(2)}`} />
+          <Activity
+            title="Last claim profit"
+            value={`$${Number(user?.todayProfit || 0).toFixed(2)}`}
+          />
           <Activity title="Hybrid Deposits" value={`$${Number(hybrid?.depositBalance || 0).toFixed(2)}`} />
         </div>
       </div>

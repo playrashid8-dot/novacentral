@@ -32,7 +32,7 @@ export default function Referral() {
           fetchHybridSummary().catch(() => null),
         ]);
         if (fresh) setUser(fresh);
-        setStats(res.data?.stats || null);
+        setStats(res.data?.data ?? res.data?.stats ?? null);
         setHybrid(hybridData);
       } catch (err: any) {
         showToast(getApiErrorMessage(err, "Failed to load referral stats ❌"));
@@ -54,9 +54,16 @@ export default function Referral() {
   const directCount = Number(hybrid?.salaryDirectCount || hybrid?.directCount || stats?.directCount || 0);
   const teamCount = Number(hybrid?.salaryTeamCount || hybrid?.teamCount || stats?.teamCount || 0);
   const stage1 = hybrid?.salaryRules?.[0];
-  const needDirect = Number(stage1?.directCount ?? 3);
-  const needTeam = Number(stage1?.teamCount ?? 10);
-  const salaryComplete = directCount >= needDirect && teamCount >= needTeam;
+  const needDirect = stage1 != null ? Number(stage1.directCount) : NaN;
+  const needTeam = stage1 != null ? Number(stage1.teamCount) : NaN;
+  const needDirectBar = Number.isFinite(needDirect) && needDirect > 0 ? needDirect : 1;
+  const needTeamBar = Number.isFinite(needTeam) && needTeam > 0 ? needTeam : 1;
+  const salaryComplete =
+    stage1 != null &&
+    Number.isFinite(needDirect) &&
+    Number.isFinite(needTeam) &&
+    directCount >= needDirect &&
+    teamCount >= needTeam;
 
   const claimSalary = async () => {
     if (!salaryComplete || salaryLoading) return;
@@ -145,8 +152,24 @@ export default function Referral() {
       <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur-2xl">
         <p className="text-sm font-semibold text-white">Live Progress</p>
         <div className="mt-3 space-y-3">
-          <ProgressBar label="Direct" value={directCount} max={needDirect} hint={`Direct: ${directCount} / ${needDirect}`} />
-          <ProgressBar label="Team" value={teamCount} max={needTeam} hint={`Team: ${teamCount} / ${needTeam}`} />
+          <ProgressBar
+            label="Direct"
+            value={directCount}
+            max={needDirectBar}
+            hint={
+              stage1
+                ? `Direct: ${directCount} / ${needDirect}`
+                : `Direct: ${directCount} (loading rules…)`
+            }
+          />
+          <ProgressBar
+            label="Team"
+            value={teamCount}
+            max={needTeamBar}
+            hint={
+              stage1 ? `Team: ${teamCount} / ${needTeam}` : `Team: ${teamCount} (loading rules…)`
+            }
+          />
         </div>
       </div>
 
@@ -173,11 +196,13 @@ export default function Referral() {
             </span>
           </div>
           <p className="mt-3 text-xs text-gray-400">
-            Requirement (stage 1): {needDirect} direct + {needTeam} team
+            {stage1
+              ? `Requirement (stage 1): ${needDirect} direct + ${needTeam} team`
+              : "Loading salary rules from HybridEarn…"}
           </p>
           <div className="mt-4 space-y-3">
-            <ProgressBar label="Direct" value={directCount} max={needDirect} />
-            <ProgressBar label="Team" value={teamCount} max={needTeam} />
+            <ProgressBar label="Direct" value={directCount} max={needDirectBar} />
+            <ProgressBar label="Team" value={teamCount} max={needTeamBar} />
           </div>
           <GradientButton
             onClick={claimSalary}

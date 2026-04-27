@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { isAdmin, isAuth } from "../lib/auth";
+import { checkAdminSession, isAuth } from "../lib/auth";
 import { motion } from "framer-motion";
 
 export default function ProtectedRoute({
@@ -25,7 +25,7 @@ export default function ProtectedRoute({
 
         if (!mounted) return;
 
-        const admin = adminOnly ? await isAdmin() : false;
+        const admin = adminOnly ? await checkAdminSession() : false;
 
         if (!mounted) return;
 

@@ -172,20 +172,37 @@ export default function Deposit() {
         <div className="mt-5 bg-white/[0.06] p-4 rounded-2xl border border-white/10 backdrop-blur-2xl">
           <p className="text-sm font-semibold text-white">Recent Hybrid Deposits</p>
           <div className="mt-3 space-y-2">
-            {hybrid.deposits.slice(0, 3).map((deposit: any) => (
+            {hybrid.deposits.slice(0, 3).map((deposit: any) => {
+              const chainOk = deposit.confirmationStatus === "confirmed";
+              const chainPending = deposit.confirmationStatus === "confirming";
+              const chainLabel = chainOk
+                ? "✅ confirmed"
+                : chainPending
+                  ? "⏳ confirming"
+                  : deposit.confirmationStatus === "unknown"
+                    ? "… confirming"
+                    : null;
+              return (
               <div
                 key={deposit._id}
                 className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-3 py-3"
               >
                 <div>
                   <p className="text-xs text-white">${Number(deposit.amount || 0).toFixed(2)}</p>
-                  <p className="text-[10px] text-gray-500">{deposit.status}</p>
+                  <p
+                    className={`text-[10px] ${
+                      chainOk ? "text-emerald-300/90" : chainPending ? "text-amber-200/90" : "text-gray-500"
+                    }`}
+                  >
+                    {[chainLabel, deposit.status].filter(Boolean).join(" · ")}
+                  </p>
                 </div>
                 <p className="text-[10px] text-gray-500">
                   {deposit.createdAt ? new Date(deposit.createdAt).toLocaleDateString() : "Auto"}
                 </p>
               </div>
-            ))}
+            );
+            })}
           </div>
         </div>
       )}

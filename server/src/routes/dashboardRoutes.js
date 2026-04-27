@@ -35,7 +35,7 @@ router.get("/", auth, async (req, res) => {
     // 💸 HYBRID WITHDRAWALS
     const withdrawals = await HybridWithdrawal.find({
       userId,
-      status: "claimed",
+      status: { $in: ["paid", "claimed"] },
     });
 
     let totalWithdrawn = 0;
@@ -50,34 +50,39 @@ router.get("/", auth, async (req, res) => {
     const rewardBalance = Number(user.rewardBalance || 0);
     const hybridBalance = depositBalance + rewardBalance;
 
+    const dashboard = {
+      balance: hybridBalance,
+      depositBalance,
+      rewardBalance,
+      pendingWithdraw: Number(user.pendingWithdraw || 0),
+      todayProfit: Number(user.todayProfit || 0),
+      lastClaimProfit: Number(user.todayProfit || 0),
+
+      totalInvested: depositBalance,
+      totalEarned: rewardBalance,
+      totalDeposited,
+      totalWithdrawn,
+
+      activePlans: 0,
+      directCount: directUsers.length,
+      teamCount: Number(user.teamCount || 0),
+
+      referralIncome: Number(user.referralEarnings || 0),
+      vipLevel: user.level,
+      level: Number(user.level || 0),
+      roiRate: getCurrentRoiRate(user.level),
+    };
+
     res.json({
       success: true,
-      dashboard: {
-        balance: hybridBalance,
-        depositBalance,
-        rewardBalance,
-        pendingWithdraw: Number(user.pendingWithdraw || 0),
-        todayProfit: Number(user.todayProfit || 0),
-
-        totalInvested: depositBalance,
-        totalEarned: rewardBalance,
-        totalDeposited,
-        totalWithdrawn,
-
-        activePlans: 0,
-        directCount: directUsers.length,
-        teamCount: Number(user.teamCount || 0),
-
-        referralIncome: Number(user.referralEarnings || 0),
-        vipLevel: user.level,
-        level: Number(user.level || 0),
-        roiRate: getCurrentRoiRate(user.level),
-      },
+      msg: "Dashboard fetched",
+      data: { dashboard },
+      dashboard,
     });
 
   } catch (err) {
     console.error("DASHBOARD ERROR:", err.message);
-    res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ success: false, msg: "Server error", data: null });
   }
 });
 

@@ -3,6 +3,9 @@ import API, { resetRedirectState } from "./api";
 // 🚫 prevent multiple logout redirects
 let isLoggingOut = false;
 
+/** Sync check on a user object from /user/me (see `data` or legacy `user` on response). */
+export const isAdmin = (user) => user?.isAdmin === true;
+
 // 🔒 CHECK AUTH (server verifies httpOnly cookie)
 export const isAuth = async () => {
   if (typeof window === "undefined") return false;
@@ -15,11 +18,12 @@ export const isAuth = async () => {
   }
 };
 
-// 🛡️ ADMIN CHECK
-export const isAdmin = async () => {
+// 🛡️ ADMIN CHECK (session)
+export const checkAdminSession = async () => {
   try {
     const res = await API.get("/user/me");
-    return Boolean(res.data?.user?.isAdmin);
+    const user = res.data?.data ?? res.data?.user;
+    return isAdmin(user);
   } catch {
     return false;
   }

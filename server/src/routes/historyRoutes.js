@@ -14,11 +14,13 @@ router.get("/", auth, async (req, res) => {
 
     res.json({
       success: true,
+      msg: "History fetched",
+      data: { history },
       history,
     });
   } catch (err) {
     console.error("HISTORY ERROR:", err.message);
-    res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ success: false, msg: "Server error", data: null });
   }
 });
 

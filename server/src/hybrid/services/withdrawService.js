@@ -1,12 +1,16 @@
 import mongoose from "mongoose";
-import { isAddress, getAddress } from "ethers";
+import { Interface, isAddress, getAddress, parseUnits } from "ethers";
 import User from "../../models/User.js";
 import HybridWithdrawal from "../models/HybridWithdrawal.js";
 import {
+  BSC_USDT_ABI,
+  HYBRID_TOKEN,
   WITHDRAW_FEE_RATE,
   WITHDRAW_MIN_AMOUNT,
   WITHDRAW_MONTHLY_LIMITS,
 } from "../utils/constants.js";
+import hybridConfig from "../../config/hybridConfig.js";
+import { withProviderRetry } from "../utils/provider.js";
 import { ensureMonthWindow, WITHDRAW_DELAY_MS } from "../utils/time.js";
 import { addHybridLedgerEntries } from "./ledgerService.js";
 import { getSpendableHybridBalance, splitHybridBalance } from "./balanceService.js";
@@ -225,6 +229,10 @@ export const requestHybridWithdrawal = async (
   }
 };
 
+/**
+ * User "claim" only moves pending → claimable after the lock window.
+ * Funds stay in pendingWithdraw until admin marks the withdrawal paid.
+ */
 export const claimHybridWithdrawal = async (userId, withdrawalId) => {
   const session = await mongoose.startSession();
 
@@ -233,87 +241,60 @@ export const claimHybridWithdrawal = async (userId, withdrawalId) => {
 
     session.startTransaction();
 
-      const withdrawal = await HybridWithdrawal.findOne({
-        _id: withdrawalId,
-        userId,
-        status: { $in: ["pending", "claimable"] },
-      }).session(session);
+    const withdrawal = await HybridWithdrawal.findOne({
+      _id: withdrawalId,
+      userId,
+    }).session(session);
 
-      if (!withdrawal) {
-        throw new Error("Withdrawal not found");
-      }
+    if (!withdrawal) {
+      throw new Error("Withdrawal not found");
+    }
 
-      if (new Date(withdrawal.availableAt).getTime() > Date.now()) {
-        throw new Error("Withdrawal is still locked for 96 hours");
-      }
-
-      const claimedWithdrawal = await HybridWithdrawal.findOneAndUpdate(
-        {
-          _id: withdrawal._id,
-          userId,
-          status: { $in: ["pending", "claimable"] },
-          availableAt: { $lte: new Date() },
-        },
-        {
-          $set: {
-            status: "claimed",
-            claimedAt: new Date(),
-          },
-        },
-        {
-          new: true,
-          session,
-        }
-      );
-
-      if (!claimedWithdrawal) {
-        throw new Error("Withdrawal already claimed");
-      }
-
-      const updatedUser = await User.findOneAndUpdate(
-        {
-          _id: userId,
-          pendingWithdraw: { $gte: Number(withdrawal.grossAmount || 0) },
-        },
-        {
-          $inc: {
-            pendingWithdraw: -Number(withdrawal.grossAmount || 0),
-          },
-        },
-        {
-          new: true,
-          session,
-        }
-      );
-
-      if (!updatedUser) {
-        throw new Error("Pending withdrawal balance mismatch");
-      }
-
-      await addHybridLedgerEntries(
-        [
-          {
-            userId,
-            entryType: "debit",
-            balanceType: "pendingWithdraw",
-            amount: Number(withdrawal.grossAmount || 0),
-            source: "withdraw_claim",
-            referenceId: withdrawal._id,
-            meta: {
-              netAmount: Number(withdrawal.netAmount || 0),
-              feeAmount: Number(withdrawal.feeAmount || 0),
-              walletAddress: withdrawal.walletAddress,
-            },
-          },
-        ],
-        session
-      );
-
+    if (withdrawal.status === "claimable") {
       result = {
         withdrawalId: withdrawal._id,
+        status: "claimable",
         netAmount: Number(withdrawal.netAmount || 0),
         feeAmount: Number(withdrawal.feeAmount || 0),
       };
+      await session.commitTransaction();
+      return result;
+    }
+
+    if (withdrawal.status !== "pending") {
+      throw new Error("Withdrawal cannot be marked claimable in its current state");
+    }
+
+    if (new Date(withdrawal.availableAt).getTime() > Date.now()) {
+      throw new Error("Withdrawal is still locked for 96 hours");
+    }
+
+    const updated = await HybridWithdrawal.findOneAndUpdate(
+      {
+        _id: withdrawal._id,
+        userId,
+        status: "pending",
+        availableAt: { $lte: new Date() },
+      },
+      {
+        $set: { status: "claimable" },
+      },
+      {
+        new: true,
+        session,
+      }
+    );
+
+    if (!updated) {
+      throw new Error("Unable to mark withdrawal as claimable");
+    }
+
+    result = {
+      withdrawalId: updated._id,
+      status: "claimable",
+      netAmount: Number(updated.netAmount || 0),
+      feeAmount: Number(updated.feeAmount || 0),
+    };
 
     await session.commitTransaction();
 
@@ -335,6 +316,61 @@ const normalizeTxHash = (txHash) => {
     return null;
   }
   return raw;
+};
+
+const transferEventIface = new Interface(BSC_USDT_ABI);
+
+/**
+ * Requires a successful receipt and a matching USDT Transfer to the user's wallet
+ * with value >= expected net (no blind trust of txHash).
+ */
+const verifyPayoutTransferInReceipt = async (txHash, toWalletLower, minNetAmount) => {
+  if (!hybridConfig.usdtContract) {
+    throw new Error("USDT contract not configured");
+  }
+
+  const tokenExpected = hybridConfig.usdtContract.toLowerCase();
+  const toExpected = String(toWalletLower || "").trim().toLowerCase();
+
+  if (!toExpected.startsWith("0x")) {
+    throw new Error("Invalid payout wallet on record");
+  }
+
+  const receipt = await withProviderRetry((p) => p.getTransactionReceipt(txHash));
+
+  if (!receipt) {
+    throw new Error("Transaction receipt not found");
+  }
+
+  if (receipt.status !== 1) {
+    throw new Error("Transaction failed on-chain");
+  }
+
+  const minWei = parseUnits(String(minNetAmount), HYBRID_TOKEN.decimals);
+  let total = 0n;
+
+  for (const log of receipt.logs) {
+    if (String(log.address).toLowerCase() !== tokenExpected) {
+      continue;
+    }
+    try {
+      const parsed = transferEventIface.parseLog(log);
+      if (parsed.name !== "Transfer") {
+        continue;
+      }
+      const to = String(parsed.args.to).toLowerCase();
+      if (to !== toExpected) {
+        continue;
+      }
+      total += BigInt(parsed.args.value.toString());
+    } catch {
+      // not a Transfer we can parse
+    }
+  }
+
+  if (total < minWei) {
+    throw new Error("On-chain USDT transfer to user is below expected net payout");
+  }
 };
 
 export const adminApproveHybridWithdrawal = async (withdrawalId) => {
@@ -385,6 +421,23 @@ export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash) => {
   if (!normalized) {
     throw new Error("Valid transaction hash required");
   }
+
+  const preCheck = await HybridWithdrawal.findOne({
+    _id: withdrawalId,
+    status: "approved",
+  })
+    .select("walletAddress netAmount")
+    .lean();
+
+  if (!preCheck) {
+    throw new Error("Withdrawal not found or not approved");
+  }
+
+  await verifyPayoutTransferInReceipt(
+    normalized,
+    preCheck.walletAddress,
+    preCheck.netAmount
+  );
 
   const session = await mongoose.startSession();
 

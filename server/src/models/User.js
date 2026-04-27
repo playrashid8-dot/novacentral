@@ -215,6 +215,12 @@ const userSchema = new mongoose.Schema(
     },
 
     // 🔐 SECURITY
+    isAdmin: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
     isBlocked: {
       type: Boolean,
       default: false,

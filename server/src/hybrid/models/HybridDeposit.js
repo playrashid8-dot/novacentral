@@ -49,6 +49,12 @@ const hybridDepositSchema = new mongoose.Schema(
       default: "detected",
       index: true,
     },
+    /** Set true only after an on-chain sweep is confirmed and written (idempotency). */
+    sweeped: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     sweepTxHash: {
       type: String,
       default: "",
@@ -69,6 +75,7 @@ const hybridDepositSchema = new mongoose.Schema(
 
 hybridDepositSchema.index({ userId: 1, createdAt: -1 });
 hybridDepositSchema.index({ walletAddress: 1, createdAt: -1 });
+hybridDepositSchema.index({ status: 1, sweeped: 1, createdAt: 1 });
 
 const HybridDeposit =
   mongoose.models.HybridDeposit ||

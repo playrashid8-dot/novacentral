@@ -43,7 +43,7 @@ const auth = async (req, res, next) => {
       _id: user._id,
       id: user._id, // legacy compatibility
       vipLevel: user.vipLevel,
-      isAdmin: user.isAdmin === true,
+      isAdmin: user.isAdmin || false,
     };
 
     next();

@@ -28,11 +28,11 @@ export default function History() {
         fetchHybridWithdrawals().catch(() => []),
       ]);
 
-      const legacyHistory = res.data.history || [];
+      const legacyHistory = res.data?.data?.history ?? (res.data?.history || []);
       const deposits = (hybridData?.deposits || []).map((item: any) => ({
         ...item,
         type: "deposit",
-        status: item.status || "approved",
+        status: item.status || "credited",
       }));
       const withdrawals = (withdrawalData || []).map((item: any) => ({
         ...item,
@@ -132,8 +132,8 @@ export default function History() {
               </span>
 
               {/* STATUS */}
-              <span className={`text-xs ${getStatusColor(item.status)}`}>
-                {item.status}
+              <span className={`text-xs ${getRowStatusColor(item)}`}>
+                {formatHistoryStatus(item)}
               </span>
             </div>
 
@@ -193,12 +193,38 @@ function getStatusColor(status: string) {
     case "paid":
     case "claimed":
     case "success":
+    case "swept":
       return "text-green-400";
     case "pending":
+    case "credited":
       return "text-yellow-400";
     case "rejected":
       return "text-red-400";
     default:
       return "text-gray-400";
   }
+}
+
+function formatHistoryStatus(item: any) {
+  const t = String(item.type || "").toLowerCase();
+  if (t.includes("deposit") && item.confirmationStatus) {
+    const chain =
+      item.confirmationStatus === "confirmed"
+        ? "✅ confirmed"
+        : item.confirmationStatus === "confirming"
+          ? "⏳ confirming"
+          : null;
+    const base = item.status || "credited";
+    return chain ? `${chain} · ${base}` : base;
+  }
+  return item.status;
+}
+
+function getRowStatusColor(item: any) {
+  const t = String(item.type || "").toLowerCase();
+  if (t.includes("deposit")) {
+    if (item.confirmationStatus === "confirmed") return "text-emerald-300";
+    if (item.confirmationStatus === "confirming") return "text-amber-200";
+  }
+  return getStatusColor(item.status);
 }

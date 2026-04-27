@@ -4,5 +4,5 @@ import API from "./api";
 
 export const fetchCurrentUser = async () => {
   const res = await API.get("/user/me");
-  return res.data?.user || null;
+  return res.data?.data ?? res.data?.user ?? null;
 };

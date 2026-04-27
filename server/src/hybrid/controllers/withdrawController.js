@@ -32,7 +32,7 @@ export const claimWithdraw = async (req, res) => {
     }
 
     const result = await claimHybridWithdrawal(req.user._id, withdrawalId);
-    return sendSuccess(res, "Withdrawal claimed successfully", result);
+    return sendSuccess(res, "Withdrawal is claimable; awaiting admin approval and payout", result);
   } catch (error) {
     return sendError(res, 400, error.message || "Failed to claim withdrawal");
   }

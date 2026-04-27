@@ -1,11 +1,10 @@
 import mongoose from "mongoose";
 import User from "../../models/User.js";
 import HybridDeposit from "../models/HybridDeposit.js";
+import { withProviderRetry } from "../utils/provider.js";
 import { addHybridLedgerEntries } from "./ledgerService.js";
 import { distributeHybridReferralRewards } from "./referralService.js";
 import { syncUserLevel } from "./levelService.js";
-import { sweepHybridDeposit } from "./sweepService.js";
-
 export const creditHybridDeposit = async ({
   userId,
   walletAddress,
@@ -67,6 +66,7 @@ export const creditHybridDeposit = async ({
           {
             $set: {
               status: "credited",
+              sweeped: false,
               walletAddress: normalizedWallet,
               amount: numericAmount,
               blockNumber,
@@ -99,6 +99,7 @@ export const creditHybridDeposit = async ({
               fromAddress: String(fromAddress || "").toLowerCase(),
               tokenAddress: String(tokenAddress || "").toLowerCase(),
               status: "credited",
+              sweeped: false,
             },
           ],
           { session }
@@ -141,16 +142,6 @@ export const creditHybridDeposit = async ({
       await syncUserLevel(userId, session);
     });
 
-    try {
-      await sweepHybridDeposit(deposit._id);
-    } catch (error) {
-      await HybridDeposit.findByIdAndUpdate(deposit._id, {
-        $set: {
-          errorMessage: error.message,
-        },
-      });
-    }
-
     return deposit;
   } catch (error) {
     if (error?.code === 11000) {
@@ -167,5 +158,41 @@ export const creditHybridDeposit = async ({
   }
 };
 
-export const getUserHybridDeposits = async (userId) =>
-  HybridDeposit.find({ userId }).sort({ createdAt: -1 });
+const HYBRID_DEPOSIT_CONFIRMATIONS_REQUIRED = 3;
+
+export const enrichHybridDepositsWithConfirmations = async (deposits) => {
+  if (!Array.isArray(deposits) || deposits.length === 0) {
+    return deposits;
+  }
+
+  try {
+    const currentBlock = await withProviderRetry((p) => p.getBlockNumber());
+    return deposits.map((d) => {
+      const bn = d.blockNumber;
+      const confirmations =
+        bn != null && Number.isFinite(Number(bn))
+          ? Math.max(0, currentBlock - Number(bn))
+          : 0;
+      const confirmationStatus =
+        confirmations >= HYBRID_DEPOSIT_CONFIRMATIONS_REQUIRED ? "confirmed" : "confirming";
+      return {
+        ...d,
+        currentBlock,
+        confirmations,
+        confirmationStatus,
+      };
+    });
+  } catch {
+    return deposits.map((d) => ({
+      ...d,
+      currentBlock: null,
+      confirmations: null,
+      confirmationStatus: "unknown",
+    }));
+  }
+};
+
+export const getUserHybridDeposits = async (userId) => {
+  const deposits = await HybridDeposit.find({ userId }).sort({ createdAt: -1 }).lean();
+  return enrichHybridDepositsWithConfirmations(deposits);
+};
