@@ -8,7 +8,9 @@ import ProtectedRoute from "../../components/ProtectedRoute";
 import AppToast from "../../components/AppToast";
 import { fetchCurrentUser } from "../../lib/session";
 import GradientButton from "../../components/GradientButton";
-import { fetchHybridSummary, requestHybridWithdraw } from "../../lib/hybrid";
+import CountdownTimer from "../../components/CountdownTimer";
+import GlassCard from "../../components/GlassCard";
+import { fetchHybridSummary, fetchHybridWithdrawals, requestHybridWithdraw } from "../../lib/hybrid";
 
 export default function Withdrawal() {
   const router = useRouter();
@@ -21,6 +23,7 @@ export default function Withdrawal() {
   const [user, setUser]: any = useState(null);
   const [toast, setToast] = useState("");
   const [hybrid, setHybrid]: any = useState(null);
+  const [withdrawals, setWithdrawals] = useState<any[]>([]);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -31,9 +34,19 @@ export default function Withdrawal() {
     Number(hybrid?.depositBalance || 0) + Number(hybrid?.rewardBalance || 0);
 
   const loadHybrid = async () => {
-    const hybridData = await fetchHybridSummary().catch(() => null);
+    const [hybridData, withdrawalData] = await Promise.all([
+      fetchHybridSummary().catch(() => null),
+      fetchHybridWithdrawals().catch(() => []),
+    ]);
     setHybrid(hybridData);
+    setWithdrawals(withdrawalData || []);
   };
+
+  const pendingWithdrawal = withdrawals.find((item) => item.status === "pending") || null;
+  const latestWithdrawal = withdrawals[0] || null;
+  const cooldownTarget = latestWithdrawal?.createdAt
+    ? new Date(latestWithdrawal.createdAt).getTime() + 96 * 60 * 60 * 1000
+    : 0;
 
   // 🔐 USER LOAD
   useEffect(() => {
@@ -73,12 +86,15 @@ export default function Withdrawal() {
 
     try {
       setLoading(true);
-      await requestHybridWithdraw({
-        amount: amt,
-        walletAddress: walletAddress.trim(),
-        password,
-        otp: otp.trim(),
-      });
+      await requestHybridWithdraw(
+        {
+          amount: amt,
+          walletAddress: walletAddress.trim(),
+          password,
+          otp: otp.trim(),
+        },
+        globalThis.crypto?.randomUUID?.()
+      );
 
       showToast("Hybrid withdrawal requested");
       setAmount("");
@@ -119,21 +135,31 @@ export default function Withdrawal() {
         </button>
       </div>
 
-      {/* BALANCE */}
-      <div className="bg-gradient-to-br from-purple-500/20 via-indigo-500/10 to-blue-500/10 p-5 rounded-3xl border border-purple-300/30 text-center mb-6 backdrop-blur-2xl shadow-[0_0_45px_rgba(124,58,237,0.28)]">
+      <div className="bg-gradient-to-br from-purple-500/20 via-indigo-500/10 to-blue-500/10 p-5 rounded-3xl border border-purple-300/30 text-center mb-4 backdrop-blur-2xl shadow-[0_0_45px_rgba(124,58,237,0.28)]">
         <p className="text-xs text-gray-400 uppercase tracking-[0.22em]">Available Balance</p>
         <h2 className="text-4xl font-black text-white text-glow">
           ${spendableHybridBalance.toFixed(2)}
         </h2>
       </div>
 
+      <div className="mb-6 grid grid-cols-2 gap-3">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-gray-500">Pending Status</p>
+          <p className="mt-1 text-sm font-black text-yellow-200">
+            {pendingWithdrawal ? `$${Number(pendingWithdrawal.amount || 0).toFixed(2)} Pending` : "No Pending"}
+          </p>
+        </div>
+        <CountdownTimer
+          targetTime={cooldownTarget ? new Date(cooldownTarget).toISOString() : null}
+          label="96h Timer"
+          completeText={latestWithdrawal ? "Window Complete" : "No Cooldown"}
+          className="p-4"
+        />
+      </div>
+
       {/* MAIN CARD */}
-      <motion.div
-        initial={{ opacity: 0, y: 40 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="p-[1px] rounded-3xl bg-gradient-to-r from-purple-500 via-fuchsia-500 to-indigo-500 shadow-[0_0_45px_rgba(124,58,237,0.35)]"
-      >
-        <div className="bg-[#08080d]/90 backdrop-blur-2xl p-5 rounded-3xl">
+      <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }}>
+        <GlassCard glow="purple">
           <div className="mb-4">
             <p className="text-sm font-semibold text-white">Withdraw USDT</p>
             <p className="mt-1 text-xs text-gray-400">
@@ -170,7 +196,7 @@ export default function Withdrawal() {
 
           <input
             type="text"
-            placeholder="Enter OTP"
+            placeholder="Email OTP"
             value={otp}
             disabled={loading}
             onChange={(e) => setOtp(e.target.value)}
@@ -187,7 +213,7 @@ export default function Withdrawal() {
             {loading ? "Processing..." : "Withdraw"}
           </GradientButton>
 
-        </div>
+        </GlassCard>
       </motion.div>
 
       {/* INFO */}

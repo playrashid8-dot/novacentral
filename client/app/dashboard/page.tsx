@@ -12,6 +12,7 @@ import AppToast from "../../components/AppToast";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import GradientButton from "../../components/GradientButton";
 import StatCard from "../../components/StatCard";
+import ProgressBar from "../../components/ProgressBar";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -111,6 +112,9 @@ export default function Dashboard() {
   const salaryRewards: any = { 1: 30, 2: 80, 3: 250, 4: 500 };
   const salaryStage = Number(hybrid?.salaryStage || 0);
   const salaryReward = salaryRewards[salaryStage] || 0;
+  const directProgress = Number(hybrid?.salaryDirectCount || hybrid?.directCount || 0);
+  const teamProgress = Number(hybrid?.salaryTeamCount || hybrid?.teamCount || 0);
+  const activeStakes = (hybrid?.stakes || []).filter((stake: any) => stake.status === "active");
 
   const handleClaimRoi = async () => {
     if (roiLoading) return;
@@ -227,7 +231,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-3 gap-3 mt-6">
         <Action label="Deposit" icon="↓" onClick={() => router.push("/deposit")} />
         <Action label="Withdraw" icon="↑" onClick={() => router.push("/withdrawal")} />
-        <Action label="Stake" icon="◆" onClick={() => router.push("/investment")} />
+        <Action label="Stake" icon="◆" onClick={() => router.push("/staking")} />
       </div>
 
       <div className="mt-6 p-[1px] rounded-3xl bg-gradient-to-r from-cyan-500/60 via-purple-500/70 to-fuchsia-500/70 shadow-[0_0_35px_rgba(124,58,237,0.25)]">
@@ -314,6 +318,28 @@ export default function Dashboard() {
         <StatCard title="Pending Withdraw" value={`$${Number(hybrid?.pendingWithdraw || 0).toFixed(2)}`} tone="purple" />
       </div>
 
+      <div className="mt-6 rounded-3xl border border-white/10 bg-white/[0.05] p-4 backdrop-blur-2xl">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.25em] text-cyan-200/80">Earning Engines</p>
+            <h3 className="text-lg font-black">Live Account Cards</h3>
+          </div>
+          <span className="rounded-full border border-purple-300/20 bg-purple-500/10 px-3 py-1 text-[10px] font-bold text-purple-100">
+            VIP {currentVipLevel}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <EngineCard title="Daily ROI" value={`${(Number(hybrid?.roiRate || 0) * 100).toFixed(2)}%`} hint={roiCooldownMs > 0 ? "Cooldown active" : "Ready window"} />
+          <EngineCard title="Referral Income" value={`$${Number(hybrid?.referralEarnings || 0).toFixed(2)}`} hint={`${Number(hybrid?.directCount || 0)} direct`} />
+          <EngineCard title="Salary Progress" value={`${directProgress}/5`} hint={`${teamProgress}/15 team`} />
+          <EngineCard title="Staking Active" value={`$${Number(hybrid?.activeStakeAmount || 0).toFixed(2)}`} hint={`${activeStakes.length} active stakes`} />
+        </div>
+        <div className="mt-4 space-y-3">
+          <ProgressBar label="Direct" value={directProgress} max={5} />
+          <ProgressBar label="Team" value={teamProgress} max={15} />
+        </div>
+      </div>
+
       {/* RECENT ACTIVITY */}
       <div className="mt-6 bg-white/[0.05] border border-white/10 rounded-2xl p-4 backdrop-blur-2xl shadow-[0_18px_55px_rgba(0,0,0,0.35)]">
         <div className="flex items-center justify-between mb-4">
@@ -371,6 +397,16 @@ function Activity({ title, value }: any) {
         <p className="text-xs text-gray-300">{title}</p>
       </div>
       <p className="text-xs font-bold text-white">{value}</p>
+    </div>
+  );
+}
+
+function EngineCard({ title, value, hint }: any) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
+      <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">{title}</p>
+      <p className="mt-1 text-lg font-black text-white">{value}</p>
+      <p className="mt-1 text-[11px] text-gray-500">{hint}</p>
     </div>
   );
 }

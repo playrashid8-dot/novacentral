@@ -5,7 +5,11 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import AppToast from "../../components/AppToast";
-import { fetchHybridSummary } from "../../lib/hybrid";
+import GradientButton from "../../components/GradientButton";
+import GlassCard from "../../components/GlassCard";
+import ProgressBar from "../../components/ProgressBar";
+import CountdownTimer from "../../components/CountdownTimer";
+import { claimHybridStake, createHybridStake, fetchHybridSummary, fetchHybridStakes } from "../../lib/hybrid";
 
 export default function Investment() {
   const router = useRouter();
@@ -14,7 +18,9 @@ export default function Investment() {
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
   const [amount, setAmount] = useState("");
   const [hybrid, setHybrid]: any = useState(null);
+  const [stakes, setStakes] = useState<any[]>([]);
   const [toast, setToast] = useState("");
+  const [claimingStake, setClaimingStake] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -30,9 +36,10 @@ export default function Investment() {
 
   // 🔐 USER LOAD
   useEffect(() => {
-    fetchHybridSummary()
-      .then((hybridData) => {
+    Promise.all([fetchHybridSummary(), fetchHybridStakes().catch(() => [])])
+      .then(([hybridData, stakeData]) => {
         if (hybridData) setHybrid(hybridData);
+        setStakes(stakeData || []);
       })
       .catch(() => {
         router.replace("/login");
@@ -50,17 +57,41 @@ export default function Investment() {
 
     try {
       setLoadingPlan(selectedPlan.key);
-      showToast("HybridEarn staking plans are coming soon.");
+      await createHybridStake({ amount: amt, planDays: selectedPlan.days });
+      showToast("Stake created successfully");
 
       setSelectedPlan(null);
       setAmount("");
-
-      router.refresh?.();
+      const [hybridData, stakeData] = await Promise.all([
+        fetchHybridSummary().catch(() => null),
+        fetchHybridStakes().catch(() => []),
+      ]);
+      if (hybridData) setHybrid(hybridData);
+      setStakes(stakeData || []);
 
     } catch (err: any) {
-      showToast("Investment disabled");
+      showToast(err?.response?.data?.msg || "Failed to create stake");
     } finally {
       setLoadingPlan(null);
+    }
+  };
+
+  const claimStake = async (stakeId: string) => {
+    if (claimingStake) return;
+    try {
+      setClaimingStake(stakeId);
+      const result = await claimHybridStake(stakeId);
+      showToast(`Stake claimed: $${Number(result?.payout || 0).toFixed(2)}`);
+      const [hybridData, stakeData] = await Promise.all([
+        fetchHybridSummary().catch(() => null),
+        fetchHybridStakes().catch(() => []),
+      ]);
+      if (hybridData) setHybrid(hybridData);
+      setStakes(stakeData || []);
+    } catch (err: any) {
+      showToast(err?.response?.data?.msg || "Stake is not ready to claim");
+    } finally {
+      setClaimingStake(null);
     }
   };
 
@@ -95,16 +126,15 @@ export default function Investment() {
         </h2>
       </div>
 
-      {/* PLANS */}
       <div className="space-y-4 relative z-10">
 
         {plans.map((plan) => (
           <motion.div
             key={plan.key}
             whileHover={{ scale: 1.03 }}
-            className={`p-[1px] rounded-2xl bg-gradient-to-r ${plan.color}`}
+            className={`p-[1px] rounded-3xl bg-gradient-to-r ${plan.color} shadow-[0_0_35px_rgba(124,58,237,0.22)]`}
           >
-            <div className="bg-[#0b0b0f] p-5 rounded-2xl">
+            <div className="bg-[#0b0b0f]/95 p-5 rounded-3xl backdrop-blur-2xl">
 
               <div className="flex justify-between items-center">
                 <h2 className="font-bold text-lg">{plan.name} Staking</h2>
@@ -129,18 +159,69 @@ export default function Investment() {
                 />
               </div>
 
-              <button
-                onClick={() => setSelectedPlan(plan)}
-                className="mt-4 w-full bg-gradient-to-r from-purple-500 to-indigo-500 p-2 rounded-xl text-sm font-semibold"
-              >
+              <GradientButton onClick={() => setSelectedPlan(plan)} className="mt-4 py-2">
                 Stake Now
-              </button>
+              </GradientButton>
 
             </div>
           </motion.div>
         ))}
 
       </div>
+
+      <GlassCard glow="cyan" className="mt-6">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.24em] text-cyan-200/80">Active Stakes</p>
+            <h3 className="text-lg font-black">Claim Center</h3>
+          </div>
+          <span className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-[10px] font-bold text-cyan-100">
+            {stakes.filter((stake) => stake.status === "active").length} Active
+          </span>
+        </div>
+
+        <div className="space-y-3">
+          {stakes.length === 0 && (
+            <p className="rounded-2xl border border-white/10 bg-black/30 p-4 text-center text-xs text-gray-500">
+              No active stakes yet.
+            </p>
+          )}
+
+          {stakes.slice(0, 5).map((stake) => {
+            const ready = new Date(stake.endAt).getTime() <= Date.now() && stake.status === "active";
+            const progress = Date.now() - new Date(stake.startAt).getTime();
+            const total = new Date(stake.endAt).getTime() - new Date(stake.startAt).getTime();
+
+            return (
+              <div key={stake._id} className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold text-white">{stake.planDays}d Stake</p>
+                    <p className="text-xs text-gray-500">
+                      ${Number(stake.amount || 0).toFixed(2)} + ${Number(stake.totalReward || 0).toFixed(2)}
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-[10px] text-gray-300">
+                    {stake.status}
+                  </span>
+                </div>
+                <ProgressBar value={progress} max={total} className="mt-3" />
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <CountdownTimer targetTime={stake.endAt} label="Matures In" completeText="Ready" className="p-3" />
+                  <GradientButton
+                    onClick={() => claimStake(stake._id)}
+                    disabled={!ready || claimingStake === stake._id}
+                    loading={claimingStake === stake._id}
+                    className="h-full py-3 text-xs"
+                  >
+                    Claim
+                  </GradientButton>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </GlassCard>
 
       {/* 🔥 MODAL */}
       {selectedPlan && (
@@ -190,16 +271,14 @@ export default function Investment() {
                   Cancel
                 </button>
 
-                <button
+                <GradientButton
                   onClick={confirmInvest}
                   disabled={loadingPlan === selectedPlan.key}
-                  className="w-full bg-gradient-to-r from-purple-500 to-indigo-500 p-2 rounded-xl text-sm flex justify-center items-center gap-2"
+                  loading={loadingPlan === selectedPlan.key}
+                  className="w-full p-2 text-sm"
                 >
-                  {loadingPlan === selectedPlan.key && (
-                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  )}
-                  Confirm 🚀
-                </button>
+                  Confirm
+                </GradientButton>
               </div>
 
             </div>

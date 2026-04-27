@@ -3,14 +3,17 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import API from "../../lib/api";
+import { fetchHybridSummary, fetchHybridWithdrawals } from "../../lib/hybrid";
 import { logout } from "../../lib/auth";
 import BottomNav from "../../components/BottomNav";
 import ProtectedRoute from "../../components/ProtectedRoute";
+import GlassCard from "../../components/GlassCard";
 
 export default function History() {
   const router = useRouter();
 
   const [data, setData] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState("deposits");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -19,8 +22,25 @@ export default function History() {
 
   const loadHistory = async () => {
     try {
-      const res = await API.get("/history");
-      setData(res.data.history || []);
+      const [res, hybridData, withdrawalData] = await Promise.all([
+        API.get("/history").catch(() => ({ data: { history: [] } })),
+        fetchHybridSummary().catch(() => null),
+        fetchHybridWithdrawals().catch(() => []),
+      ]);
+
+      const legacyHistory = res.data.history || [];
+      const deposits = (hybridData?.deposits || []).map((item: any) => ({
+        ...item,
+        type: "deposit",
+        status: item.status || "approved",
+      }));
+      const withdrawals = (withdrawalData || []).map((item: any) => ({
+        ...item,
+        type: "withdrawal",
+        status: item.status || "pending",
+      }));
+
+      setData([...deposits, ...withdrawals, ...legacyHistory]);
     } catch {
       logout();
     } finally {
@@ -36,13 +56,34 @@ export default function History() {
     );
   }
 
+  const tabs = [
+    { key: "deposits", label: "Deposits" },
+    { key: "withdrawals", label: "Withdrawals" },
+    { key: "roi", label: "ROI" },
+    { key: "referral", label: "Referral" },
+  ];
+
+  const filtered = data
+    .filter((item) => {
+      const type = String(item.type || item.source || item.note || "").toLowerCase();
+      if (activeTab === "deposits") return type.includes("deposit");
+      if (activeTab === "withdrawals") return type.includes("withdraw");
+      if (activeTab === "roi") return type.includes("roi");
+      if (activeTab === "referral") return type.includes("referral");
+      return true;
+    })
+    .sort((a, b) => new Date(b.createdAt || b.updatedAt || 0).getTime() - new Date(a.createdAt || a.updatedAt || 0).getTime());
+
   return (
     <ProtectedRoute>
-    <div className="min-h-screen max-w-[420px] mx-auto px-4 pb-28 text-white">
+    <div className="min-h-screen max-w-[420px] mx-auto px-4 pb-28 text-white relative">
 
       {/* HEADER */}
       <div className="flex justify-between items-center pt-5">
-        <h1 className="text-xl font-bold text-purple-400">📜 History</h1>
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.3em] text-purple-300/70">Real Records</p>
+          <h1 className="text-2xl font-black bg-gradient-to-r from-purple-300 via-fuchsia-300 to-blue-300 bg-clip-text text-transparent">History</h1>
+        </div>
 
         <button
           onClick={() => router.push("/dashboard")}
@@ -52,25 +93,42 @@ export default function History() {
         </button>
       </div>
 
-      {/* LIST */}
+      <GlassCard glow="purple" className="mt-5">
+        <div className="grid grid-cols-4 gap-2">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`rounded-xl px-2 py-2 text-[11px] font-semibold transition ${
+                activeTab === tab.key
+                  ? "bg-purple-500 text-white shadow-[0_0_18px_rgba(168,85,247,0.45)]"
+                  : "bg-white/[0.06] text-gray-400"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </GlassCard>
+
       <div className="mt-5 space-y-3">
 
-        {data.length === 0 && (
+        {filtered.length === 0 && (
           <p className="text-center text-gray-500 mt-10">
-            No transactions yet
+            No {tabs.find((tab) => tab.key === activeTab)?.label.toLowerCase()} records yet
           </p>
         )}
 
-        {data.map((item, i) => (
+        {filtered.map((item, i) => (
           <div
-            key={i}
-            className="bg-white/5 border border-white/10 p-4 rounded-xl"
+            key={item._id || i}
+            className="bg-white/5 border border-white/10 p-4 rounded-2xl backdrop-blur-2xl"
           >
             <div className="flex justify-between items-center">
 
               {/* TYPE */}
               <span className={`text-sm font-semibold ${getTypeColor(item.type)}`}>
-                {item.type.toUpperCase()}
+                {String(item.type || activeTab).toUpperCase()}
               </span>
 
               {/* STATUS */}
@@ -81,12 +139,12 @@ export default function History() {
 
             {/* AMOUNT */}
             <p className="text-lg font-bold mt-1 text-green-400">
-              ${Number(item.amount).toFixed(2)}
+              ${Number(item.amount || item.totalReward || 0).toFixed(2)}
             </p>
 
             {/* DATE */}
             <p className="text-xs text-gray-500 mt-1">
-              {new Date(item.createdAt).toLocaleString()}
+              {item.createdAt ? new Date(item.createdAt).toLocaleString() : "No date"}
             </p>
           </div>
         ))}
@@ -105,7 +163,12 @@ function getTypeColor(type: string) {
     case "deposit":
       return "text-green-400";
     case "withdraw":
+    case "withdrawal":
       return "text-red-400";
+    case "roi":
+      return "text-cyan-400";
+    case "referral":
+      return "text-yellow-300";
     case "investment":
       return "text-blue-400";
     default:

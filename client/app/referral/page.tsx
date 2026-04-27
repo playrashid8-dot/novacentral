@@ -6,8 +6,9 @@ import API, { getApiErrorMessage } from "../../lib/api";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import AppToast from "../../components/AppToast";
 import { fetchCurrentUser } from "../../lib/session";
-import { fetchHybridSummary } from "../../lib/hybrid";
+import { claimHybridSalary, fetchHybridSummary } from "../../lib/hybrid";
 import GradientButton from "../../components/GradientButton";
+import ProgressBar from "../../components/ProgressBar";
 
 export default function Referral() {
   const [copied, setCopied] = useState(false);
@@ -15,6 +16,7 @@ export default function Referral() {
   const [stats, setStats] = useState<any>(null);
   const [user, setUser]: any = useState(null);
   const [hybrid, setHybrid] = useState<any>(null);
+  const [salaryLoading, setSalaryLoading] = useState(false);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -47,6 +49,26 @@ export default function Referral() {
     await navigator.clipboard.writeText(link);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const directCount = Number(hybrid?.salaryDirectCount || hybrid?.directCount || stats?.directCount || 0);
+  const teamCount = Number(hybrid?.salaryTeamCount || hybrid?.teamCount || stats?.teamCount || 0);
+  const salaryComplete = directCount >= 5 && teamCount >= 15;
+
+  const claimSalary = async () => {
+    if (!salaryComplete || salaryLoading) return;
+
+    try {
+      setSalaryLoading(true);
+      const result = await claimHybridSalary();
+      showToast(`Salary claimed: $${Number(result?.amount || 0).toFixed(2)}`);
+      const hybridData = await fetchHybridSummary().catch(() => null);
+      setHybrid(hybridData);
+    } catch (err: any) {
+      showToast(getApiErrorMessage(err, "Failed to claim salary reward"));
+    } finally {
+      setSalaryLoading(false);
+    }
   };
 
   return (
@@ -100,8 +122,8 @@ export default function Referral() {
       {/* 📊 STATS */}
       <div className="grid grid-cols-2 gap-3">
 
-        <Stat title="Team Size" value={hybrid?.teamCount || stats?.teamCount || 0} />
-        <Stat title="Direct Referrals" value={hybrid?.directCount || stats?.directCount || 0} />
+        <Stat title="Team Count" value={hybrid?.teamCount || stats?.teamCount || 0} />
+        <Stat title="Direct Count" value={hybrid?.directCount || stats?.directCount || 0} />
         <Stat title="Team Volume" value={`$${Number(stats?.teamVolume || 0).toFixed(2)}`} />
         <Stat title="Referral Code" value={stats?.referralCode || user?.referralCode || "-"} />
 
@@ -117,6 +139,14 @@ export default function Referral() {
         <Stat title="Salary Team" value={hybrid?.salaryTeamCount || 0} />
       </div>
 
+      <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur-2xl">
+        <p className="text-sm font-semibold text-white">Live Progress</p>
+        <div className="mt-3 space-y-3">
+          <ProgressBar label="Direct" value={directCount} max={5} hint={`Direct: ${directCount} / 5`} />
+          <ProgressBar label="Team" value={teamCount} max={15} hint={`Team: ${teamCount} / 15`} />
+        </div>
+      </div>
+
       <div className="mt-5 p-[1px] rounded-2xl bg-gradient-to-r from-yellow-400/70 via-purple-500/70 to-cyan-400/70">
         <div className="rounded-2xl bg-[#08080d]/95 p-4 backdrop-blur-2xl">
           <p className="text-sm font-semibold text-white">HybridEarn Referral Income</p>
@@ -125,6 +155,33 @@ export default function Referral() {
             <IncomeLevel level="Level 2" rate="6%" />
             <IncomeLevel level="Level 3" rate="5%" />
           </div>
+        </div>
+      </div>
+
+      <div className="mt-5 p-[1px] rounded-2xl bg-gradient-to-r from-yellow-300/80 via-purple-500/60 to-cyan-400/70">
+        <div className="rounded-2xl bg-[#08080d]/95 p-4 backdrop-blur-2xl">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.24em] text-yellow-200/80">Salary Rewards</p>
+              <h3 className="mt-1 text-lg font-black text-white">Stage 1</h3>
+            </div>
+            <span className={`rounded-full border px-3 py-1 text-[10px] font-bold ${salaryComplete ? "border-green-300/30 bg-green-400/10 text-green-200" : "border-yellow-300/20 bg-yellow-400/10 text-yellow-200"}`}>
+              {salaryComplete ? "Complete" : "In Progress"}
+            </span>
+          </div>
+          <p className="mt-3 text-xs text-gray-400">Requirement: 5 direct + 15 team</p>
+          <div className="mt-4 space-y-3">
+            <ProgressBar label="Direct" value={directCount} max={5} />
+            <ProgressBar label="Team" value={teamCount} max={15} />
+          </div>
+          <GradientButton
+            onClick={claimSalary}
+            disabled={!salaryComplete || salaryLoading}
+            loading={salaryLoading}
+            className="mt-4"
+          >
+            {salaryLoading ? "Claiming..." : "Claim Salary Reward"}
+          </GradientButton>
         </div>
       </div>
 

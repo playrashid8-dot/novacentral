@@ -2,20 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getApiErrorMessage } from "../../lib/api";
 import { motion } from "framer-motion";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import AppToast from "../../components/AppToast";
 import { fetchCurrentUser } from "../../lib/session";
 import { fetchHybridSummary } from "../../lib/hybrid";
-import GradientButton from "../../components/GradientButton";
+import GlassCard from "../../components/GlassCard";
 
 export default function Deposit() {
   const router = useRouter();
 
-  const [amount, setAmount] = useState("");
-  const [txHash, setTxHash] = useState("");
-  const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [user, setUser]: any = useState(null);
   const [toast, setToast] = useState("");
@@ -63,33 +59,6 @@ export default function Deposit() {
     };
   }, []);
 
-  // 🚀 SUBMIT
-  const handleDeposit = async () => {
-    if (loading) return;
-
-    const amt = Number(amount);
-
-    if (!Number.isFinite(amt) || amt <= 0) {
-      return showToast("Amount must be greater than 0");
-    }
-
-    if (!wallet) {
-      return showToast("Wallet is still generating");
-    }
-
-    try {
-      setLoading(true);
-      showToast("Deposit will credit automatically after BSC confirmation");
-      setAmount("");
-      setTxHash("");
-
-    } catch (err: any) {
-      showToast(getApiErrorMessage(err, "Deposit failed ❌"));
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // 📋 COPY
   const copyWallet = async () => {
     if (!wallet) return;
@@ -136,13 +105,8 @@ export default function Deposit() {
         </h2>
       </motion.div>
 
-      {/* CARD */}
-      <motion.div
-        initial={{ opacity: 0, y: 40 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="p-[1px] rounded-3xl bg-gradient-to-r from-purple-500 via-fuchsia-500 to-indigo-500 shadow-[0_0_45px_rgba(124,58,237,0.35)]"
-      >
-        <div className="bg-[#08080d]/90 backdrop-blur-2xl p-5 rounded-3xl">
+      <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }}>
+        <GlassCard glow="purple">
 
           <div className="mb-4 flex items-center justify-between">
             <p className="text-sm font-semibold text-white">
@@ -157,7 +121,6 @@ export default function Deposit() {
             Send USDT (BEP20) to this address
           </p>
 
-          {/* WALLET */}
           <div className="bg-black/40 p-3 rounded-2xl border border-white/10 flex justify-between items-center gap-3">
             <div className="min-w-0 flex items-center gap-2">
               {!wallet && walletLoading && (
@@ -177,46 +140,6 @@ export default function Deposit() {
             </button>
           </div>
 
-          {/* QUICK AMOUNTS */}
-          <div className="grid grid-cols-3 gap-2 mt-4">
-            {[10, 50, 100].map((val) => (
-              <button
-                key={val}
-                disabled={loading}
-                onClick={() => {
-                  setAmount(String(val));
-                }}
-                className="bg-white/[0.06] border border-white/10 p-2 rounded-xl text-xs hover:scale-105 hover:bg-purple-500/20 hover:border-purple-300/30 transition-all duration-300"
-              >
-                ${val}
-              </button>
-            ))}
-          </div>
-
-          {/* AMOUNT */}
-          <input
-            type="number"
-            placeholder="Enter Amount ($)"
-            value={amount}
-            disabled={loading}
-            onChange={(e) => {
-              setAmount(e.target.value);
-            }}
-            className="w-full mt-4 bg-white/[0.06] border border-white/10 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/25 focus:shadow-[0_0_28px_rgba(124,58,237,0.3)] outline-none p-3 rounded-xl text-sm transition-all duration-300 placeholder:text-gray-600"
-          />
-
-          {/* TX HASH */}
-          <input
-            type="text"
-            placeholder="Optional note / transaction hash"
-            value={txHash}
-            disabled={loading}
-            onChange={(e) => {
-              setTxHash(e.target.value);
-            }}
-            className="w-full mt-3 bg-white/[0.06] border border-white/10 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/25 focus:shadow-[0_0_28px_rgba(124,58,237,0.3)] outline-none p-3 rounded-xl text-sm transition-all duration-300 placeholder:text-gray-600"
-          />
-
           <div className="mt-4 flex flex-wrap gap-2">
             <span className="rounded-full bg-yellow-400/10 border border-yellow-300/20 px-3 py-1 text-[10px] font-semibold text-yellow-200">
               Auto Listener
@@ -226,17 +149,10 @@ export default function Deposit() {
             </span>
           </div>
 
-          {/* BUTTON */}
-          <GradientButton
-            onClick={handleDeposit}
-            disabled={loading}
-            loading={loading}
-            className="mt-5"
-          >
-            {loading ? "Processing..." : "Submit Deposit"}
-          </GradientButton>
-
-        </div>
+          <div className="mt-5 rounded-2xl border border-cyan-300/20 bg-cyan-400/10 p-4 text-xs leading-5 text-cyan-100">
+            Deposit credits are handled automatically after BEP20 confirmation. No transaction hash is required.
+          </div>
+        </GlassCard>
       </motion.div>
 
       {/* INFO */}
@@ -265,7 +181,7 @@ export default function Deposit() {
                   <p className="text-[10px] text-gray-500">{deposit.status}</p>
                 </div>
                 <p className="text-[10px] text-gray-500">
-                  {String(deposit.txHash || "").slice(0, 10)}...
+                  {deposit.createdAt ? new Date(deposit.createdAt).toLocaleDateString() : "Auto"}
                 </p>
               </div>
             ))}

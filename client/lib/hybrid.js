@@ -20,6 +20,21 @@ export const fetchHybridWithdrawals = async () => {
   return res.data?.data?.withdrawals || [];
 };
 
+export const fetchHybridStakes = async () => {
+  const res = await API.get("/stake/my");
+  return res.data?.data?.stakes || [];
+};
+
+export const createHybridStake = async (payload) => {
+  const res = await API.post("/stake/create", payload);
+  return res.data?.data || null;
+};
+
+export const claimHybridStake = async (stakeId) => {
+  const res = await API.post("/stake/claim", { stakeId });
+  return res.data?.data || null;
+};
+
 export const requestHybridWithdraw = async (payload, idempotencyKey) => {
   const res = await API.post("/withdraw/request", payload, {
     headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
