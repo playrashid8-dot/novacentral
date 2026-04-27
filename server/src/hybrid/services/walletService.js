@@ -10,10 +10,13 @@ export const getNextWalletIndex = async () => {
       { $inc: { value: 1 } },
       {
         new: true,
-        upsert: true,
-        setDefaultsOnInsert: true,
+        upsert: true
       }
     );
+
+    if (!counter || typeof counter.value !== "number") {
+      throw new Error("Wallet counter failed");
+    }
 
     const walletIndex = Number(counter?.value || 0);
 
