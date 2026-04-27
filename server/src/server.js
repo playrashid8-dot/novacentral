@@ -42,7 +42,7 @@ app.set("trust proxy", 1);
 /* ==============================
    🔥 CONNECT DATABASE
 ============================== */
-connectDB();
+await connectDB();
 
 /* ==============================
    🔐 GLOBAL SECURITY

@@ -9,6 +9,7 @@ import { getProvider, getRpcUrls, withProviderRetry } from "../utils/provider.js
 const TRANSFER_TOPIC =
   "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55aeb1d5b1d";
 const MIN_DEPOSIT_AMOUNT = 1;
+const FIRST_RUN_SCAN_BLOCKS = 5000;
 
 const isEnabled = (value) => String(value).toLowerCase() === "true";
 
@@ -18,12 +19,16 @@ const decodeTopicAddress = (topic = "") =>
 const getLastProcessedBlock = async () => {
   const setting = await HybridSetting.findOne({ key: "hybridLastProcessedBlock" });
 
-  if (setting?.value) {
-    return Number(setting.value);
+  if (setting?.value !== undefined && setting?.value !== null && setting?.value !== "") {
+    const storedBlock = Number(setting.value);
+
+    if (Number.isFinite(storedBlock)) {
+      return storedBlock;
+    }
   }
 
   const currentBlock = await withProviderRetry((provider) => provider.getBlockNumber());
-  const startBlock = Math.max(currentBlock - 50, 0);
+  const startBlock = Math.max(currentBlock - FIRST_RUN_SCAN_BLOCKS, 0);
 
   await HybridSetting.findOneAndUpdate(
     { key: "hybridLastProcessedBlock" },
@@ -42,7 +47,7 @@ const saveLastProcessedBlock = async (blockNumber) => {
   );
 };
 
-export const scanHybridDeposits = async () => {
+export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverride = null) => {
   try {
     if (
       !isEnabled(process.env.HYBRID_EARN_ENABLED) ||
@@ -55,8 +60,17 @@ export const scanHybridDeposits = async () => {
 
     getProvider();
     const iface = new Interface(BSC_USDT_ABI);
-    const latestBlock = await withProviderRetry((provider) => provider.getBlockNumber());
-    const storedBlock = await getLastProcessedBlock();
+    const isManualRescan = fromBlockOverride !== null || toBlockOverride !== null;
+    const latestBlock =
+      toBlockOverride !== null
+        ? Number(toBlockOverride)
+        : await withProviderRetry((provider) => provider.getBlockNumber());
+    const storedBlock =
+      fromBlockOverride !== null ? Number(fromBlockOverride) - 1 : await getLastProcessedBlock();
+
+    if (!Number.isFinite(latestBlock) || !Number.isFinite(storedBlock)) {
+      throw new Error("Invalid block range for deposit scan");
+    }
 
     if (latestBlock <= storedBlock) {
       console.log("Deposit listener up to date:", { latestBlock, storedBlock });
@@ -68,7 +82,9 @@ export const scanHybridDeposits = async () => {
 
     for (let fromBlock = storedBlock + 1; fromBlock <= latestBlock; fromBlock += chunkSize) {
       const toBlock = Math.min(fromBlock + chunkSize - 1, latestBlock);
-      console.log("Deposit listener scanning blocks:", { fromBlock, toBlock, latestBlock });
+      let chunkHadCreditFailure = false;
+
+      console.log("📦 Block scan:", { fromBlock, toBlock });
 
       const logs = await withProviderRetry((provider) =>
         provider.getLogs({
@@ -101,7 +117,7 @@ export const scanHybridDeposits = async () => {
         }).select("_id walletAddress");
 
         const usersByWallet = new Map(
-          users.map((user) => [String(user.walletAddress || "").toLowerCase(), user])
+          users.map((user) => [user.walletAddress.toLowerCase(), user])
         );
 
         console.log("Deposit listener wallet match summary:", {
@@ -114,6 +130,7 @@ export const scanHybridDeposits = async () => {
           const toAddress = decodeTopicAddress(log.topics?.[2]).toLowerCase();
           const fromAddress = decodeTopicAddress(log.topics?.[1]).toLowerCase();
 
+          console.log("🔍 Wallet match:", toAddress);
           console.log("Deposit incoming:", {
             wallet: toAddress,
             txHash,
@@ -138,7 +155,10 @@ export const scanHybridDeposits = async () => {
             continue;
           }
 
-          const existing = await HybridDeposit.findOne({ txHash })
+          const existing = await HybridDeposit.findOne({
+            txHash,
+            userId: matchedUser._id,
+          })
             .select("_id status")
             .lean();
 
@@ -153,6 +173,8 @@ export const scanHybridDeposits = async () => {
 
           const parsed = iface.parseLog(log);
           const amount = Number(formatUnits(parsed.args.value, HYBRID_TOKEN.decimals));
+
+          console.log("💰 Deposit detected:", { txHash, amount });
 
           if (!Number.isFinite(amount) || amount <= 0) {
             console.log("Deposit skipped: invalid amount", {
@@ -173,15 +195,23 @@ export const scanHybridDeposits = async () => {
             continue;
           }
 
-          const deposit = await creditHybridDeposit({
-            userId: matchedUser._id,
-            walletAddress: toAddress,
-            txHash,
-            amount,
-            blockNumber: log.blockNumber,
-            fromAddress,
-            tokenAddress: process.env.HYBRID_USDT_CONTRACT,
-          });
+          let deposit = null;
+
+          try {
+            deposit = await creditHybridDeposit({
+              userId: matchedUser._id,
+              walletAddress: toAddress,
+              txHash,
+              amount,
+              blockNumber: log.blockNumber,
+              fromAddress,
+              tokenAddress: process.env.HYBRID_USDT_CONTRACT,
+            });
+          } catch (err) {
+            chunkHadCreditFailure = true;
+            console.error("Deposit credit failed:", err);
+            continue;
+          }
 
           console.log("✅ Deposit credited:", {
             user: matchedUser._id,
@@ -197,8 +227,18 @@ export const scanHybridDeposits = async () => {
         console.log("Deposit listener found no recipient addresses:", { fromBlock, toBlock });
       }
 
-      await saveLastProcessedBlock(toBlock);
-      console.log("Deposit listener checkpoint saved:", { blockNumber: toBlock });
+      if (chunkHadCreditFailure) {
+        console.error("Deposit listener checkpoint not saved due to credit failure:", {
+          fromBlock,
+          toBlock,
+        });
+        break;
+      }
+
+      if (!isManualRescan && logs.length > 0) {
+        await saveLastProcessedBlock(toBlock);
+        console.log("Deposit listener checkpoint saved:", { blockNumber: toBlock });
+      }
     }
 
     return { skipped: false, processed };
@@ -206,4 +246,9 @@ export const scanHybridDeposits = async () => {
     console.error("❌ Deposit listener error:", err);
     throw err;
   }
+};
+
+export const rescanDeposits = async (fromBlock, toBlock) => {
+  console.log("🔁 Manual rescan started...", { fromBlock, toBlock });
+  return await scanHybridDeposits(fromBlock, toBlock);
 };
