@@ -44,7 +44,7 @@ export const generateWallet = (index) => {
   );
 
   return {
-    address: wallet.address,
+    address: wallet.address.toLowerCase(),
     privateKey: wallet.privateKey,
   };
 };

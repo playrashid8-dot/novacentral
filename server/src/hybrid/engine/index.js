@@ -7,25 +7,27 @@ const isEnabled = (value) => String(value).toLowerCase() === "true";
 
 const runListener = async () => {
   if (isRunning) {
+    console.log("🔁 Polling active: previous deposit scan still running");
     return;
   }
 
   isRunning = true;
 
   try {
+    console.log("🔁 Polling active...");
     const result = await scanHybridDeposits();
 
     if (!result?.skipped) {
       console.log(`HYBRID listener processed ${result.processed || 0} deposits`);
     }
   } catch (error) {
-    console.error("HYBRID listener error:", error.message);
+    console.error("❌ Deposit listener error:", error);
   } finally {
     isRunning = false;
   }
 };
 
-export const startHybridEngine = () => {
+export const startDepositListener = () => {
   if (!isEnabled(process.env.HYBRID_EARN_ENABLED)) {
     console.log("HYBRID engine disabled");
     return;
@@ -42,3 +44,5 @@ export const startHybridEngine = () => {
 
   console.log(`HYBRID engine started (${intervalMs}ms interval)`);
 };
+
+export const startHybridEngine = startDepositListener;
