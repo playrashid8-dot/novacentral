@@ -2,6 +2,7 @@ import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { createUserWallet } from "../hybrid/services/walletService.js";
+import { updateUserLevel } from "../hybrid/services/levelService.js";
 
 const TOKEN_COOKIE_NAME = "token";
 
@@ -34,6 +35,7 @@ const bumpTeamCounts = async (referredById) => {
     if (!parent) break;
 
     await User.updateOne({ _id: parent._id }, { $inc: { teamCount: 1 } });
+    await updateUserLevel(parent._id);
     current = parent.referredBy;
   }
 };
@@ -109,6 +111,7 @@ export const register = async (req, res) => {
           { _id: refUser._id },
           { $inc: { directCount: 1 } }
         );
+        await updateUserLevel(refUser._id);
       }
     }
 

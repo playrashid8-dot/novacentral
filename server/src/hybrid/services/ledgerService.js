@@ -1,9 +1,16 @@
 import HybridLedger from "../models/HybridLedger.js";
 
 export const addHybridLedgerEntries = async (entries, session = null) => {
-  if (!Array.isArray(entries) || entries.length === 0) {
-    return [];
-  }
+  try {
+    if (!Array.isArray(entries) || entries.length === 0) {
+      return [];
+    }
 
-  return HybridLedger.create(entries, session ? { session } : undefined);
+    return HybridLedger.insertMany(entries, {
+      ordered: true,
+      ...(session ? { session } : {}),
+    });
+  } catch (error) {
+    throw new Error(error.message || "Failed to write ledger entries");
+  }
 };

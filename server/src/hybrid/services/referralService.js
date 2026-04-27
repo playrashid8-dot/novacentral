@@ -1,6 +1,7 @@
 import User from "../../models/User.js";
 import { REFERRAL_RATES } from "../utils/constants.js";
 import { addHybridLedgerEntries } from "./ledgerService.js";
+import { updateUserLevel } from "./levelService.js";
 import { refreshSalaryStage } from "./salaryService.js";
 
 const getParentId = (user) => user?.referrer || user?.referredBy || null;
@@ -22,6 +23,7 @@ export const distributeHybridReferralRewards = async (
   const isFirstQualifiedDeposit = options.isFirstQualifiedDeposit === true;
   const appliedRewards = [];
   const salaryTouchedIds = new Set();
+  const levelTouchedIds = new Set();
 
   let currentParentId = getParentId(sourceUser);
   let depth = 1;
@@ -61,6 +63,7 @@ export const distributeHybridReferralRewards = async (
           amount: reward,
           depth,
         });
+        levelTouchedIds.add(String(parent._id));
       }
     }
 
@@ -81,6 +84,7 @@ export const distributeHybridReferralRewards = async (
       );
 
       salaryTouchedIds.add(String(parent._id));
+      levelTouchedIds.add(String(parent._id));
     }
 
     currentParentId = getParentId(parent);
@@ -106,6 +110,10 @@ export const distributeHybridReferralRewards = async (
 
   for (const touchedId of salaryTouchedIds) {
     await refreshSalaryStage(touchedId, session);
+  }
+
+  for (const touchedId of levelTouchedIds) {
+    await updateUserLevel(touchedId, session);
   }
 
   return appliedRewards;

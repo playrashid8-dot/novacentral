@@ -1,13 +1,12 @@
 import { HDNodeWallet } from "ethers";
 import hybridConfig from "../../config/hybridConfig.js";
-import HybridSetting from "../models/HybridSetting.js";
+import WalletCounter from "../models/WalletCounter.js";
 import { encryptPrivateKey } from "../utils/crypto.js";
 
 const reserveWalletIndex = async () => {
-  const setting = await HybridSetting.findOneAndUpdate(
-    { key: "walletCounter" },
+  const counter = await WalletCounter.findOneAndUpdate(
+    { key: "wallet_index" },
     {
-      $setOnInsert: { value: 0 },
       $inc: { value: 1 },
     },
     {
@@ -16,7 +15,7 @@ const reserveWalletIndex = async () => {
     }
   );
 
-  return Number(setting?.value || 0);
+  return Number(counter?.value || 0);
 };
 
 export const generateWallet = (index) => {

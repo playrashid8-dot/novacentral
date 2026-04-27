@@ -17,8 +17,6 @@ export default function Withdrawal() {
 
   const [amount, setAmount] = useState("");
   const [walletAddress, setWalletAddress] = useState("");
-  const [password, setPassword] = useState("");
-  const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [user, setUser]: any = useState(null);
   const [toast, setToast] = useState("");
@@ -76,30 +74,18 @@ export default function Withdrawal() {
       return showToast("Wallet address is required");
     }
 
-    if (!password.trim()) {
-      return showToast("Password is required");
-    }
-
-    if (!otp.trim()) {
-      return showToast("OTP is required");
-    }
-
     try {
       setLoading(true);
       await requestHybridWithdraw(
         {
           amount: amt,
           walletAddress: walletAddress.trim(),
-          password,
-          otp: otp.trim(),
         },
         globalThis.crypto?.randomUUID?.()
       );
 
       showToast("Hybrid withdrawal requested");
       setAmount("");
-      setPassword("");
-      setOtp("");
       await loadHybrid();
 
     } catch (err: any) {
@@ -163,7 +149,7 @@ export default function Withdrawal() {
           <div className="mb-4">
             <p className="text-sm font-semibold text-white">Withdraw USDT</p>
             <p className="mt-1 text-xs text-gray-400">
-              Enter your payout details and security verification.
+              Enter your payout details. Your account session is verified by secure cookie auth.
             </p>
           </div>
 
@@ -182,24 +168,6 @@ export default function Withdrawal() {
             value={walletAddress}
             disabled={loading}
             onChange={(e) => setWalletAddress(e.target.value)}
-            className="w-full mt-3 bg-white/[0.06] border border-white/10 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/25 focus:shadow-[0_0_28px_rgba(124,58,237,0.3)] outline-none p-3 rounded-xl text-sm transition-all duration-300 placeholder:text-gray-600"
-          />
-
-          <input
-            type="password"
-            placeholder="Enter password"
-            value={password}
-            disabled={loading}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full mt-3 bg-white/[0.06] border border-white/10 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/25 focus:shadow-[0_0_28px_rgba(124,58,237,0.3)] outline-none p-3 rounded-xl text-sm transition-all duration-300 placeholder:text-gray-600"
-          />
-
-          <input
-            type="text"
-            placeholder="Email OTP"
-            value={otp}
-            disabled={loading}
-            onChange={(e) => setOtp(e.target.value)}
             className="w-full mt-3 bg-white/[0.06] border border-white/10 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/25 focus:shadow-[0_0_28px_rgba(124,58,237,0.3)] outline-none p-3 rounded-xl text-sm transition-all duration-300 placeholder:text-gray-600"
           />
 

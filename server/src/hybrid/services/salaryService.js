@@ -83,6 +83,8 @@ export const claimSalary = async (userId) => {
           },
           $set: {
             salaryStage: 0,
+            salaryDirectCount: 0,
+            salaryTeamCount: 0,
           },
           $addToSet: {
             claimedSalaryStages: rule.stage,

@@ -1,8 +1,9 @@
-import { Interface, JsonRpcProvider, formatUnits } from "ethers";
+import { Interface, formatUnits } from "ethers";
 import User from "../../models/User.js";
 import HybridSetting from "../models/HybridSetting.js";
 import { creditHybridDeposit } from "./depositService.js";
 import { BSC_USDT_ABI, HYBRID_TOKEN } from "../utils/constants.js";
+import { getProvider, getRpcUrls, withProviderRetry } from "../utils/provider.js";
 
 const TRANSFER_TOPIC =
   "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55aeb1d5b1d";
@@ -12,16 +13,14 @@ const isEnabled = (value) => String(value).toLowerCase() === "true";
 const decodeTopicAddress = (topic = "") =>
   `0x${String(topic).slice(-40).toLowerCase()}`;
 
-const getProvider = () => new JsonRpcProvider(process.env.HYBRID_BSC_RPC_URL);
-
-const getLastProcessedBlock = async (provider) => {
+const getLastProcessedBlock = async () => {
   const setting = await HybridSetting.findOne({ key: "hybridLastProcessedBlock" });
 
   if (setting?.value) {
     return Number(setting.value);
   }
 
-  const currentBlock = await provider.getBlockNumber();
+  const currentBlock = await withProviderRetry((provider) => provider.getBlockNumber());
   const startBlock = Math.max(currentBlock - 50, 0);
 
   await HybridSetting.findOneAndUpdate(
@@ -44,16 +43,16 @@ const saveLastProcessedBlock = async (blockNumber) => {
 export const scanHybridDeposits = async () => {
   if (
     !isEnabled(process.env.HYBRID_EARN_ENABLED) ||
-    !process.env.HYBRID_BSC_RPC_URL ||
+    getRpcUrls().length === 0 ||
     !process.env.HYBRID_USDT_CONTRACT
   ) {
     return { skipped: true };
   }
 
-  const provider = getProvider();
+  getProvider();
   const iface = new Interface(BSC_USDT_ABI);
-  const latestBlock = await provider.getBlockNumber();
-  const storedBlock = await getLastProcessedBlock(provider);
+  const latestBlock = await withProviderRetry((provider) => provider.getBlockNumber());
+  const storedBlock = await getLastProcessedBlock();
 
   if (latestBlock <= storedBlock) {
     return { skipped: false, processed: 0 };
@@ -64,12 +63,14 @@ export const scanHybridDeposits = async () => {
 
   for (let fromBlock = storedBlock + 1; fromBlock <= latestBlock; fromBlock += chunkSize) {
     const toBlock = Math.min(fromBlock + chunkSize - 1, latestBlock);
-    const logs = await provider.getLogs({
-      address: process.env.HYBRID_USDT_CONTRACT,
-      fromBlock,
-      toBlock,
-      topics: [TRANSFER_TOPIC],
-    });
+    const logs = await withProviderRetry((provider) =>
+      provider.getLogs({
+        address: process.env.HYBRID_USDT_CONTRACT,
+        fromBlock,
+        toBlock,
+        topics: [TRANSFER_TOPIC],
+      })
+    );
 
     const toAddresses = [...new Set(logs.map((log) => decodeTopicAddress(log.topics?.[2])))];
 

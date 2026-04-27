@@ -47,7 +47,8 @@ export const requestHybridWithdrawal = async (
   try {
     let result = null;
 
-    await session.withTransaction(async () => {
+    session.startTransaction();
+
       const user = await User.findById(userId)
         .select(
           "depositBalance rewardBalance pendingWithdraw level monthlyWithdrawn monthStart lastWithdrawRequest"
@@ -196,9 +197,13 @@ export const requestHybridWithdrawal = async (
           }
         );
       }
-    });
+
+    await session.commitTransaction();
 
     return result;
+  } catch (error) {
+    await session.abortTransaction();
+    throw new Error(error.message || "Failed to request withdrawal");
   } finally {
     session.endSession();
   }
@@ -210,7 +215,8 @@ export const claimHybridWithdrawal = async (userId, withdrawalId) => {
   try {
     let result = null;
 
-    await session.withTransaction(async () => {
+    session.startTransaction();
+
       const withdrawal = await HybridWithdrawal.findOne({
         _id: withdrawalId,
         userId,
@@ -292,9 +298,13 @@ export const claimHybridWithdrawal = async (userId, withdrawalId) => {
         netAmount: Number(withdrawal.netAmount || 0),
         feeAmount: Number(withdrawal.feeAmount || 0),
       };
-    });
+
+    await session.commitTransaction();
 
     return result;
+  } catch (error) {
+    await session.abortTransaction();
+    throw new Error(error.message || "Failed to claim withdrawal");
   } finally {
     session.endSession();
   }

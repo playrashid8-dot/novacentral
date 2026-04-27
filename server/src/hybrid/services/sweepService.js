@@ -4,7 +4,7 @@ import User from "../../models/User.js";
 import HybridDeposit from "../models/HybridDeposit.js";
 import { decryptPrivateKey } from "../utils/crypto.js";
 import { BSC_USDT_ABI, HYBRID_TOKEN } from "../utils/constants.js";
-import { getProvider } from "../utils/provider.js";
+import { getProvider, getRpcUrls } from "../utils/provider.js";
 
 const assertSweepConfig = () => {
   if (!hybridConfig.gasKey) {
@@ -22,7 +22,7 @@ export const canSweepHybridFunds = () =>
   !!hybridConfig.adminWallet &&
   !!hybridConfig.usdtContract &&
   !!hybridConfig.gasKey &&
-  !!hybridConfig.rpcUrl;
+    getRpcUrls().length > 0;
 
 export const sendGas = async (address) => {
   try {

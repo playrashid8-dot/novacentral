@@ -84,3 +84,5 @@ export const syncUserLevel = async (userId, session = null) => {
 
   return updatedUser;
 };
+
+export const updateUserLevel = syncUserLevel;

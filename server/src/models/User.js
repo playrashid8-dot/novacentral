@@ -245,9 +245,6 @@ userSchema.methods.toJSON = function () {
 //
 // 🔥 INDEXES (NO DUPLICATE)
 //
-userSchema.index({ email: 1 });
-userSchema.index({ username: 1 });
-userSchema.index({ referralCode: 1 });
 userSchema.index({ createdAt: -1 });
 
 export default mongoose.model("User", userSchema);
