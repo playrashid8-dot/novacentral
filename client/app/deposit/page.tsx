@@ -8,6 +8,7 @@ import ProtectedRoute from "../../components/ProtectedRoute";
 import AppToast from "../../components/AppToast";
 import { fetchCurrentUser } from "../../lib/session";
 import { fetchHybridSummary } from "../../lib/hybrid";
+import GradientButton from "../../components/GradientButton";
 
 export default function Deposit() {
   const router = useRouter();
@@ -86,7 +87,7 @@ export default function Deposit() {
         <div>
           <p className="text-[10px] uppercase tracking-[0.35em] text-purple-300/70">Wallet Top Up</p>
           <h1 className="text-2xl font-black bg-gradient-to-r from-purple-300 via-fuchsia-300 to-blue-300 bg-clip-text text-transparent">
-            Deposit
+            HybridEarn Deposit
           </h1>
         </div>
 
@@ -120,7 +121,7 @@ export default function Deposit() {
 
           <div className="mb-4 flex items-center justify-between">
             <p className="text-sm font-semibold text-white">
-              Send USDT
+              Send USDT (BEP20)
             </p>
             <span className="rounded-full border border-blue-300/20 bg-blue-400/10 px-3 py-1 text-[10px] font-bold text-blue-200">
               BEP20
@@ -128,7 +129,7 @@ export default function Deposit() {
           </div>
 
           <p className="text-xs text-gray-400 mb-3">
-            Send USDT (BEP20 Network) to your assigned HybridEarn wallet
+            Send USDT (BEP20) to this address
           </p>
 
           {/* WALLET */}
@@ -196,16 +197,14 @@ export default function Deposit() {
           </div>
 
           {/* BUTTON */}
-          <button
+          <GradientButton
             onClick={handleDeposit}
             disabled={loading}
-            className="mt-5 w-full bg-gradient-to-r from-[#7c3aed] via-[#a855f7] to-[#4f46e5] p-3 rounded-xl font-bold shadow-[0_0_30px_rgba(124,58,237,0.5)] hover:scale-105 hover:shadow-[0_0_42px_rgba(168,85,247,0.72)] transition-all duration-300 flex justify-center items-center gap-2"
+            loading={loading}
+            className="mt-5"
           >
-            {loading && (
-              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            )}
             {loading ? "Processing..." : "Submit Deposit"}
-          </button>
+          </GradientButton>
 
         </div>
       </motion.div>

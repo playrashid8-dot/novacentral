@@ -7,9 +7,11 @@ import { useRouter, usePathname } from "next/navigation";
 import { getApiErrorMessage } from "../../lib/api";
 import { logout } from "../../lib/auth";
 import { fetchCurrentUser } from "../../lib/session";
-import { claimHybridRoi, fetchHybridSummary } from "../../lib/hybrid";
+import { claimHybridRoi, claimHybridSalary, fetchHybridSummary } from "../../lib/hybrid";
 import AppToast from "../../components/AppToast";
 import ProtectedRoute from "../../components/ProtectedRoute";
+import GradientButton from "../../components/GradientButton";
+import StatCard from "../../components/StatCard";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -21,6 +23,7 @@ export default function Dashboard() {
   const [toast, setToast] = useState("");
   const [hybrid, setHybrid] = useState<any>(null);
   const [roiLoading, setRoiLoading] = useState(false);
+  const [salaryLoading, setSalaryLoading] = useState(false);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -100,6 +103,15 @@ export default function Dashboard() {
       )
     : 0;
 
+  const currentVipLevel = Math.min(Math.max(Number(hybrid?.level || 1), 1), 3);
+  const totalEarnings = Number(
+    user?.totalEarnings ??
+      Number(hybrid?.rewardBalance || 0) + Number(user?.todayProfit || 0)
+  );
+  const salaryRewards: any = { 1: 30, 2: 80, 3: 250, 4: 500 };
+  const salaryStage = Number(hybrid?.salaryStage || 0);
+  const salaryReward = salaryRewards[salaryStage] || 0;
+
   const handleClaimRoi = async () => {
     if (roiLoading) return;
 
@@ -112,6 +124,21 @@ export default function Dashboard() {
       showToast(getApiErrorMessage(err, "Failed to claim ROI ❌"));
     } finally {
       setRoiLoading(false);
+    }
+  };
+
+  const handleClaimSalary = async () => {
+    if (salaryLoading) return;
+
+    try {
+      setSalaryLoading(true);
+      const result = await claimHybridSalary();
+      showToast(`Salary claimed: $${Number(result?.amount || salaryReward || 0).toFixed(2)}`);
+      await loadUser(true);
+    } catch (err: any) {
+      showToast(getApiErrorMessage(err, "Failed to claim salary ❌"));
+    } finally {
+      setSalaryLoading(false);
     }
   };
 
@@ -137,10 +164,10 @@ export default function Dashboard() {
       <div className="flex justify-between items-center pt-5 relative z-10">
         <div>
           <p className="text-[10px] uppercase tracking-[0.35em] text-purple-300/70">
-            VIP Ultra
+            VIP Ultra UI
           </p>
           <h1 className="font-black text-2xl bg-gradient-to-r from-purple-300 via-fuchsia-300 to-blue-300 bg-clip-text text-transparent">
-            NovaCentral
+            HybridEarn Dashboard
           </h1>
         </div>
 
@@ -168,7 +195,7 @@ export default function Dashboard() {
           <p className="text-gray-400 text-xs uppercase tracking-[0.18em]">Welcome Back</p>
           <h2 className="font-bold text-lg truncate">{user?.username}</h2>
           <p className="text-[11px] text-gray-500">
-            VIP ID: {user?._id?.slice(0, 6)}
+            VIP {currentVipLevel} ID: {user?._id?.slice(0, 6)}
           </p>
         </div>
       </div>
@@ -176,15 +203,16 @@ export default function Dashboard() {
       {/* BALANCE */}
       <div className="mt-6 p-[1px] rounded-3xl bg-gradient-to-br from-purple-400 via-fuchsia-500 to-blue-500 shadow-[0_0_55px_rgba(124,58,237,0.45)]">
         <div className="bg-[#08080d]/90 p-5 rounded-3xl backdrop-blur-2xl">
-        <p className="text-xs text-gray-400 uppercase tracking-[0.22em]">Total Balance</p>
+        <p className="text-xs text-gray-400 uppercase tracking-[0.22em]">Total Earnings</p>
 
         <h1 className="text-4xl font-black text-white mt-2 text-glow">
-          ${displayBalance.toFixed(2)}
+          ${totalEarnings.toFixed(2)}
         </h1>
 
-        <div className="grid grid-cols-2 gap-3 mt-5">
+        <div className="grid grid-cols-3 gap-3 mt-5">
           <MiniMetric title="Deposit Balance" value={hybrid?.depositBalance} />
           <MiniMetric title="Reward Balance" value={hybrid?.rewardBalance} />
+          <MiniMetric title="Total Earnings" value={totalEarnings} />
         </div>
 
         {cooldown > 0 && (
@@ -209,10 +237,10 @@ export default function Dashboard() {
               <p className="text-[10px] uppercase tracking-[0.25em] text-cyan-200/80">
                 HybridEarn
               </p>
-              <h3 className="mt-1 text-lg font-black text-white">ROI Wallet</h3>
+              <h3 className="mt-1 text-lg font-black text-white">HybridEarn Daily ROI</h3>
             </div>
             <span className="rounded-full border border-purple-300/20 bg-purple-500/10 px-3 py-1 text-[10px] font-semibold text-purple-100">
-              Level {Number(hybrid?.level || 0)}
+              VIP {currentVipLevel}
             </span>
           </div>
 
@@ -229,13 +257,14 @@ export default function Dashboard() {
                   {(Number(hybrid?.roiRate || 0) * 100).toFixed(2)}% daily
                 </p>
               </div>
-              <button
+              <GradientButton
                 onClick={handleClaimRoi}
                 disabled={roiLoading || Number(hybrid?.roiRate || 0) <= 0 || roiCooldownMs > 0}
-                className="rounded-xl bg-gradient-to-r from-[#7c3aed] via-[#a855f7] to-[#4f46e5] px-4 py-3 text-xs font-bold shadow-[0_0_24px_rgba(124,58,237,0.45)] disabled:cursor-not-allowed disabled:opacity-50"
+                loading={roiLoading}
+                className="w-auto px-4 py-3 text-xs"
               >
                 {roiLoading ? "Claiming..." : "Claim ROI"}
-              </button>
+              </GradientButton>
             </div>
 
             <p className="mt-3 text-[11px] text-gray-400">
@@ -247,12 +276,42 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <div className="mt-6 p-[1px] rounded-3xl bg-gradient-to-r from-yellow-400/70 via-purple-500/70 to-blue-500/70 shadow-[0_0_35px_rgba(234,179,8,0.18)]">
+        <div className="bg-[#08080d]/90 p-5 rounded-3xl backdrop-blur-2xl">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.25em] text-yellow-200/80">
+                Team Milestone
+              </p>
+              <h3 className="mt-1 text-lg font-black text-white">HybridEarn Salary Rewards</h3>
+            </div>
+            <span className="rounded-full border border-yellow-300/20 bg-yellow-400/10 px-3 py-1 text-[10px] font-semibold text-yellow-100">
+              Stage {salaryStage || 0}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 mt-4">
+            <MiniMetric title="Stage" value={salaryStage || 0} raw />
+            <MiniMetric title="Reward" value={salaryReward} />
+          </div>
+
+          <GradientButton
+            onClick={handleClaimSalary}
+            loading={salaryLoading}
+            disabled={salaryStage <= 0}
+            className="mt-4"
+          >
+            {salaryLoading ? "Claiming..." : "Claim Salary Reward"}
+          </GradientButton>
+        </div>
+      </div>
+
       {/* STATS */}
       <div className="grid grid-cols-2 gap-3 mt-6">
-        <Stat title="Rewards" value={hybrid?.rewardBalance} />
-        <Stat title="Today" value={user?.todayProfit} />
-        <Stat title="Deposits" value={hybrid?.depositBalance} />
-        <Stat title="Pending" value={hybrid?.pendingWithdraw} />
+        <StatCard title="Deposit Balance" value={`$${Number(hybrid?.depositBalance || 0).toFixed(2)}`} tone="purple" />
+        <StatCard title="Reward Balance" value={`$${Number(hybrid?.rewardBalance || 0).toFixed(2)}`} tone="cyan" />
+        <StatCard title="Total Earnings" value={`$${totalEarnings.toFixed(2)}`} tone="green" />
+        <StatCard title="Pending Withdraw" value={`$${Number(hybrid?.pendingWithdraw || 0).toFixed(2)}`} tone="purple" />
       </div>
 
       {/* RECENT ACTIVITY */}
@@ -293,23 +352,13 @@ function Action({ label, icon, onClick }: any) {
   );
 }
 
-/* 📊 STAT */
-function Stat({ title, value }: any) {
-  return (
-    <div className="bg-white/[0.06] border border-white/10 p-4 rounded-2xl backdrop-blur-xl hover:scale-[1.02] hover:border-blue-300/30 transition-all duration-300">
-      <p className="text-[10px] text-gray-400 uppercase tracking-[0.18em]">{title}</p>
-      <h4 className="text-base font-bold text-cyan-300 mt-1">
-        ${Number(value || 0).toFixed(2)}
-      </h4>
-    </div>
-  );
-}
-
-function MiniMetric({ title, value }: any) {
+function MiniMetric({ title, value, raw = false }: any) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
       <p className="text-[10px] text-gray-400">{title}</p>
-      <p className="text-sm font-bold text-purple-200">${Number(value || 0).toFixed(2)}</p>
+      <p className="text-sm font-bold text-purple-200">
+        {raw ? value : `$${Number(value || 0).toFixed(2)}`}
+      </p>
     </div>
   );
 }

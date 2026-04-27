@@ -7,6 +7,7 @@ import ProtectedRoute from "../../components/ProtectedRoute";
 import AppToast from "../../components/AppToast";
 import { fetchCurrentUser } from "../../lib/session";
 import { fetchHybridSummary } from "../../lib/hybrid";
+import GradientButton from "../../components/GradientButton";
 
 export default function Referral() {
   const [copied, setCopied] = useState(false);
@@ -59,7 +60,7 @@ export default function Referral() {
 
       {/* HEADER */}
       <h1 className="text-xl font-bold mb-6 bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
-        Referral Program 👥
+        HybridEarn Referral
       </h1>
 
       {/* 💎 EARNINGS CARD */}
@@ -86,12 +87,12 @@ export default function Referral() {
             {link}
           </div>
 
-          <button
+          <GradientButton
             onClick={copyLink}
-            className="mt-3 w-full bg-gradient-to-r from-purple-500 to-indigo-500 p-2 rounded-xl text-sm font-semibold"
+            className="mt-3 py-2"
           >
             {copied ? "Copied ✅" : "Copy Link"}
-          </button>
+          </GradientButton>
 
         </div>
       </div>
@@ -114,6 +115,17 @@ export default function Referral() {
         />
         <Stat title="Salary Direct" value={hybrid?.salaryDirectCount || 0} />
         <Stat title="Salary Team" value={hybrid?.salaryTeamCount || 0} />
+      </div>
+
+      <div className="mt-5 p-[1px] rounded-2xl bg-gradient-to-r from-yellow-400/70 via-purple-500/70 to-cyan-400/70">
+        <div className="rounded-2xl bg-[#08080d]/95 p-4 backdrop-blur-2xl">
+          <p className="text-sm font-semibold text-white">HybridEarn Referral Income</p>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <IncomeLevel level="Level 1" rate="10%" />
+            <IncomeLevel level="Level 2" rate="6%" />
+            <IncomeLevel level="Level 3" rate="5%" />
+          </div>
+        </div>
       </div>
 
       {/* 📢 INFO */}
@@ -145,6 +157,15 @@ function Stat({ title, value }: any) {
       <h4 className="font-bold text-sm text-purple-400 mt-1">
         {value}
       </h4>
+    </div>
+  );
+}
+
+function IncomeLevel({ level, rate }: any) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.06] p-3 text-center">
+      <p className="text-[10px] text-gray-400">{level}</p>
+      <p className="mt-1 text-lg font-black text-yellow-200">{rate}</p>
     </div>
   );
 }

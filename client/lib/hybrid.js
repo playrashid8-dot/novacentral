@@ -10,6 +10,11 @@ export const claimHybridRoi = async () => {
   return res.data?.data || null;
 };
 
+export const claimHybridSalary = async () => {
+  const res = await API.post("/salary/claim");
+  return res.data?.data || null;
+};
+
 export const fetchHybridWithdrawals = async () => {
   const res = await API.get("/withdraw/my");
   return res.data?.data?.withdrawals || [];

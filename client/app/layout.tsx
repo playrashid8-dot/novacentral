@@ -8,8 +8,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "NovaCentral",
-  description: "Hybrid Crypto Earning Platform",
+  title: "HybridEarn",
+  description: "HybridEarn premium crypto earning platform with ROI, referrals, VIP rewards, and staking.",
   icons: {
     icon: "/logo.png",
   },

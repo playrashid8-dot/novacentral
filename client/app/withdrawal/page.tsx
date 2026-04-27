@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import AppToast from "../../components/AppToast";
 import { fetchCurrentUser } from "../../lib/session";
+import GradientButton from "../../components/GradientButton";
 import {
   claimHybridWithdraw,
   fetchHybridSummary,
@@ -64,6 +65,13 @@ export default function Withdrawal() {
 
   const spendableHybridBalance =
     Number(hybrid?.depositBalance || 0) + Number(hybrid?.rewardBalance || 0);
+
+  const formatCountdown = (availableAt: string) => {
+    const remaining = Math.max(0, new Date(availableAt).getTime() - Date.now());
+    const hours = Math.floor(remaining / (1000 * 60 * 60));
+    const minutes = Math.floor((remaining / (1000 * 60)) % 60);
+    return remaining > 0 ? `${hours}h ${minutes}m remaining` : "Ready to claim";
+  };
 
   const loadHybrid = async () => {
     const [hybridData, withdrawals] = await Promise.all([
@@ -186,7 +194,7 @@ export default function Withdrawal() {
         <div>
           <p className="text-[10px] uppercase tracking-[0.35em] text-purple-300/70">Secure Payout</p>
           <h1 className="text-2xl font-black bg-gradient-to-r from-purple-300 via-fuchsia-300 to-blue-300 bg-clip-text text-transparent">
-            Withdraw
+            HybridEarn Withdraw
           </h1>
         </div>
 
@@ -267,16 +275,14 @@ export default function Withdrawal() {
           </div>
 
           {/* BUTTON */}
-          <button
+          <GradientButton
             onClick={withdraw}
             disabled={loading}
-            className="mt-5 w-full bg-gradient-to-r from-[#7c3aed] via-[#a855f7] to-[#4f46e5] p-3 rounded-xl font-bold shadow-[0_0_30px_rgba(124,58,237,0.5)] hover:scale-105 hover:shadow-[0_0_42px_rgba(168,85,247,0.72)] transition-all duration-300 flex justify-center items-center gap-2"
+            loading={loading}
+            className="mt-5"
           >
-            {loading && (
-              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            )}
             {loading ? "Processing..." : "Withdraw"}
-          </button>
+          </GradientButton>
 
         </div>
       </motion.div>
@@ -292,7 +298,7 @@ export default function Withdrawal() {
               <p className="text-[10px] uppercase tracking-[0.25em] text-cyan-200/80">
                 HybridEarn
               </p>
-              <h3 className="mt-1 text-lg font-black text-white">96h Withdrawal</h3>
+              <h3 className="mt-1 text-lg font-black text-white">Pending Withdraw</h3>
             </div>
             <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-[10px] font-semibold text-purple-100">
               Level {Number(hybrid?.level || 0)}
@@ -312,6 +318,13 @@ export default function Withdrawal() {
                 ${Number(hybrid?.pendingWithdraw || 0).toFixed(2)}
               </p>
             </div>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-cyan-300/20 bg-cyan-400/10 p-3">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-200">96h Countdown</p>
+            <p className="mt-1 text-xs text-gray-300">
+              Pending withdrawals unlock after the protected 96h window.
+            </p>
           </div>
 
           <input
@@ -338,13 +351,14 @@ export default function Withdrawal() {
             className="w-full mt-3 bg-white/[0.06] border border-white/10 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/25 outline-none p-3 rounded-xl text-sm placeholder:text-gray-600"
           />
 
-          <button
+          <GradientButton
             onClick={requestHybrid}
             disabled={hybridLoading}
-            className="mt-5 w-full bg-gradient-to-r from-[#0891b2] via-[#7c3aed] to-[#d946ef] p-3 rounded-xl font-bold shadow-[0_0_30px_rgba(124,58,237,0.35)] disabled:opacity-60"
+            loading={hybridLoading}
+            className="mt-5 bg-gradient-to-r from-[#0891b2] via-[#7c3aed] to-[#d946ef]"
           >
             {hybridLoading ? "Processing..." : "Request Hybrid Withdrawal"}
-          </button>
+          </GradientButton>
 
           <div className="mt-4 space-y-2">
             {hybridWithdrawals.slice(0, 3).map((item: any) => (
@@ -359,6 +373,9 @@ export default function Withdrawal() {
                     </p>
                     <p className="text-[10px] text-gray-500">
                       Status: {item.status} | Fee: ${Number(item.feeAmount || 0).toFixed(2)}
+                    </p>
+                    <p className="text-[10px] text-cyan-300">
+                      96h countdown: {item.availableAt ? formatCountdown(item.availableAt) : "Pending"}
                     </p>
                   </div>
                   {(item.status === "claimable" ||

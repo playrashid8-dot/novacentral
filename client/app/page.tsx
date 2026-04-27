@@ -27,7 +27,7 @@ export default function Home() {
               className="rounded-full shadow-[0_0_12px_rgba(139,92,246,0.6)]"
             />
             <h1 className="font-bold text-lg bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
-              NovaCentral
+              HybridEarn
             </h1>
           </div>
 
@@ -50,7 +50,7 @@ export default function Home() {
           </h2>
 
           <p className="text-gray-400 text-sm mt-2">
-            Automated crypto earning system with ROI, referrals & smart rewards.
+            HybridEarn crypto earning system with ROI, referrals, staking, and smart rewards.
           </p>
 
           {/* CTA */}
@@ -71,7 +71,7 @@ export default function Home() {
 
         {/* FEATURES */}
         <div className="space-y-3 mb-6">
-          <Feature title="Daily ROI Income" desc="1% – 2.5% per day" />
+          <Feature title="HybridEarn Daily ROI" desc="1% - 2% per day" />
           <Feature title="Instant Deposit" desc="USDT auto credit system" />
           <Feature title="Secure Withdraw" desc="96h protected system" />
           <Feature title="Referral Income" desc="Multi-level earning" />
@@ -80,14 +80,14 @@ export default function Home() {
         {/* 💰 PLANS */}
         <div className="bg-white/5 border border-white/10 p-4 rounded-2xl mb-6">
           <h3 className="font-semibold mb-3 text-purple-400">
-            Investment Plans
+            HybridEarn VIP Plans
           </h3>
 
           <div className="grid grid-cols-2 gap-2 text-sm">
-            <Plan name="Basic" roi="1%" />
-            <Plan name="Silver" roi="1.5%" />
-            <Plan name="Gold" roi="2%" />
-            <Plan name="VIP" roi="2.5%" />
+            <Plan name="VIP 1" roi="1%" />
+            <Plan name="VIP 2" roi="1.5%" />
+            <Plan name="VIP 3" roi="2%" />
+            <Plan name="Staking" roi="1.3%-2.2%" />
           </div>
         </div>
 
@@ -103,7 +103,7 @@ export default function Home() {
           onClick={() => router.push("/signup")}
           className="w-full bg-gradient-to-r from-purple-500 via-indigo-500 to-cyan-500 p-3 rounded-xl font-semibold shadow-lg hover:scale-105 active:scale-95 transition"
         >
-          Join NovaCentral 🚀
+          Join HybridEarn
         </button>
 
       </div>

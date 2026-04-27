@@ -22,10 +22,10 @@ export default function Investment() {
   };
 
   const plans = [
-    { name: "Basic", key: "basic", days: 30, roi: 1, color: "from-purple-500 to-indigo-500" },
-    { name: "Silver", key: "silver", days: 45, roi: 1.5, color: "from-blue-500 to-cyan-500" },
-    { name: "Gold", key: "gold", days: 60, roi: 2, color: "from-green-500 to-emerald-500" },
-    { name: "VIP", key: "vip", days: 90, roi: 2.5, color: "from-yellow-500 to-orange-500" },
+    { name: "7d", key: "stake-7", days: 7, roi: 1.3, color: "from-purple-500 to-indigo-500" },
+    { name: "15d", key: "stake-15", days: 15, roi: 1.5, color: "from-blue-500 to-cyan-500" },
+    { name: "30d", key: "stake-30", days: 30, roi: 1.8, color: "from-green-500 to-emerald-500" },
+    { name: "60d", key: "stake-60", days: 60, roi: 2.2, color: "from-fuchsia-500 to-blue-500" },
   ];
 
   // 🔐 USER LOAD
@@ -50,7 +50,7 @@ export default function Investment() {
 
     try {
       setLoadingPlan(selectedPlan.key);
-      showToast("Legacy investment plans are disabled. Use HybridEarn staking.");
+      showToast("HybridEarn staking plans are coming soon.");
 
       setSelectedPlan(null);
       setAmount("");
@@ -76,7 +76,7 @@ export default function Investment() {
       {/* HEADER */}
       <div className="flex justify-between items-center mb-6 relative z-10">
         <h1 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
-          Investment Plans 📊
+          HybridEarn Staking
         </h1>
 
         <button
@@ -107,7 +107,7 @@ export default function Investment() {
             <div className="bg-[#0b0b0f] p-5 rounded-2xl">
 
               <div className="flex justify-between items-center">
-                <h2 className="font-bold text-lg">{plan.name}</h2>
+                <h2 className="font-bold text-lg">{plan.name} Staking</h2>
                 <span className="text-xs bg-white/10 px-2 py-1 rounded-lg">
                   {plan.days}D
                 </span>
@@ -133,7 +133,7 @@ export default function Investment() {
                 onClick={() => setSelectedPlan(plan)}
                 className="mt-4 w-full bg-gradient-to-r from-purple-500 to-indigo-500 p-2 rounded-xl text-sm font-semibold"
               >
-                Invest Now 🚀
+                Stake Now
               </button>
 
             </div>
@@ -154,11 +154,11 @@ export default function Investment() {
             <div className="bg-[#0b0b0f] p-5 rounded-2xl">
 
               <h2 className="font-bold text-lg mb-2">
-                Invest in {selectedPlan.name}
+                Stake in {selectedPlan.name}
               </h2>
 
               <p className="text-xs text-gray-400 mb-3">
-                Hybrid Balance: ${(Number(hybrid?.depositBalance || 0) + Number(hybrid?.rewardBalance || 0)).toFixed(2)}
+                HybridEarn Balance: ${(Number(hybrid?.depositBalance || 0) + Number(hybrid?.rewardBalance || 0)).toFixed(2)}
               </p>
 
               {/* QUICK AMOUNTS */}

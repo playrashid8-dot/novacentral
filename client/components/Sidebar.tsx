@@ -33,7 +33,7 @@ export default function Sidebar() {
           </div>
 
           <h1 className="text-lg font-bold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
-            NovaCentral
+            HybridEarn
           </h1>
         </div>
 
@@ -86,7 +86,7 @@ export default function Sidebar() {
         {/* ⚡ FOOTER */}
         <div className="mt-auto pt-6 border-t border-white/5">
           <p className="text-xs text-gray-500">
-            © 2026 NovaCentral
+            © 2026 HybridEarn
           </p>
         </div>
 

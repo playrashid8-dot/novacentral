@@ -40,7 +40,7 @@ export default function Loader({
         >
           <Image
             src="/logo.png"
-            alt="NovaCentral"
+            alt="HybridEarn"
             width={65}
             height={65}
             className="rounded-full shadow-[0_0_30px_rgba(168,85,247,0.8)]"
@@ -56,7 +56,7 @@ export default function Loader({
 
         {/* TEXT */}
         <p className="text-xs text-gray-400 mt-4 tracking-wide">
-          Loading NovaCentral...
+          Loading HybridEarn...
         </p>
 
       </div>

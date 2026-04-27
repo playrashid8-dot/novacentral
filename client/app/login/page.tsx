@@ -71,13 +71,13 @@ export default function Login() {
       <div className="absolute top-6 left-1/2 -translate-x-1/2 flex items-center gap-2">
         <Image
           src="/logo.png"
-          alt="NovaCentral"
+          alt="HybridEarn"
           width={36}
           height={36}
           className="rounded-full shadow-[0_0_20px_rgba(168,85,247,0.8)]"
         />
         <h1 className="font-bold text-lg bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
-          NovaCentral
+          HybridEarn
         </h1>
       </div>
 
@@ -90,9 +90,12 @@ export default function Login() {
         <div className="bg-[#0b0b0f]/90 backdrop-blur-xl p-6 rounded-3xl">
 
           {/* TITLE */}
-          <h2 className="text-2xl font-bold text-center mb-6 text-glow">
-            Welcome Back 🔐
+          <h2 className="text-2xl font-bold text-center mb-2 text-glow">
+            Welcome to HybridEarn
           </h2>
+          <p className="mb-6 text-center text-xs text-gray-400">
+            Premium glass access for daily ROI, referrals, and rewards.
+          </p>
 
           {/* USERNAME */}
           <Input

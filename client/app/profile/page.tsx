@@ -29,7 +29,7 @@ export default function Profile() {
       {/* HEADER */}
       <div className="flex justify-between items-center mb-6 relative z-10">
         <h1 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
-          Profile 👤
+          HybridEarn Profile
         </h1>
 
         <button

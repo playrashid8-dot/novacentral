@@ -124,7 +124,7 @@ function SignupInner() {
         <div className="bg-[#0b0b0f]/90 backdrop-blur-xl p-6 rounded-3xl">
 
           <h2 className="text-2xl font-bold text-center mb-6 bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent">
-            Create Account 🚀
+            Welcome to HybridEarn
           </h2>
 
           <Input label="Username" value={username} setValue={setUsername} />
@@ -167,13 +167,13 @@ function Header() {
     <div className="absolute top-6 left-1/2 -translate-x-1/2 flex items-center gap-2">
       <Image
         src="/logo.png"
-        alt="NovaCentral"
+        alt="HybridEarn"
         width={36}
         height={36}
         className="rounded-full shadow-[0_0_20px_rgba(168,85,247,0.8)]"
       />
       <h1 className="font-bold text-lg bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
-        NovaCentral
+        HybridEarn
       </h1>
     </div>
   );

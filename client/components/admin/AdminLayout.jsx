@@ -127,7 +127,7 @@ export default function AdminLayout({ title, subtitle, children }) {
     <AdminShell>
       <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-sm font-medium text-purple-300">NovaCentral Admin</p>
+          <p className="text-sm font-medium text-purple-300">HybridEarn Admin</p>
           <h1 className="mt-1 text-3xl font-bold text-white">{title}</h1>
           {subtitle ? <p className="mt-2 text-sm text-gray-400">{subtitle}</p> : null}
         </div>

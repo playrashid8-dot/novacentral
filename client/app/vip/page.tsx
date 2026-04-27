@@ -19,33 +19,32 @@ export default function VIP() {
   const vipLevels = [
     {
       name: "VIP 1",
-      min: 100,
-      bonus: "5% Deposit Bonus",
-      roi: "+0.2% ROI",
-      duration: "30 Days",
-      benefits: ["Priority activation", "Daily compounding", "Starter bonus"],
+      level: 1,
+      requirement: "Deposit ≥ 50",
+      roi: "1%",
+      benefits: ["Starter daily ROI", "HybridEarn access", "Deposit milestone"],
       color: "from-purple-500 to-indigo-500",
     },
     {
       name: "VIP 2",
-      min: 500,
-      bonus: "10% Deposit Bonus",
-      roi: "+0.5% ROI",
-      duration: "45 Days",
-      benefits: ["Boosted rewards", "Faster review", "Team multiplier"],
+      level: 2,
+      requirement: "5 direct + 15 team",
+      roi: "1.5%",
+      benefits: ["Higher daily ROI", "Team growth boost", "Premium badge"],
       color: "from-blue-500 to-cyan-500",
     },
     {
-      name: "VIP ULTRA",
-      min: 1000,
-      bonus: "15% Deposit Bonus",
-      roi: "+1% ROI",
-      duration: "60 Days",
-      benefits: ["Maximum ROI", "Premium glow status", "Exclusive rewards"],
+      name: "VIP 3",
+      level: 3,
+      requirement: "18 direct + 45 team",
+      roi: "2%",
+      benefits: ["Maximum daily ROI", "VIP Ultra glow", "Exclusive rewards"],
       color: "from-fuchsia-500 via-purple-500 to-blue-500",
       recommended: true,
     },
   ];
+
+  const currentLevel = Math.min(Math.max(Number(hybrid?.level || 1), 1), 3);
 
   return (
     <ProtectedRoute>
@@ -60,7 +59,7 @@ export default function VIP() {
         <div>
           <p className="text-[10px] uppercase tracking-[0.35em] text-purple-300/70">Premium Access</p>
           <h1 className="text-2xl font-black bg-gradient-to-r from-purple-300 via-fuchsia-300 to-blue-300 bg-clip-text text-transparent">
-            VIP Membership
+            HybridEarn VIP
           </h1>
         </div>
 
@@ -76,7 +75,7 @@ export default function VIP() {
       <div className="bg-gradient-to-br from-purple-500/20 via-indigo-500/10 to-blue-500/10 p-5 rounded-3xl border border-purple-300/30 text-center mb-6 backdrop-blur-2xl shadow-[0_0_50px_rgba(124,58,237,0.32)]">
         <p className="text-xs text-gray-400 uppercase tracking-[0.22em]">Your VIP Level</p>
         <h2 className="text-3xl font-black text-white mt-2 text-glow">
-          L{Number(hybrid?.level || 0)}
+          VIP {currentLevel}
         </h2>
 
         <p className="text-xs text-gray-500 mt-1">
@@ -87,32 +86,35 @@ export default function VIP() {
       <div className="grid grid-cols-2 gap-3 mb-6">
         <VIPMetric
           label="Hybrid Level"
-          value={`L${Number(hybrid?.level || 0)}`}
+          value={`VIP ${currentLevel}`}
         />
         <VIPMetric
           label="Hybrid ROI"
           value={`${(Number(hybrid?.roiRate || 0) * 100).toFixed(2)}%`}
         />
+        <VIPMetric label="Direct Team" value={hybrid?.directCount || 0} />
+        <VIPMetric label="Total Team" value={hybrid?.teamCount || 0} />
       </div>
 
       {/* VIP CARDS */}
       <div className="space-y-4 relative z-10">
 
         {vipLevels.map((vip, i) => {
-          const unlocked = Number(hybrid?.depositBalance || 0) >= vip.min;
+          const unlocked = currentLevel >= vip.level;
+          const current = currentLevel === vip.level;
 
           return (
             <motion.div
               key={i}
               whileHover={{ scale: 1.03 }}
               className={`p-[1px] rounded-3xl bg-gradient-to-r ${vip.color} ${
-                vip.recommended ? "vip-pulse shadow-[0_0_60px_rgba(168,85,247,0.45)]" : ""
+                current || vip.recommended ? "vip-pulse shadow-[0_0_60px_rgba(168,85,247,0.45)]" : ""
               }`}
             >
               <div className="bg-[#08080d]/95 p-5 rounded-3xl backdrop-blur-2xl relative overflow-hidden">
-                {vip.recommended && (
+                {current && (
                   <span className="absolute right-4 top-4 rounded-full bg-purple-500/20 border border-purple-300/40 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-purple-100">
-                    Recommended
+                    Current Level
                   </span>
                 )}
 
@@ -128,15 +130,11 @@ export default function VIP() {
 
                 <div className="grid grid-cols-2 gap-3 mt-5">
                   <VIPMetric label="ROI" value={vip.roi} />
-                  <VIPMetric label="Duration" value={vip.duration} />
+                  <VIPMetric label="Requirement" value={vip.requirement} />
                 </div>
 
                 <p className="text-xs text-gray-400 mt-4">
-                  Required Investment: <span className="font-bold text-white">${vip.min}</span>
-                </p>
-
-                <p className="text-sm text-green-300 mt-2">
-                  {vip.bonus}
+                  Requirement: <span className="font-bold text-white">{vip.requirement}</span>
                 </p>
 
                 <ul className="mt-4 space-y-2">
@@ -153,7 +151,7 @@ export default function VIP() {
                     onClick={() => router.push("/deposit")}
                     className="mt-5 w-full bg-gradient-to-r from-[#7c3aed] via-[#a855f7] to-[#4f46e5] p-3 rounded-xl text-sm font-bold shadow-[0_0_30px_rgba(124,58,237,0.5)] hover:scale-105 hover:shadow-[0_0_42px_rgba(168,85,247,0.72)] transition-all duration-300"
                   >
-                    Activate Plan
+                    Go to Deposit
                   </button>
                 )}
 
