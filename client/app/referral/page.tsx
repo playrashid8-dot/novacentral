@@ -6,12 +6,14 @@ import API, { getApiErrorMessage } from "../../lib/api";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import AppToast from "../../components/AppToast";
 import { fetchCurrentUser } from "../../lib/session";
+import { fetchHybridSummary } from "../../lib/hybrid";
 
 export default function Referral() {
   const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState("");
   const [stats, setStats] = useState<any>(null);
   const [user, setUser]: any = useState(null);
+  const [hybrid, setHybrid] = useState<any>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -21,11 +23,14 @@ export default function Referral() {
   useEffect(() => {
     const loadStats = async () => {
       try {
-        const fresh = await fetchCurrentUser();
+        const [fresh, res, hybridData] = await Promise.all([
+          fetchCurrentUser(),
+          API.get("/user/referral-stats"),
+          fetchHybridSummary().catch(() => null),
+        ]);
         if (fresh) setUser(fresh);
-
-        const res = await API.get("/user/referral-stats");
         setStats(res.data?.stats || null);
+        setHybrid(hybridData);
       } catch (err: any) {
         showToast(getApiErrorMessage(err, "Failed to load referral stats ❌"));
       }
@@ -99,6 +104,16 @@ export default function Referral() {
         <Stat title="Team Volume" value={`$${Number(stats?.teamVolume || 0).toFixed(2)}`} />
         <Stat title="Referral Code" value={stats?.referralCode || user?.referralCode || "-"} />
 
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 mt-3">
+        <Stat title="Hybrid Level" value={hybrid?.level || 0} />
+        <Stat
+          title="ROI Rate"
+          value={`${(Number(hybrid?.roiRate || 0) * 100).toFixed(2)}%`}
+        />
+        <Stat title="Salary Direct" value={hybrid?.salaryDirectCount || 0} />
+        <Stat title="Salary Team" value={hybrid?.salaryTeamCount || 0} />
       </div>
 
       {/* 📢 INFO */}

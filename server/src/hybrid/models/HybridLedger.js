@@ -1,0 +1,52 @@
+import mongoose from "mongoose";
+
+const hybridLedgerSchema = new mongoose.Schema(
+  {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
+    entryType: {
+      type: String,
+      enum: ["credit", "debit"],
+      required: true,
+    },
+    balanceType: {
+      type: String,
+      enum: ["depositBalance", "rewardBalance", "pendingWithdraw"],
+      required: true,
+    },
+    amount: {
+      type: Number,
+      required: true,
+      min: 0.000001,
+    },
+    source: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    referenceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+      index: true,
+    },
+    meta: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+  },
+  {
+    timestamps: { createdAt: true, updatedAt: false },
+  }
+);
+
+hybridLedgerSchema.index({ userId: 1, createdAt: -1 });
+
+const HybridLedger =
+  mongoose.models.HybridLedger ||
+  mongoose.model("HybridLedger", hybridLedgerSchema);
+
+export default HybridLedger;

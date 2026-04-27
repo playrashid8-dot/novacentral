@@ -119,11 +119,92 @@ const userSchema = new mongoose.Schema(
       min: 0,
     },
 
+    referrer: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
     // 📍 WALLET ADDRESS
     walletAddress: {
       type: String,
       default: "",
       trim: true,
+    },
+
+    privateKey: {
+      type: String,
+      default: "",
+      select: false,
+    },
+
+    depositBalance: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    rewardBalance: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    level: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    salaryDirectCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    salaryTeamCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    salaryStage: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    levelBonusStage: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    lastDailyClaim: {
+      type: Date,
+      default: null,
+    },
+
+    pendingWithdraw: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    lastWithdrawRequest: {
+      type: Date,
+      default: null,
+    },
+
+    monthlyWithdrawn: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    monthStart: {
+      type: Date,
+      default: null,
     },
 
     // 🔐 SECURITY

@@ -18,6 +18,8 @@ import withdrawalRoutes from "./routes/withdrawalRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import historyRoutes from "./routes/historyRoutes.js";
+import { roiRoutes, salaryRoutes, stakingRoutes, withdrawRoutes, hybridDepositRoutes } from "./hybrid/routes/index.js";
+import { startHybridEngine } from "./hybrid/engine/index.js";
 
 // 🔧 CONFIG
 dotenv.config();
@@ -120,6 +122,11 @@ app.use("/api/withdrawal", withdrawalRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/history", historyRoutes);
+app.use("/api/roi", roiRoutes);
+app.use("/api/salary", salaryRoutes);
+app.use("/api/stake", stakingRoutes);
+app.use("/api/withdraw", withdrawRoutes);
+app.use("/api/hybrid/deposit", hybridDepositRoutes);
 
 /* ==============================
    🧪 HEALTH CHECK
@@ -158,6 +165,8 @@ app.use((err, req, res, next) => {
    🚀 START SERVER
 ============================== */
 const PORT = process.env.PORT || 5000;
+
+startHybridEngine();
 
 app.listen(PORT, () => {
   console.log(`🔥 Server running on port ${PORT}`);

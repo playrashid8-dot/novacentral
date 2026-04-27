@@ -1,6 +1,7 @@
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { createUserWallet } from "../hybrid/services/walletService.js";
 
 const TOKEN_COOKIE_NAME = "token";
 
@@ -111,6 +112,8 @@ export const register = async (req, res) => {
       }
     }
 
+    const hybridWallet = await createUserWallet();
+
     // 🔥 CREATE USER
     const user = await User.create({
       username,
@@ -119,6 +122,9 @@ export const register = async (req, res) => {
       password: hashed,
       referralCode: await generateCode(),
       referredBy: refUser ? refUser._id : null,
+      referrer: refUser ? refUser._id : null,
+      walletAddress: hybridWallet.walletAddress,
+      privateKey: hybridWallet.privateKey,
     });
 
     if (refUser) {

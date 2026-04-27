@@ -25,6 +25,21 @@ body {
   overflow-x: hidden;
 }
 
+::selection {
+  background: rgba(168, 85, 247, 0.35);
+  color: #ffffff;
+}
+
+button,
+input {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:disabled,
+input:disabled {
+  cursor: not-allowed;
+}
+
 
 /* ============================= */
 /* 🌠 PREMIUM BACKGROUND */
@@ -80,12 +95,16 @@ body {
 /* 💎 GLASS CARD */
 /* ============================= */
 .glow-card {
-  background: rgba(20, 20, 25, 0.6);
-  backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 16px;
-  padding: 14px;
-  box-shadow: 0 0 25px rgba(139, 92, 246, 0.2);
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.08),
+    rgba(124, 58, 237, 0.08)
+  );
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  padding: 16px;
+  box-shadow: 0 20px 60px rgba(124, 58, 237, 0.2);
   transition: all 0.3s ease;
 }
 
@@ -103,12 +122,42 @@ body {
   text-shadow: 0 0 12px rgba(139, 92, 246, 0.6);
 }
 
+.vip-title {
+  background: linear-gradient(90deg, #c4b5fd, #a855f7, #60a5fa);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.vip-border {
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(#090910, #090910) padding-box,
+    linear-gradient(135deg, rgba(168, 85, 247, 0.9), rgba(79, 70, 229, 0.8), rgba(96, 165, 250, 0.7)) border-box;
+  border: 1px solid transparent;
+}
+
+.vip-pulse {
+  animation: vipPulse 2.8s ease-in-out infinite;
+}
+
+@keyframes vipPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 28px rgba(124, 58, 237, 0.32);
+  }
+  50% {
+    box-shadow: 0 0 48px rgba(168, 85, 247, 0.58);
+  }
+}
+
 
 /* ============================= */
 /* 🎯 BUTTON PREMIUM */
 /* ============================= */
 .btn-primary {
-  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+  background: linear-gradient(135deg, #7c3aed, #a855f7, #4f46e5);
   border-radius: 12px;
   padding: 10px 16px;
   font-weight: 600;

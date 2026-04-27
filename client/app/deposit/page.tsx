@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import AppToast from "../../components/AppToast";
 import { fetchCurrentUser } from "../../lib/session";
+import { fetchHybridSummary } from "../../lib/hybrid";
 
 export default function Deposit() {
   const router = useRouter();
@@ -17,6 +18,7 @@ export default function Deposit() {
   const [copied, setCopied] = useState(false);
   const [user, setUser]: any = useState(null);
   const [toast, setToast] = useState("");
+  const [hybrid, setHybrid]: any = useState(null);
   const idempotencyKeyRef = useRef("");
 
   const showToast = (msg: string) => {
@@ -40,13 +42,16 @@ export default function Deposit() {
     idempotencyKeyRef.current = "";
   };
 
-  const wallet = "0xEC4Edc0654Ee207F9dB9E1068d3adfE689362B64";
+  const wallet = hybrid?.walletAddress || user?.walletAddress || "";
 
   // 🔐 AUTH
   useEffect(() => {
-    fetchCurrentUser().then((fresh) => {
-      if (fresh) setUser(fresh);
-    });
+    Promise.all([fetchCurrentUser(), fetchHybridSummary().catch(() => null)]).then(
+      ([fresh, hybridData]) => {
+        if (fresh) setUser(fresh);
+        if (hybridData) setHybrid(hybridData);
+      }
+    );
   }, []);
 
   // 🚀 SUBMIT
@@ -95,6 +100,7 @@ export default function Deposit() {
 
   // 📋 COPY
   const copyWallet = async () => {
+    if (!wallet) return;
     await navigator.clipboard.writeText(wallet);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -111,13 +117,16 @@ export default function Deposit() {
 
       {/* HEADER */}
       <div className="flex justify-between items-center mb-6 relative z-10">
-        <h1 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
-          Deposit 💰
-        </h1>
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.35em] text-purple-300/70">Wallet Top Up</p>
+          <h1 className="text-2xl font-black bg-gradient-to-r from-purple-300 via-fuchsia-300 to-blue-300 bg-clip-text text-transparent">
+            Deposit
+          </h1>
+        </div>
 
         <button
           onClick={() => router.push("/dashboard")}
-          className="text-sm text-purple-400 hover:opacity-80"
+          className="text-sm text-purple-300 bg-white/[0.06] border border-white/10 rounded-full px-4 py-2 hover:bg-purple-500/15 transition-all duration-300"
         >
           Back
         </button>
@@ -127,10 +136,10 @@ export default function Deposit() {
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="bg-white/5 p-4 rounded-2xl border border-white/10 mb-6 text-center"
+        className="bg-gradient-to-br from-purple-500/20 via-indigo-500/10 to-blue-500/10 p-5 rounded-3xl border border-purple-300/30 mb-6 text-center backdrop-blur-2xl shadow-[0_0_45px_rgba(124,58,237,0.28)]"
       >
-        <p className="text-xs text-gray-400">Your Balance</p>
-        <h2 className="text-3xl font-bold text-green-400 mt-1">
+        <p className="text-xs text-gray-400 uppercase tracking-[0.22em]">Your Balance</p>
+        <h2 className="text-4xl font-black text-white mt-1 text-glow">
           ${Number(user?.balance || 0).toFixed(2)}
         </h2>
       </motion.div>
@@ -139,23 +148,35 @@ export default function Deposit() {
       <motion.div
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
-        className="p-[1px] rounded-2xl bg-gradient-to-r from-purple-500 to-indigo-500"
+        className="p-[1px] rounded-3xl bg-gradient-to-r from-purple-500 via-fuchsia-500 to-indigo-500 shadow-[0_0_45px_rgba(124,58,237,0.35)]"
       >
-        <div className="bg-[#0b0b0f]/90 backdrop-blur-xl p-5 rounded-2xl">
+        <div className="bg-[#08080d]/90 backdrop-blur-2xl p-5 rounded-3xl">
 
-          <p className="text-sm text-gray-400 mb-3">
-            Send USDT (BEP20 Network)
+          <div className="mb-4 flex items-center justify-between">
+            <p className="text-sm font-semibold text-white">
+              Send USDT
+            </p>
+            <span className="rounded-full border border-blue-300/20 bg-blue-400/10 px-3 py-1 text-[10px] font-bold text-blue-200">
+              BEP20
+            </span>
+          </div>
+
+          <p className="text-xs text-gray-400 mb-3">
+            Send USDT (BEP20 Network) to your assigned HybridEarn wallet
           </p>
 
           {/* WALLET */}
-          <div className="bg-black/40 p-3 rounded-xl border border-white/10 flex justify-between items-center">
-            <span className="truncate text-xs">{wallet}</span>
+          <div className="bg-black/40 p-3 rounded-2xl border border-white/10 flex justify-between items-center gap-3">
+            <span className="truncate text-xs text-gray-200">
+              {wallet || "Wallet generating..."}
+            </span>
 
             <button
               onClick={copyWallet}
-              className="text-xs px-2 py-1 rounded-lg bg-purple-500/20 text-purple-400"
+              disabled={!wallet}
+              className="text-xs px-3 py-2 rounded-xl bg-purple-500/20 text-purple-200 border border-purple-300/20 hover:bg-purple-500/30 transition"
             >
-              {copied ? "Copied ✅" : "Copy"}
+              {copied ? "Copied" : "Copy"}
             </button>
           </div>
 
@@ -169,7 +190,7 @@ export default function Deposit() {
                   resetSubmissionIdempotencyKey();
                   setAmount(String(val));
                 }}
-                className="bg-white/5 p-2 rounded-lg text-xs hover:bg-purple-500/20 transition"
+                className="bg-white/[0.06] border border-white/10 p-2 rounded-xl text-xs hover:scale-105 hover:bg-purple-500/20 hover:border-purple-300/30 transition-all duration-300"
               >
                 ${val}
               </button>
@@ -186,7 +207,7 @@ export default function Deposit() {
               resetSubmissionIdempotencyKey();
               setAmount(e.target.value);
             }}
-            className="w-full mt-4 bg-white/5 border border-white/10 focus:border-purple-500 outline-none p-3 rounded-xl text-sm"
+            className="w-full mt-4 bg-white/[0.06] border border-white/10 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/25 focus:shadow-[0_0_28px_rgba(124,58,237,0.3)] outline-none p-3 rounded-xl text-sm transition-all duration-300 placeholder:text-gray-600"
           />
 
           {/* TX HASH */}
@@ -199,35 +220,66 @@ export default function Deposit() {
               resetSubmissionIdempotencyKey();
               setTxHash(e.target.value);
             }}
-            className="w-full mt-3 bg-white/5 border border-white/10 focus:border-purple-500 outline-none p-3 rounded-xl text-sm"
+            className="w-full mt-3 bg-white/[0.06] border border-white/10 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/25 focus:shadow-[0_0_28px_rgba(124,58,237,0.3)] outline-none p-3 rounded-xl text-sm transition-all duration-300 placeholder:text-gray-600"
           />
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <span className="rounded-full bg-yellow-400/10 border border-yellow-300/20 px-3 py-1 text-[10px] font-semibold text-yellow-200">
+              Pending Review
+            </span>
+            <span className="rounded-full bg-green-400/10 border border-green-300/20 px-3 py-1 text-[10px] font-semibold text-green-200">
+              TX Hash Required
+            </span>
+          </div>
 
           {/* BUTTON */}
           <button
             onClick={handleDeposit}
             disabled={loading}
-            className="mt-5 w-full bg-gradient-to-r from-purple-500 to-indigo-500 p-3 rounded-xl font-semibold shadow-lg hover:scale-105 transition flex justify-center items-center gap-2"
+            className="mt-5 w-full bg-gradient-to-r from-[#7c3aed] via-[#a855f7] to-[#4f46e5] p-3 rounded-xl font-bold shadow-[0_0_30px_rgba(124,58,237,0.5)] hover:scale-105 hover:shadow-[0_0_42px_rgba(168,85,247,0.72)] transition-all duration-300 flex justify-center items-center gap-2"
           >
             {loading && (
               <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
             )}
-            {loading ? "Processing..." : "Submit Deposit 🚀"}
+            {loading ? "Processing..." : "Submit Deposit"}
           </button>
 
         </div>
       </motion.div>
 
       {/* INFO */}
-      <div className="mt-5 bg-white/5 p-4 rounded-2xl border border-white/10 text-sm">
-        <p className="text-yellow-400 font-semibold mb-2">⚠️ Important</p>
+      <div className="mt-5 bg-white/[0.06] p-4 rounded-2xl border border-white/10 text-sm backdrop-blur-2xl">
+        <p className="text-yellow-300 font-semibold mb-2">Important</p>
 
         <ul className="space-y-1 text-gray-400 text-xs">
-          <li>• Send only USDT (BEP20)</li>
-          <li>• Minimum deposit: $10</li>
-          <li>• Confirmation: 1–2 minutes</li>
-          <li>• Wrong network = loss</li>
+          <li>Send only USDT (BEP20)</li>
+          <li>Minimum deposit: $10</li>
+          <li>Confirmation: 1-2 minutes</li>
+          <li>Wrong network = loss</li>
         </ul>
       </div>
+
+      {!!hybrid?.deposits?.length && (
+        <div className="mt-5 bg-white/[0.06] p-4 rounded-2xl border border-white/10 backdrop-blur-2xl">
+          <p className="text-sm font-semibold text-white">Recent Hybrid Deposits</p>
+          <div className="mt-3 space-y-2">
+            {hybrid.deposits.slice(0, 3).map((deposit: any) => (
+              <div
+                key={deposit._id}
+                className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-3 py-3"
+              >
+                <div>
+                  <p className="text-xs text-white">${Number(deposit.amount || 0).toFixed(2)}</p>
+                  <p className="text-[10px] text-gray-500">{deposit.status}</p>
+                </div>
+                <p className="text-[10px] text-gray-500">
+                  {String(deposit.txHash || "").slice(0, 10)}...
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
     </div>
     </ProtectedRoute>
