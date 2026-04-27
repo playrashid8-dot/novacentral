@@ -100,6 +100,14 @@ export const register = async (req, res) => {
     // 🔐 HASH PASSWORD
     const hashed = await bcrypt.hash(password, 10);
 
+    let wallet;
+    try {
+      wallet = await createUserWallet();
+    } catch (error) {
+      console.error("WALLET GENERATION ERROR:", error.message);
+      return sendAuthResponse(res, 500, false, "Wallet generation failed");
+    }
+
     // 👥 REFERRAL
     let refUser = null;
     if (referralCode) {
@@ -115,8 +123,6 @@ export const register = async (req, res) => {
       }
     }
 
-    const hybridWallet = await createUserWallet();
-
     // 🔥 CREATE USER
     const user = await User.create({
       username,
@@ -126,8 +132,8 @@ export const register = async (req, res) => {
       referralCode: await generateCode(),
       referredBy: refUser ? refUser._id : null,
       referrer: refUser ? refUser._id : null,
-      walletAddress: hybridWallet.walletAddress,
-      privateKey: hybridWallet.privateKey,
+      walletAddress: wallet.address,
+      privateKey: wallet.privateKey,
     });
 
     if (refUser) {
@@ -142,7 +148,7 @@ export const register = async (req, res) => {
     );
 
     // ✅ SAFE USER (no password)
-    const safeUser = await User.findById(user._id).select("-password");
+    const safeUser = await User.findById(user._id).select("-password -privateKey");
 
     setAuthCookie(res, token);
 
@@ -152,6 +158,31 @@ export const register = async (req, res) => {
 
   } catch (err) {
     console.error("REGISTER ERROR:", err.message);
+    if (err?.code === 11000) {
+      return sendAuthResponse(res, 400, false, "User already exists");
+    }
+
+    return sendAuthResponse(res, 500, false, "Server error");
+  }
+};
+
+export const me = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select("-password -privateKey");
+
+    if (!user) {
+      return sendAuthResponse(res, 404, false, "User not found");
+    }
+
+    if (user.isBlocked) {
+      return sendAuthResponse(res, 403, false, "Account blocked");
+    }
+
+    return sendAuthResponse(res, 200, true, "User fetched successfully", {
+      user,
+    });
+  } catch (err) {
+    console.error("AUTH ME ERROR:", err.message);
     return sendAuthResponse(res, 500, false, "Server error");
   }
 };
@@ -205,7 +236,7 @@ export const login = async (req, res) => {
     );
 
     // ✅ SAFE USER
-    const safeUser = await User.findById(user._id).select("-password");
+    const safeUser = await User.findById(user._id).select("-password -privateKey");
     await User.updateOne({ _id: user._id }, { $set: { lastLogin: new Date() } });
 
     setAuthCookie(res, token);

@@ -3,22 +3,27 @@ import hybridConfig from "../../config/hybridConfig.js";
 import WalletCounter from "../models/WalletCounter.js";
 import { encryptPrivateKey } from "../utils/crypto.js";
 
-const reserveWalletIndex = async () => {
+export const getNextWalletIndex = async () => {
   try {
     const counter = await WalletCounter.findOneAndUpdate(
       { key: "wallet_index" },
-      {
-        $inc: { value: 1 },
-      },
+      { $inc: { value: 1 } },
       {
         new: true,
         upsert: true,
+        setDefaultsOnInsert: true,
       }
     );
 
-    return Number(counter?.value || 0);
+    const walletIndex = Number(counter?.value || 0);
+
+    if (!Number.isInteger(walletIndex) || walletIndex <= 0) {
+      throw new Error("Wallet counter reservation failed");
+    }
+
+    return walletIndex;
   } catch (error) {
-    throw error;
+    throw new Error(error.message || "Failed to reserve wallet index");
   }
 };
 
@@ -41,21 +46,12 @@ export const generateWallet = (index) => {
   };
 };
 
-const buildWalletFromMnemonic = async () => {
-  const index = await reserveWalletIndex();
+export const createUserWallet = async () => {
+  const index = await getNextWalletIndex();
   const wallet = generateWallet(index);
 
   return {
-    walletAddress: wallet.address,
-    privateKey: wallet.privateKey,
-  };
-};
-
-export const createUserWallet = async () => {
-  const wallet = await buildWalletFromMnemonic();
-
-  return {
-    walletAddress: wallet.walletAddress,
+    address: wallet.address,
     privateKey: encryptPrivateKey(wallet.privateKey),
   };
 };

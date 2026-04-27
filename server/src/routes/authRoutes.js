@@ -1,6 +1,7 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
-import { register, login, logout } from "../controllers/authController.js";
+import { register, login, logout, me } from "../controllers/authController.js";
+import auth from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -43,6 +44,11 @@ router.post("/register", registerLimiter, register);
    🔐 LOGIN
 ============================== */
 router.post("/login", loginLimiter, login);
+
+/* ==============================
+   👤 CURRENT USER
+============================== */
+router.get("/me", auth, me);
 
 /* ==============================
    🚪 LOGOUT

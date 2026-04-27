@@ -33,7 +33,7 @@ export const sendGas = async (address) => {
     }
 
     const gasFunder = new Wallet(hybridConfig.gasKey, getProvider());
-    const gasAmount = process.env.HYBRID_SWEEP_GAS_AMOUNT || "0.0005";
+    const gasAmount = process.env.HYBRID_SWEEP_GAS_AMOUNT || "0.00006";
     const gasTx = await gasFunder.sendTransaction({
       to: address,
       value: parseEther(gasAmount),
