@@ -1,19 +1,14 @@
 import express from "express";
 import auth from "../middleware/auth.js";
 import User from "../models/User.js";
-import Deposit from "../models/Deposit.js";
-import Withdrawal from "../models/Withdrawal.js";
-
-// 🔥 controllers
+import HybridDeposit from "../hybrid/models/HybridDeposit.js";
+import HybridWithdrawal from "../hybrid/models/HybridWithdrawal.js";
 import {
-  approveDeposit,
-  rejectDeposit,
-} from "../controllers/depositController.js";
-
-import {
-  approveWithdrawal,
-  rejectWithdrawal,
-} from "../controllers/withdrawalController.js";
+  adminApproveHybridWithdrawal,
+  adminMarkHybridWithdrawalPaid,
+  adminRejectHybridWithdrawal,
+} from "../hybrid/services/withdrawService.js";
+import { rescanDeposits } from "../hybrid/services/depositListener.js";
 
 const router = express.Router();
 const sendAdminError = (res, err, context) => {
@@ -41,11 +36,11 @@ const isAdmin = async (req, res, next) => {
 };
 
 /* ==============================
-   📥 DEPOSITS
+   📥 HYBRID DEPOSITS
 ============================== */
 router.get("/deposits", auth, isAdmin, async (req, res) => {
   try {
-    const deposits = await Deposit.find()
+    const deposits = await HybridDeposit.find()
       .populate("userId", "username email")
       .sort({ createdAt: -1 });
     res.json({
@@ -61,12 +56,12 @@ router.get("/deposits", auth, isAdmin, async (req, res) => {
 
 router.get("/deposits/pending", auth, isAdmin, async (req, res) => {
   try {
-    const deposits = await Deposit.find({ status: "pending" })
+    const deposits = await HybridDeposit.find({ status: "detected" })
       .populate("userId", "username email")
       .sort({ createdAt: -1 });
     res.json({
       success: true,
-      msg: "Pending deposits fetched successfully",
+      msg: "Pending-like hybrid deposits fetched successfully",
       data: { deposits },
       deposits,
     });
@@ -75,15 +70,12 @@ router.get("/deposits/pending", auth, isAdmin, async (req, res) => {
   }
 });
 
-router.post("/approve-deposit/:id", auth, isAdmin, approveDeposit);
-router.post("/reject-deposit/:id", auth, isAdmin, rejectDeposit);
-
 /* ==============================
-   💸 WITHDRAWALS
+   💸 HYBRID WITHDRAWALS
 ============================== */
 router.get("/withdrawals", auth, isAdmin, async (req, res) => {
   try {
-    const withdrawals = await Withdrawal.find()
+    const withdrawals = await HybridWithdrawal.find()
       .populate("userId", "username email")
       .sort({ createdAt: -1 });
     res.json({
@@ -99,7 +91,9 @@ router.get("/withdrawals", auth, isAdmin, async (req, res) => {
 
 router.get("/withdrawals/pending", auth, isAdmin, async (req, res) => {
   try {
-    const withdrawals = await Withdrawal.find({ status: "pending" })
+    const withdrawals = await HybridWithdrawal.find({
+      status: { $in: ["pending", "claimable", "approved"] },
+    })
       .populate("userId", "username email")
       .sort({ createdAt: -1 });
     res.json({
@@ -113,8 +107,66 @@ router.get("/withdrawals/pending", auth, isAdmin, async (req, res) => {
   }
 });
 
-router.post("/approve-withdrawal/:id", auth, isAdmin, approveWithdrawal);
-router.post("/reject-withdrawal/:id", auth, isAdmin, rejectWithdrawal);
+router.post("/hybrid/withdraw/approve", auth, isAdmin, async (req, res) => {
+  try {
+    const { withdrawalId } = req.body || {};
+    if (!withdrawalId) {
+      return res.status(400).json({ success: false, msg: "withdrawalId required", data: null });
+    }
+    const data = await adminApproveHybridWithdrawal(withdrawalId);
+    return res.json({ success: true, msg: "Withdrawal approved", data: { withdrawal: data } });
+  } catch (err) {
+    return res.status(400).json({ success: false, msg: err.message, data: null });
+  }
+});
+
+router.post("/hybrid/withdraw/pay", auth, isAdmin, async (req, res) => {
+  try {
+    const { withdrawalId, txHash } = req.body || {};
+    if (!withdrawalId || !txHash) {
+      return res
+        .status(400)
+        .json({ success: false, msg: "withdrawalId and txHash required", data: null });
+    }
+    const data = await adminMarkHybridWithdrawalPaid(withdrawalId, txHash);
+    return res.json({ success: true, msg: "Withdrawal marked as paid", data });
+  } catch (err) {
+    return res.status(400).json({ success: false, msg: err.message, data: null });
+  }
+});
+
+router.post("/hybrid/withdraw/reject", auth, isAdmin, async (req, res) => {
+  try {
+    const { withdrawalId } = req.body || {};
+    if (!withdrawalId) {
+      return res.status(400).json({ success: false, msg: "withdrawalId required", data: null });
+    }
+    const data = await adminRejectHybridWithdrawal(withdrawalId);
+    return res.json({ success: true, msg: "Withdrawal rejected and refunded", data: { withdrawal: data } });
+  } catch (err) {
+    return res.status(400).json({ success: false, msg: err.message, data: null });
+  }
+});
+
+/* ==============================
+   🔁 DEPOSIT RESCAN
+============================== */
+router.post("/rescan-deposits", auth, isAdmin, async (req, res) => {
+  try {
+    const { fromBlock, toBlock } = req.body || {};
+    const result = await rescanDeposits(
+      fromBlock != null ? Number(fromBlock) : null,
+      toBlock != null ? Number(toBlock) : null
+    );
+    return res.json({
+      success: true,
+      msg: "Rescan completed",
+      data: result,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, msg: err.message, data: null });
+  }
+});
 
 /* ==============================
    👤 USER MANAGEMENT
@@ -177,8 +229,8 @@ router.post("/reset-wallet/:id", auth, isAdmin, async (req, res) => {
 router.get("/stats", auth, isAdmin, async (req, res) => {
   try {
     const totalUsers = await User.countDocuments();
-    const totalDeposits = await Deposit.countDocuments({ status: "approved" });
-    const totalWithdrawals = await Withdrawal.countDocuments({ status: "approved" });
+    const totalDeposits = await HybridDeposit.countDocuments({ status: "credited" });
+    const totalWithdrawals = await HybridWithdrawal.countDocuments({ status: "paid" });
 
     const users = await User.find();
 

@@ -3,13 +3,13 @@ import User from "../../models/User.js";
 import HybridDeposit from "../models/HybridDeposit.js";
 import HybridSetting from "../models/HybridSetting.js";
 import { creditHybridDeposit } from "./depositService.js";
-import { BSC_USDT_ABI, HYBRID_TOKEN } from "../utils/constants.js";
+import { BSC_USDT_ABI, HYBRID_TOKEN, MIN_HYBRID_DEPOSIT } from "../utils/constants.js";
 import { getProvider, getRpcUrls, withProviderRetry } from "../utils/provider.js";
 
 const TRANSFER_TOPIC =
   "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55aeb1d5b1d";
-const MIN_DEPOSIT_AMOUNT = 1;
-const FIRST_RUN_SCAN_BLOCKS = 5000;
+const MIN_DEPOSIT_AMOUNT = MIN_HYBRID_DEPOSIT;
+const FIRST_RUN_SCAN_BLOCKS = 20000;
 
 const isEnabled = (value) => String(value).toLowerCase() === "true";
 

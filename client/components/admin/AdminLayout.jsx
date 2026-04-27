@@ -8,19 +8,53 @@ import Loader from "./Loader";
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
+let adminCsrfToken = null;
+
+const ensureAdminCsrf = async () => {
+  if (adminCsrfToken) return adminCsrfToken;
+  const r = await fetch(`${API_BASE}/csrf-token`, { credentials: "include" });
+  const payload = await r.json().catch(() => ({}));
+  adminCsrfToken = payload?.data?.csrfToken || null;
+  return adminCsrfToken;
+};
+
 export async function adminFetch(path, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
   const headers = { ...(options.headers || {}) };
   delete headers.Authorization;
   delete headers.authorization;
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...headers,
-    },
-  });
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && !String(path).includes("csrf-token")) {
+    const token = await ensureAdminCsrf();
+    if (token) {
+      headers["CSRF-Token"] = token;
+      headers["csrf-token"] = token;
+    }
+  }
+
+  const doFetch = () =>
+    fetch(`${API_BASE}${path}`, {
+      ...options,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...headers,
+      },
+    });
+
+  let response = await doFetch();
+
+  if (response.status === 403) {
+    adminCsrfToken = null;
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && !String(path).includes("csrf-token")) {
+      const token = await ensureAdminCsrf();
+      if (token) {
+        headers["CSRF-Token"] = token;
+        headers["csrf-token"] = token;
+      }
+      response = await doFetch();
+    }
+  }
 
   const contentType = response.headers.get("content-type") || "";
   const payload = contentType.includes("application/json")

@@ -54,3 +54,6 @@ export const BSC_USDT_ABI = [
   "function transfer(address to, uint256 value) returns (bool)",
   "function balanceOf(address account) view returns (uint256)",
 ];
+
+/** BEP20 deposit minimum (USDT) — must match deposit listener & UI */
+export const MIN_HYBRID_DEPOSIT = 1;

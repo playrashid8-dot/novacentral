@@ -139,7 +139,17 @@ export default function History() {
 
             {/* AMOUNT */}
             <p className="text-lg font-bold mt-1 text-green-400">
-              ${Number(item.amount || item.totalReward || 0).toFixed(2)}
+              $
+              {Number(
+                item.type === "withdrawal" || String(item.type || "").includes("withdraw")
+                  ? item.netAmount ?? item.amount
+                  : item.amount || item.totalReward || 0
+              ).toFixed(2)}
+              {item.type === "withdrawal" && item.grossAmount != null ? (
+                <span className="ml-1 text-xs font-normal text-gray-500">
+                  (net · gross ${Number(item.grossAmount).toFixed(2)})
+                </span>
+              ) : null}
             </p>
 
             {/* DATE */}
@@ -180,6 +190,8 @@ function getTypeColor(type: string) {
 function getStatusColor(status: string) {
   switch (status) {
     case "approved":
+    case "paid":
+    case "claimed":
     case "success":
       return "text-green-400";
     case "pending":

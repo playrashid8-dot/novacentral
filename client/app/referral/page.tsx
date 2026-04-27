@@ -53,7 +53,10 @@ export default function Referral() {
 
   const directCount = Number(hybrid?.salaryDirectCount || hybrid?.directCount || stats?.directCount || 0);
   const teamCount = Number(hybrid?.salaryTeamCount || hybrid?.teamCount || stats?.teamCount || 0);
-  const salaryComplete = directCount >= 5 && teamCount >= 15;
+  const stage1 = hybrid?.salaryRules?.[0];
+  const needDirect = Number(stage1?.directCount ?? 3);
+  const needTeam = Number(stage1?.teamCount ?? 10);
+  const salaryComplete = directCount >= needDirect && teamCount >= needTeam;
 
   const claimSalary = async () => {
     if (!salaryComplete || salaryLoading) return;
@@ -142,8 +145,8 @@ export default function Referral() {
       <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur-2xl">
         <p className="text-sm font-semibold text-white">Live Progress</p>
         <div className="mt-3 space-y-3">
-          <ProgressBar label="Direct" value={directCount} max={5} hint={`Direct: ${directCount} / 5`} />
-          <ProgressBar label="Team" value={teamCount} max={15} hint={`Team: ${teamCount} / 15`} />
+          <ProgressBar label="Direct" value={directCount} max={needDirect} hint={`Direct: ${directCount} / ${needDirect}`} />
+          <ProgressBar label="Team" value={teamCount} max={needTeam} hint={`Team: ${teamCount} / ${needTeam}`} />
         </div>
       </div>
 
@@ -169,10 +172,12 @@ export default function Referral() {
               {salaryComplete ? "Complete" : "In Progress"}
             </span>
           </div>
-          <p className="mt-3 text-xs text-gray-400">Requirement: 5 direct + 15 team</p>
+          <p className="mt-3 text-xs text-gray-400">
+            Requirement (stage 1): {needDirect} direct + {needTeam} team
+          </p>
           <div className="mt-4 space-y-3">
-            <ProgressBar label="Direct" value={directCount} max={5} />
-            <ProgressBar label="Team" value={teamCount} max={15} />
+            <ProgressBar label="Direct" value={directCount} max={needDirect} />
+            <ProgressBar label="Team" value={teamCount} max={needTeam} />
           </div>
           <GradientButton
             onClick={claimSalary}

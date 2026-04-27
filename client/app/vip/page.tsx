@@ -6,45 +6,80 @@ import { useEffect, useState } from "react";
 import { fetchHybridSummary } from "../../lib/hybrid";
 import ProtectedRoute from "../../components/ProtectedRoute";
 
+type LevelRule = {
+  level: number;
+  minDeposit: number;
+  directCount: number;
+  teamCount: number;
+  bonus: number;
+};
+
 export default function VIP() {
   const router = useRouter();
   const [hybrid, setHybrid]: any = useState(null);
 
   useEffect(() => {
-    fetchHybridSummary().then((hybridData) => {
-      if (hybridData) setHybrid(hybridData);
-    }).catch(() => null);
+    fetchHybridSummary()
+      .then((hybridData) => {
+        if (hybridData) setHybrid(hybridData);
+      })
+      .catch(() => null);
   }, []);
 
-  const vipLevels = [
-    {
-      name: "VIP 1",
-      level: 1,
-      requirement: "Deposit ≥ 50",
-      roi: "1%",
-      benefits: ["Starter daily ROI", "HybridEarn access", "Deposit milestone"],
-      color: "from-purple-500 to-indigo-500",
-    },
-    {
-      name: "VIP 2",
-      level: 2,
-      requirement: "5 direct + 15 team",
-      roi: "1.5%",
-      benefits: ["Higher daily ROI", "Team growth boost", "Premium badge"],
-      color: "from-blue-500 to-cyan-500",
-    },
-    {
-      name: "VIP 3",
-      level: 3,
-      requirement: "18 direct + 45 team",
-      roi: "2%",
-      benefits: ["Maximum daily ROI", "VIP Ultra glow", "Exclusive rewards"],
-      color: "from-fuchsia-500 via-purple-500 to-blue-500",
-      recommended: true,
-    },
-  ];
+  const levelRules: LevelRule[] = Array.isArray(hybrid?.levelRules) ? hybrid.levelRules : [];
+  const currentLevel = Number(hybrid?.level ?? 0);
 
-  const currentLevel = Math.min(Math.max(Number(hybrid?.level || 1), 1), 3);
+  const roiLabel = (level: number) =>
+    level === 1 ? "1%" : level === 2 ? "1.5%" : level === 3 ? "2%" : "—";
+
+  const vipLevels = levelRules.length
+    ? levelRules.map((rule) => ({
+        name: `VIP ${rule.level}`,
+        level: rule.level,
+        requirement: `Deposit ≥ ${rule.minDeposit} · ${rule.directCount} direct / ${rule.teamCount} team`,
+        roi: roiLabel(rule.level),
+        benefits: [
+          `Level ${rule.level} daily ROI`,
+          "HybridEarn access",
+          rule.bonus ? `Level bonus $${rule.bonus}` : "Team milestones",
+        ],
+        color:
+          rule.level === 1
+            ? "from-purple-500 to-indigo-500"
+            : rule.level === 2
+              ? "from-blue-500 to-cyan-500"
+              : "from-fuchsia-500 via-purple-500 to-blue-500",
+        recommended: rule.level === 3,
+      }))
+    : [
+        {
+          name: "VIP 1",
+          level: 1,
+          requirement: "Deposit ≥ 50",
+          roi: "1%",
+          benefits: ["Starter daily ROI", "HybridEarn access", "Deposit milestone"],
+          color: "from-purple-500 to-indigo-500",
+          recommended: false,
+        },
+        {
+          name: "VIP 2",
+          level: 2,
+          requirement: "5 direct + 15 team",
+          roi: "1.5%",
+          benefits: ["Higher daily ROI", "Team growth boost", "Premium badge"],
+          color: "from-blue-500 to-cyan-500",
+          recommended: false,
+        },
+        {
+          name: "VIP 3",
+          level: 3,
+          requirement: "18 direct + 45 team",
+          roi: "2%",
+          benefits: ["Maximum daily ROI", "VIP Ultra glow", "Exclusive rewards"],
+          color: "from-fuchsia-500 via-purple-500 to-blue-500",
+          recommended: true,
+        },
+      ];
 
   return (
     <ProtectedRoute>
@@ -75,7 +110,7 @@ export default function VIP() {
       <div className="bg-gradient-to-br from-purple-500/20 via-indigo-500/10 to-blue-500/10 p-5 rounded-3xl border border-purple-300/30 text-center mb-6 backdrop-blur-2xl shadow-[0_0_50px_rgba(124,58,237,0.32)]">
         <p className="text-xs text-gray-400 uppercase tracking-[0.22em]">Your VIP Level</p>
         <h2 className="text-3xl font-black text-white mt-2 text-glow">
-          VIP {currentLevel}
+          {currentLevel > 0 ? `VIP ${currentLevel}` : "Not ranked"}
         </h2>
 
         <p className="text-xs text-gray-500 mt-1">
@@ -86,7 +121,7 @@ export default function VIP() {
       <div className="grid grid-cols-2 gap-3 mb-6">
         <VIPMetric
           label="Hybrid Level"
-          value={`VIP ${currentLevel}`}
+          value={currentLevel > 0 ? `VIP ${currentLevel}` : "—"}
         />
         <VIPMetric
           label="Hybrid ROI"

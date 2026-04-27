@@ -12,9 +12,7 @@ import Table from "../../../components/admin/Table";
 export default function AdminDepositsPage() {
   const [deposits, setDeposits] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [processingId, setProcessingId] = useState("");
 
   const loadDeposits = async () => {
     try {
@@ -33,76 +31,41 @@ export default function AdminDepositsPage() {
     loadDeposits();
   }, []);
 
-  const approveDeposit = async (id) => {
-    if (processingId) return;
-
-    try {
-      setProcessingId(id);
-      setMessage("");
-      setError("");
-      const payload = await adminFetch(`/admin/approve-deposit/${id}`, {
-        method: "POST",
-      });
-      setMessage(payload?.msg || "Deposit approved successfully");
-      await loadDeposits();
-    } catch (err) {
-      setError(err.message || "Failed to approve deposit");
-    } finally {
-      setProcessingId("");
-    }
-  };
-
   return (
     <AdminLayout
-      title="Deposits"
-      subtitle="Review deposit requests and approve pending transactions."
+      title="Hybrid deposits"
+      subtitle="On-chain deposits detected by the hybrid listener (no manual approval)."
     >
-      <StatusMessage message={message} />
       <StatusMessage type="error" message={error} />
 
       {loading ? (
         <Loader label="Loading deposits..." />
       ) : (
         <Table
-          columns={["User", "Amount", "Status", "Action"]}
-          emptyText="No deposits found"
+          columns={["User", "Amount", "Tx", "Status"]}
+          emptyText="No hybrid deposits found"
         >
-          {deposits.map((deposit) => {
-            const isPending = deposit.status === "pending";
-            const isProcessing = processingId === deposit._id;
-
-            return (
-              <tr key={deposit._id} className="hover:bg-white/[0.03]">
-                <td className="whitespace-nowrap px-4 py-4">
-                  <div className="font-medium text-white">
-                    {getUserLabel(deposit.userId)}
-                  </div>
-                  {deposit.userId?.email ? (
-                    <div className="text-xs text-gray-500">{deposit.userId.email}</div>
-                  ) : null}
-                </td>
-                <td className="whitespace-nowrap px-4 py-4 text-green-300">
-                  {formatCurrency(deposit.amount)}
-                </td>
-                <td className="whitespace-nowrap px-4 py-4">
-                  <StatusBadge status={deposit.status} />
-                </td>
-                <td className="whitespace-nowrap px-4 py-4">
-                  {isPending ? (
-                    <button
-                      onClick={() => approveDeposit(deposit._id)}
-                      disabled={Boolean(processingId)}
-                      className="rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {isProcessing ? "Approving..." : "Approve"}
-                    </button>
-                  ) : (
-                    <span className="text-xs text-gray-500">No action</span>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
+          {deposits.map((deposit) => (
+            <tr key={deposit._id} className="hover:bg-white/[0.03]">
+              <td className="whitespace-nowrap px-4 py-4">
+                <div className="font-medium text-white">
+                  {getUserLabel(deposit.userId)}
+                </div>
+                {deposit.userId?.email ? (
+                  <div className="text-xs text-gray-500">{deposit.userId.email}</div>
+                ) : null}
+              </td>
+              <td className="whitespace-nowrap px-4 py-4 text-green-300">
+                {formatCurrency(deposit.amount)}
+              </td>
+              <td className="max-w-[200px] truncate px-4 py-4 font-mono text-xs text-gray-400">
+                {deposit.txHash || "-"}
+              </td>
+              <td className="whitespace-nowrap px-4 py-4">
+                <StatusBadge status={deposit.status} />
+              </td>
+            </tr>
+          ))}
         </Table>
       )}
     </AdminLayout>
@@ -112,11 +75,13 @@ export default function AdminDepositsPage() {
 function StatusBadge({ status }) {
   const normalized = status || "unknown";
   const color =
-    normalized === "approved"
+    normalized === "credited"
       ? "bg-green-500/15 text-green-300"
-      : normalized === "rejected"
+      : normalized === "failed"
         ? "bg-red-500/15 text-red-300"
-        : "bg-yellow-500/15 text-yellow-300";
+        : normalized === "swept"
+          ? "bg-blue-500/15 text-blue-200"
+          : "bg-yellow-500/15 text-yellow-300";
 
   return (
     <span className={`rounded-full px-3 py-1 text-xs capitalize ${color}`}>
@@ -125,7 +90,7 @@ function StatusBadge({ status }) {
   );
 }
 
-function StatusMessage({ type = "success", message }) {
+function StatusMessage({ type = "error", message }) {
   if (!message) return null;
 
   const styles =

@@ -104,7 +104,10 @@ export default function Dashboard() {
       )
     : 0;
 
-  const currentVipLevel = Math.min(Math.max(Number(hybrid?.level || 1), 1), 3);
+  const currentVipLevel = Number(hybrid?.level ?? 0);
+  const stage1Rule = hybrid?.salaryRules?.[0];
+  const salaryDirectNeed = Number(stage1Rule?.directCount ?? 3);
+  const salaryTeamNeed = Number(stage1Rule?.teamCount ?? 10);
   const totalEarnings = Number(
     user?.totalEarnings ??
       Number(hybrid?.rewardBalance || 0) + Number(user?.todayProfit || 0)
@@ -331,12 +334,16 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 gap-3">
           <EngineCard title="Daily ROI" value={`${(Number(hybrid?.roiRate || 0) * 100).toFixed(2)}%`} hint={roiCooldownMs > 0 ? "Cooldown active" : "Ready window"} />
           <EngineCard title="Referral Income" value={`$${Number(hybrid?.referralEarnings || 0).toFixed(2)}`} hint={`${Number(hybrid?.directCount || 0)} direct`} />
-          <EngineCard title="Salary Progress" value={`${directProgress}/5`} hint={`${teamProgress}/15 team`} />
+          <EngineCard
+            title="Salary Progress"
+            value={`${directProgress}/${salaryDirectNeed}`}
+            hint={`${teamProgress}/${salaryTeamNeed} team`}
+          />
           <EngineCard title="Staking Active" value={`$${Number(hybrid?.activeStakeAmount || 0).toFixed(2)}`} hint={`${activeStakes.length} active stakes`} />
         </div>
         <div className="mt-4 space-y-3">
-          <ProgressBar label="Direct" value={directProgress} max={5} />
-          <ProgressBar label="Team" value={teamProgress} max={15} />
+          <ProgressBar label="Direct" value={directProgress} max={salaryDirectNeed} />
+          <ProgressBar label="Team" value={teamProgress} max={salaryTeamNeed} />
         </div>
       </div>
 

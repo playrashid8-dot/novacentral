@@ -4,6 +4,12 @@ import { getUserStakes } from "../services/stakingService.js";
 import { getCurrentRoiRate } from "../services/roiService.js";
 import { refreshSalaryStage } from "../services/salaryService.js";
 import { sendError, sendSuccess } from "../utils/response.js";
+import {
+  LEVEL_RULES,
+  MIN_HYBRID_DEPOSIT,
+  SALARY_RULES,
+  WITHDRAW_MIN_AMOUNT,
+} from "../utils/constants.js";
 
 export const getHybridDepositDashboard = async (req, res) => {
   try {
@@ -26,16 +32,20 @@ export const getHybridDepositDashboard = async (req, res) => {
       .reduce((sum, stake) => sum + Number(stake.amount || 0), 0);
 
     return sendSuccess(res, "Hybrid deposit data fetched successfully", {
-      walletAddress: user.walletAddress || "",
+      walletAddress: (user.walletAddress || "").toLowerCase(),
       depositBalance: Number(user.depositBalance || 0),
       rewardBalance: Number(user.rewardBalance || 0),
       referralEarnings: Number(user.referralEarnings || 0),
       pendingWithdraw: Number(user.pendingWithdraw || 0),
+      minDepositAmount: MIN_HYBRID_DEPOSIT,
+      withdrawMinAmount: WITHDRAW_MIN_AMOUNT,
       level: Number(user.level || 0),
       roiRate: getCurrentRoiRate(user.level),
       salaryStage: Number(refreshedUser?.salaryStage ?? user.salaryStage ?? 0),
       salaryDirectCount: Number(user.salaryDirectCount || 0),
       salaryTeamCount: Number(user.salaryTeamCount || 0),
+      salaryRules: SALARY_RULES,
+      levelRules: LEVEL_RULES,
       directCount: Number(user.directCount || 0),
       teamCount: Number(user.teamCount || 0),
       activeStakeAmount,

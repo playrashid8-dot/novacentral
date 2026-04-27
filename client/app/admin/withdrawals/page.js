@@ -15,12 +15,13 @@ export default function AdminWithdrawalsPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [processingId, setProcessingId] = useState("");
+  const [payTxById, setPayTxById] = useState({});
 
   const loadWithdrawals = async () => {
     try {
       setLoading(true);
       setError("");
-      const payload = await adminFetch("/admin/withdrawals");
+      const payload = await adminFetch("/admin/withdrawals/pending");
       setWithdrawals(payload?.data?.withdrawals || payload?.withdrawals || []);
     } catch (err) {
       setError(err.message || "Failed to load withdrawals");
@@ -33,21 +34,64 @@ export default function AdminWithdrawalsPage() {
     loadWithdrawals();
   }, []);
 
-  const runAction = async (id, action) => {
+  const approve = async (id) => {
     if (processingId) return;
-
     try {
-      setProcessingId(`${action}:${id}`);
+      setProcessingId(`approve:${id}`);
       setMessage("");
       setError("");
-      const payload = await adminFetch(`/admin/${action}-withdrawal/${id}`, {
+      await adminFetch("/admin/hybrid/withdraw/approve", {
         method: "POST",
+        body: JSON.stringify({ withdrawalId: id }),
       });
-      const completed = action === "approve" ? "approved" : "rejected";
-      setMessage(payload?.msg || `Withdrawal ${completed} successfully`);
+      setMessage("Withdrawal approved");
       await loadWithdrawals();
     } catch (err) {
-      setError(err.message || `Failed to ${action} withdrawal`);
+      setError(err.message || "Failed to approve");
+    } finally {
+      setProcessingId("");
+    }
+  };
+
+  const markPaid = async (id) => {
+    if (processingId) return;
+    const txHash = String(payTxById[id] || "").trim();
+    if (!txHash) {
+      setError("Enter a transaction hash before marking paid");
+      return;
+    }
+    try {
+      setProcessingId(`pay:${id}`);
+      setMessage("");
+      setError("");
+      await adminFetch("/admin/hybrid/withdraw/pay", {
+        method: "POST",
+        body: JSON.stringify({ withdrawalId: id, txHash }),
+      });
+      setMessage("Marked as paid");
+      setPayTxById((prev) => ({ ...prev, [id]: "" }));
+      await loadWithdrawals();
+    } catch (err) {
+      setError(err.message || "Failed to mark paid");
+    } finally {
+      setProcessingId("");
+    }
+  };
+
+  const reject = async (id) => {
+    if (processingId) return;
+    try {
+      setProcessingId(`reject:${id}`);
+      setMessage("");
+      setError("");
+      await adminFetch("/admin/hybrid/withdraw/reject", {
+        method: "POST",
+        body: JSON.stringify({ withdrawalId: id }),
+      });
+      setMessage("Withdrawal rejected");
+      await loadWithdrawals();
+    } catch (err) {
+      setError(err.message || "Failed to reject");
     } finally {
       setProcessingId("");
     }
@@ -55,8 +99,8 @@ export default function AdminWithdrawalsPage() {
 
   return (
     <AdminLayout
-      title="Withdrawals"
-      subtitle="Approve or reject withdrawal requests from users."
+      title="Hybrid withdrawals"
+      subtitle="Approve after the 96h lock, send USDT manually, then record the tx hash."
     >
       <StatusMessage message={message} />
       <StatusMessage type="error" message={error} />
@@ -65,12 +109,15 @@ export default function AdminWithdrawalsPage() {
         <Loader label="Loading withdrawals..." />
       ) : (
         <Table
-          columns={["User", "Amount", "Wallet", "Status", "Actions"]}
-          emptyText="No withdrawals found"
+          columns={["User", "Gross", "Net", "Wallet", "Status", "Actions"]}
+          emptyText="No pending hybrid withdrawals"
         >
           {withdrawals.map((withdrawal) => {
-            const isPending = withdrawal.status === "pending";
+            const canApprove = ["pending", "claimable"].includes(withdrawal.status);
+            const canPay = withdrawal.status === "approved";
+            const canReject = ["pending", "claimable", "approved"].includes(withdrawal.status);
             const approving = processingId === `approve:${withdrawal._id}`;
+            const paying = processingId === `pay:${withdrawal._id}`;
             const rejecting = processingId === `reject:${withdrawal._id}`;
 
             return (
@@ -86,9 +133,12 @@ export default function AdminWithdrawalsPage() {
                   ) : null}
                 </td>
                 <td className="whitespace-nowrap px-4 py-4 text-green-300">
-                  {formatCurrency(withdrawal.amount)}
+                  {formatCurrency(withdrawal.grossAmount)}
                 </td>
-                <td className="max-w-[260px] px-4 py-4">
+                <td className="whitespace-nowrap px-4 py-4 text-cyan-200">
+                  {formatCurrency(withdrawal.netAmount)}
+                </td>
+                <td className="max-w-[220px] px-4 py-4">
                   <span className="block truncate text-gray-300">
                     {withdrawal.walletAddress || "-"}
                   </span>
@@ -96,22 +146,51 @@ export default function AdminWithdrawalsPage() {
                 <td className="whitespace-nowrap px-4 py-4">
                   <StatusBadge status={withdrawal.status} />
                 </td>
-                <td className="whitespace-nowrap px-4 py-4">
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => runAction(withdrawal._id, "approve")}
-                      disabled={!isPending || Boolean(processingId)}
-                      className="rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {approving ? "Approving..." : "Approve"}
-                    </button>
-                    <button
-                      onClick={() => runAction(withdrawal._id, "reject")}
-                      disabled={!isPending || Boolean(processingId)}
-                      className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {rejecting ? "Rejecting..." : "Reject"}
-                    </button>
+                <td className="min-w-[260px] px-4 py-4">
+                  <div className="flex flex-col gap-2">
+                    {canApprove && (
+                      <button
+                        type="button"
+                        onClick={() => approve(withdrawal._id)}
+                        disabled={Boolean(processingId)}
+                        className="rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {approving ? "Approving..." : "Approve"}
+                      </button>
+                    )}
+                    {canPay && (
+                      <div className="flex flex-col gap-2">
+                        <input
+                          className="rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-white"
+                          placeholder="Paste payout tx hash"
+                          value={payTxById[withdrawal._id] || ""}
+                          onChange={(e) =>
+                            setPayTxById((prev) => ({
+                              ...prev,
+                              [withdrawal._id]: e.target.value,
+                            }))
+                          }
+                        />
+                        <button
+                          type="button"
+                          onClick={() => markPaid(withdrawal._id)}
+                          disabled={Boolean(processingId)}
+                          className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {paying ? "Saving..." : "Mark paid"}
+                        </button>
+                      </div>
+                    )}
+                    {canReject && (
+                      <button
+                        type="button"
+                        onClick={() => reject(withdrawal._id)}
+                        disabled={Boolean(processingId)}
+                        className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {rejecting ? "Rejecting..." : "Reject & refund"}
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -126,11 +205,13 @@ export default function AdminWithdrawalsPage() {
 function StatusBadge({ status }) {
   const normalized = status || "unknown";
   const color =
-    normalized === "approved"
+    normalized === "paid" || normalized === "claimed"
       ? "bg-green-500/15 text-green-300"
       : normalized === "rejected"
         ? "bg-red-500/15 text-red-300"
-        : "bg-yellow-500/15 text-yellow-300";
+        : normalized === "approved"
+          ? "bg-blue-500/15 text-blue-200"
+          : "bg-yellow-500/15 text-yellow-300";
 
   return (
     <span className={`rounded-full px-3 py-1 text-xs capitalize ${color}`}>

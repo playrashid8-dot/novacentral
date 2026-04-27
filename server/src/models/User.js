@@ -130,6 +130,8 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
       trim: true,
+      lowercase: true,
+      index: true,
     },
 
     privateKey: {

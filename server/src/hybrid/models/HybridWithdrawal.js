@@ -27,12 +27,40 @@ const hybridWithdrawalSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+      lowercase: true,
+      index: true,
     },
     status: {
       type: String,
-      enum: ["pending", "claimable", "claimed", "rejected"],
+      enum: ["pending", "claimable", "claimed", "approved", "paid", "rejected"],
       default: "pending",
       index: true,
+    },
+    txHash: {
+      type: String,
+      default: null,
+      trim: true,
+      lowercase: true,
+      index: true,
+      sparse: true,
+    },
+    sourceRewardAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    sourceDepositAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    approvedAt: {
+      type: Date,
+      default: null,
+    },
+    paidAt: {
+      type: Date,
+      default: null,
     },
     availableAt: {
       type: Date,
@@ -69,6 +97,7 @@ const hybridWithdrawalSchema = new mongoose.Schema(
 );
 
 hybridWithdrawalSchema.index({ userId: 1, createdAt: -1 });
+hybridWithdrawalSchema.index({ status: 1, createdAt: -1 });
 hybridWithdrawalSchema.index(
   { userId: 1, idempotencyKey: 1 },
   {

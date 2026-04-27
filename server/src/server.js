@@ -2,6 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import csrf from "csurf";
 import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
@@ -23,6 +24,15 @@ import { startHybridEngine } from "./hybrid/engine/index.js";
 
 // 🔧 CONFIG
 dotenv.config();
+
+const csrfProtection = csrf({
+  cookie: {
+    key: "_csrf",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  },
+});
 
 const app = express();
 const allowedOrigins = [
@@ -58,8 +68,11 @@ app.use((req, res, next) => {
   }
 
   res.header("Access-Control-Allow-Credentials", "true");
-  res.header("Access-Control-Allow-Headers", "Content-Type");
-  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Content-Type, CSRF-Token, csrf-token, X-CSRF-Token, X-Requested-With"
+  );
+  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,PATCH,OPTIONS");
 
   if (req.method === "OPTIONS") {
     return res.sendStatus(204);
@@ -71,6 +84,14 @@ app.use((req, res, next) => {
 // ✅ BODY PARSER (LIMITED SIZE)
 app.use(express.json({ limit: "10kb" }));
 app.use(cookieParser());
+app.use("/api", csrfProtection);
+app.get("/api/csrf-token", (req, res) => {
+  res.json({
+    success: true,
+    msg: "ok",
+    data: { csrfToken: req.csrfToken() },
+  });
+});
 
 // ✅ HELMET (SECURITY HEADERS)
 app.use(helmet());
@@ -153,6 +174,13 @@ app.use((req, res) => {
    🔥 GLOBAL ERROR HANDLER
 ============================== */
 app.use((err, req, res, next) => {
+  if (err?.code === "EBADCSRFTOKEN") {
+    return res.status(403).json({
+      success: false,
+      msg: "Invalid or missing CSRF token",
+      data: null,
+    });
+  }
   console.error("❌ Server Error:", err.stack);
 
   res.status(err.status || 500).json({
