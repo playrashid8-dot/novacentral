@@ -11,7 +11,7 @@ export const getHybridDepositDashboard = async (req, res) => {
 
     const [user, deposits, stakes] = await Promise.all([
       User.findById(req.user._id).select(
-        "walletAddress depositBalance rewardBalance level pendingWithdraw salaryStage salaryDirectCount salaryTeamCount lastDailyClaim directCount teamCount"
+        "walletAddress depositBalance rewardBalance referralEarnings level pendingWithdraw salaryStage salaryDirectCount salaryTeamCount lastDailyClaim directCount teamCount"
       ),
       getUserHybridDeposits(req.user._id),
       getUserStakes(req.user._id),
@@ -29,6 +29,7 @@ export const getHybridDepositDashboard = async (req, res) => {
       walletAddress: user.walletAddress || "",
       depositBalance: Number(user.depositBalance || 0),
       rewardBalance: Number(user.rewardBalance || 0),
+      referralEarnings: Number(user.referralEarnings || 0),
       pendingWithdraw: Number(user.pendingWithdraw || 0),
       level: Number(user.level || 0),
       roiRate: getCurrentRoiRate(user.level),

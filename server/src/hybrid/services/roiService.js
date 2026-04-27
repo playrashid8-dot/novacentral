@@ -45,9 +45,17 @@ export const claimDailyRoi = async (userId) => {
       }
 
       const reward = Number((totalBase * roiRate).toFixed(8));
+      const claimCutoff = new Date(now.getTime() - ONE_DAY_MS);
 
-      await User.findByIdAndUpdate(
-        userId,
+      const updatedUser = await User.findOneAndUpdate(
+        {
+          _id: userId,
+          $or: [
+            { lastDailyClaim: null },
+            { lastDailyClaim: { $lte: claimCutoff } },
+            { lastDailyClaim: { $exists: false } },
+          ],
+        },
         {
           $inc: {
             rewardBalance: reward,
@@ -63,6 +71,10 @@ export const claimDailyRoi = async (userId) => {
           session,
         }
       );
+
+      if (!updatedUser) {
+        throw new Error("ROI claim available every 24 hours");
+      }
 
       await addHybridLedgerEntries(
         [

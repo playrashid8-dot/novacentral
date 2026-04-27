@@ -23,18 +23,22 @@ export const creditHybridDeposit = async ({
     throw new Error("Invalid deposit payload");
   }
 
-  const existing = await HybridDeposit.findOne({ txHash: normalizedTxHash });
-
-  if (existing && ["credited", "swept"].includes(existing.status)) {
-    return existing;
-  }
-
   const session = await mongoose.startSession();
 
   try {
     let deposit = null;
 
     await session.withTransaction(async () => {
+      const creditedDeposit = await HybridDeposit.findOne({
+        txHash: normalizedTxHash,
+        status: { $in: ["credited", "swept"] },
+      }).session(session);
+
+      if (creditedDeposit) {
+        deposit = creditedDeposit;
+        return;
+      }
+
       const user = await User.findById(userId)
         .select("depositBalance")
         .session(session);
@@ -50,9 +54,16 @@ export const creditHybridDeposit = async ({
 
       const isFirstQualifiedDeposit = qualifiedDepositCount === 0;
 
+      const existing = await HybridDeposit.findOne({
+        txHash: normalizedTxHash,
+      }).session(session);
+
       if (existing) {
         deposit = await HybridDeposit.findOneAndUpdate(
-          { _id: existing._id },
+          {
+            _id: existing._id,
+            status: { $nin: ["credited", "swept"] },
+          },
           {
             $set: {
               status: "credited",
@@ -69,6 +80,13 @@ export const creditHybridDeposit = async ({
             session,
           }
         );
+
+        if (!deposit) {
+          deposit = await HybridDeposit.findOne({
+            txHash: normalizedTxHash,
+          }).session(session);
+          return;
+        }
       } else {
         [deposit] = await HybridDeposit.create(
           [
@@ -134,6 +152,16 @@ export const creditHybridDeposit = async ({
     }
 
     return deposit;
+  } catch (error) {
+    if (error?.code === 11000) {
+      const existing = await HybridDeposit.findOne({ txHash: normalizedTxHash });
+
+      if (existing && ["credited", "swept"].includes(existing.status)) {
+        return existing;
+      }
+    }
+
+    throw error;
   } finally {
     session.endSession();
   }

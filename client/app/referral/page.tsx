@@ -70,7 +70,7 @@ export default function Referral() {
       >
         <p className="text-xs text-gray-400">Total Referral Earnings</p>
         <h2 className="text-3xl font-bold text-green-400 mt-1">
-          ${Number(stats?.referralEarnings || user?.referralEarnings || 0).toFixed(2)}
+          ${Number(hybrid?.referralEarnings || stats?.referralEarnings || user?.referralEarnings || 0).toFixed(2)}
         </h2>
       </motion.div>
 
@@ -99,8 +99,8 @@ export default function Referral() {
       {/* 📊 STATS */}
       <div className="grid grid-cols-2 gap-3">
 
-        <Stat title="Team Size" value={stats?.teamCount || 0} />
-        <Stat title="Direct Referrals" value={stats?.directCount || 0} />
+        <Stat title="Team Size" value={hybrid?.teamCount || stats?.teamCount || 0} />
+        <Stat title="Direct Referrals" value={hybrid?.directCount || stats?.directCount || 0} />
         <Stat title="Team Volume" value={`$${Number(stats?.teamVolume || 0).toFixed(2)}`} />
         <Stat title="Referral Code" value={stats?.referralCode || user?.referralCode || "-"} />
 

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import API, { getApiErrorMessage } from "../../lib/api";
+import { getApiErrorMessage } from "../../lib/api";
 import { motion } from "framer-motion";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import AppToast from "../../components/AppToast";
@@ -19,27 +19,10 @@ export default function Deposit() {
   const [user, setUser]: any = useState(null);
   const [toast, setToast] = useState("");
   const [hybrid, setHybrid]: any = useState(null);
-  const idempotencyKeyRef = useRef("");
 
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(""), 2500);
-  };
-
-  const createIdempotencyKey = () =>
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random()}`;
-
-  const getSubmissionIdempotencyKey = () => {
-    if (!idempotencyKeyRef.current) {
-      idempotencyKeyRef.current = createIdempotencyKey();
-    }
-    return idempotencyKeyRef.current;
-  };
-
-  const resetSubmissionIdempotencyKey = () => {
-    idempotencyKeyRef.current = "";
   };
 
   const wallet = hybrid?.walletAddress || user?.walletAddress || "";
@@ -64,32 +47,15 @@ export default function Deposit() {
       return showToast("Amount must be greater than 0");
     }
 
-    if (!txHash || txHash.trim().length < 20) {
-      return showToast("Invalid TX Hash");
+    if (!wallet) {
+      return showToast("Wallet is still generating");
     }
 
     try {
       setLoading(true);
-      const idempotencyKey = getSubmissionIdempotencyKey();
-
-      const res = await API.post(
-        "/deposit",
-        {
-          amount: amt,
-          txHash: txHash.trim().toLowerCase(),
-        },
-        {
-          headers: { "Idempotency-Key": idempotencyKey },
-        }
-      );
-
-      showToast(res?.data?.msg || "Deposit submitted successfully");
-
+      showToast("Deposit will credit automatically after BSC confirmation");
       setAmount("");
       setTxHash("");
-      resetSubmissionIdempotencyKey();
-
-      router.push("/dashboard");
 
     } catch (err: any) {
       showToast(getApiErrorMessage(err, "Deposit failed ❌"));
@@ -140,7 +106,7 @@ export default function Deposit() {
       >
         <p className="text-xs text-gray-400 uppercase tracking-[0.22em]">Your Balance</p>
         <h2 className="text-4xl font-black text-white mt-1 text-glow">
-          ${Number(user?.balance || 0).toFixed(2)}
+          ${(Number(hybrid?.depositBalance || 0) + Number(hybrid?.rewardBalance || 0)).toFixed(2)}
         </h2>
       </motion.div>
 
@@ -187,7 +153,6 @@ export default function Deposit() {
                 key={val}
                 disabled={loading}
                 onClick={() => {
-                  resetSubmissionIdempotencyKey();
                   setAmount(String(val));
                 }}
                 className="bg-white/[0.06] border border-white/10 p-2 rounded-xl text-xs hover:scale-105 hover:bg-purple-500/20 hover:border-purple-300/30 transition-all duration-300"
@@ -204,7 +169,6 @@ export default function Deposit() {
             value={amount}
             disabled={loading}
             onChange={(e) => {
-              resetSubmissionIdempotencyKey();
               setAmount(e.target.value);
             }}
             className="w-full mt-4 bg-white/[0.06] border border-white/10 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/25 focus:shadow-[0_0_28px_rgba(124,58,237,0.3)] outline-none p-3 rounded-xl text-sm transition-all duration-300 placeholder:text-gray-600"
@@ -213,11 +177,10 @@ export default function Deposit() {
           {/* TX HASH */}
           <input
             type="text"
-            placeholder="Transaction Hash"
+            placeholder="Optional note / transaction hash"
             value={txHash}
             disabled={loading}
             onChange={(e) => {
-              resetSubmissionIdempotencyKey();
               setTxHash(e.target.value);
             }}
             className="w-full mt-3 bg-white/[0.06] border border-white/10 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/25 focus:shadow-[0_0_28px_rgba(124,58,237,0.3)] outline-none p-3 rounded-xl text-sm transition-all duration-300 placeholder:text-gray-600"
@@ -225,10 +188,10 @@ export default function Deposit() {
 
           <div className="mt-4 flex flex-wrap gap-2">
             <span className="rounded-full bg-yellow-400/10 border border-yellow-300/20 px-3 py-1 text-[10px] font-semibold text-yellow-200">
-              Pending Review
+              Auto Listener
             </span>
             <span className="rounded-full bg-green-400/10 border border-green-300/20 px-3 py-1 text-[10px] font-semibold text-green-200">
-              TX Hash Required
+              No Manual Approval
             </span>
           </div>
 

@@ -3,6 +3,9 @@ import User from "../models/User.js";
 
 export const runDailyROI = async () => {
   try {
+    console.log("Legacy Daily ROI disabled; HybridEarn ROI claim is active");
+    return;
+
     const now = new Date();
 
     console.log("⏳ Running Daily ROI...");

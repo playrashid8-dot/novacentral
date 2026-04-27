@@ -1,7 +1,7 @@
 import express from "express";
 import auth from "../middleware/auth.js";
 import User from "../models/User.js";
-import Investment from "../models/Investment.js";
+import { getCurrentRoiRate } from "../hybrid/services/roiService.js";
 
 const router = express.Router();
 
@@ -37,7 +37,7 @@ router.get("/me", auth, async (req, res) => {
 router.get("/stats", auth, async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select(
-      "balance totalInvested totalWithdraw totalEarnings todayProfit isBlocked vipLevel directCount"
+      "depositBalance rewardBalance pendingWithdraw referralEarnings todayProfit isBlocked level directCount teamCount"
     );
 
     if (!user) {
@@ -48,16 +48,25 @@ router.get("/stats", auth, async (req, res) => {
       return res.status(403).json({ msg: "Account blocked" });
     }
 
+    const depositBalance = Number(user.depositBalance || 0);
+    const rewardBalance = Number(user.rewardBalance || 0);
+
     res.json({
       success: true,
       stats: {
-        balance: user.balance,
-        totalInvested: user.totalInvested,
-        totalWithdraw: user.totalWithdraw,
-        totalEarnings: user.totalEarnings,
+        balance: depositBalance + rewardBalance,
+        depositBalance,
+        rewardBalance,
+        pendingWithdraw: Number(user.pendingWithdraw || 0),
+        totalInvested: depositBalance,
+        totalWithdraw: Number(user.pendingWithdraw || 0),
+        totalEarnings: rewardBalance,
         todayProfit: user.todayProfit,
-        vipLevel: user.vipLevel,
+        vipLevel: user.level,
+        level: Number(user.level || 0),
+        roiRate: getCurrentRoiRate(user.level),
         directCount: user.directCount,
+        teamCount: user.teamCount,
       },
     });
 
@@ -75,7 +84,7 @@ router.get("/dashboard", auth, async (req, res) => {
     const userId = req.user._id;
 
     const user = await User.findById(userId).select(
-      "balance totalEarnings todayProfit vipLevel directCount"
+      "depositBalance rewardBalance pendingWithdraw referralEarnings todayProfit level directCount teamCount"
     );
 
     if (!user) {
@@ -86,32 +95,28 @@ router.get("/dashboard", auth, async (req, res) => {
       return res.status(403).json({ msg: "Account blocked" });
     }
 
-    // 🔥 INVESTMENTS
-    const investments = await Investment.find({ userId });
-
-    let totalInvested = 0;
-    let totalEarned = 0;
-    let activePlans = 0;
-
-    investments.forEach((inv) => {
-      totalInvested += inv.amount;
-      totalEarned += inv.totalEarned || 0;
-      if (inv.status === "active") activePlans++;
-    });
+    const depositBalance = Number(user.depositBalance || 0);
+    const rewardBalance = Number(user.rewardBalance || 0);
 
     res.json({
       success: true,
       dashboard: {
-        balance: user.balance,
+        balance: depositBalance + rewardBalance,
+        depositBalance,
+        rewardBalance,
+        pendingWithdraw: Number(user.pendingWithdraw || 0),
         todayProfit: user.todayProfit,
-        totalEarned: user.totalEarnings,
+        totalEarned: rewardBalance,
 
-        totalInvested,
-        investmentProfit: totalEarned,
+        totalInvested: depositBalance,
+        investmentProfit: 0,
 
-        activePlans,
+        activePlans: 0,
         directCount: user.directCount,
-        vipLevel: user.vipLevel,
+        teamCount: user.teamCount,
+        vipLevel: user.level,
+        level: Number(user.level || 0),
+        roiRate: getCurrentRoiRate(user.level),
       },
     });
 

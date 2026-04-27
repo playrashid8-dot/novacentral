@@ -2,13 +2,20 @@ import crypto from "crypto";
 
 const getSecret = () =>
   process.env.HYBRID_PRIVATE_KEY_ENCRYPTION_SECRET ||
-  process.env.JWT_SECRET ||
-  "novacentral-hybrid-default-secret";
+  process.env.JWT_SECRET;
 
 const getKey = () =>
-  crypto.createHash("sha256").update(String(getSecret())).digest();
+  crypto.createHash("sha256").update(String(getSecret() || "")).digest();
+
+const assertSecretConfigured = () => {
+  if (!getSecret()) {
+    throw new Error("Hybrid private key encryption secret missing");
+  }
+};
 
 export const encryptText = (value = "") => {
+  assertSecretConfigured();
+
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", getKey(), iv);
   const encrypted = Buffer.concat([
@@ -22,6 +29,7 @@ export const encryptText = (value = "") => {
 
 export const decryptText = (payload = "") => {
   if (!payload) return "";
+  assertSecretConfigured();
 
   const [ivHex, authTagHex, encryptedHex] = String(payload).split(":");
 

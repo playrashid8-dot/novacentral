@@ -174,6 +174,11 @@ const userSchema = new mongoose.Schema(
       min: 0,
     },
 
+    claimedSalaryStages: {
+      type: [Number],
+      default: [],
+    },
+
     levelBonusStage: {
       type: Number,
       default: 0,
@@ -233,6 +238,7 @@ const userSchema = new mongoose.Schema(
 userSchema.methods.toJSON = function () {
   const obj = this.toObject();
   delete obj.password;
+  delete obj.privateKey;
   return obj;
 };
 

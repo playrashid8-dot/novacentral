@@ -8,6 +8,12 @@ import { distributeReferralIncome } from "../utils/referral.js";
 //
 export const createInvestment = async (req, res) => {
   try {
+    return res.status(400).json({
+      success: false,
+      msg: "Legacy investments are disabled. HybridEarn is the active earning system.",
+      data: null,
+    });
+
     let { amount, plan } = req.body;
 
     amount = Number(amount);

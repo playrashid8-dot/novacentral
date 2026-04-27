@@ -8,6 +8,9 @@ const vipLevels = [
 
 export const updateVIP = async (userId) => {
   try {
+    console.log("Legacy VIP bonuses disabled; HybridEarn level bonuses are active");
+    return;
+
     const user = await User.findById(userId);
 
     if (!user) return;

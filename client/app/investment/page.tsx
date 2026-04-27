@@ -2,11 +2,10 @@
 
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
-import API, { getApiErrorMessage } from "../../lib/api";
 import { useRouter } from "next/navigation";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import AppToast from "../../components/AppToast";
-import { fetchCurrentUser } from "../../lib/session";
+import { fetchHybridSummary } from "../../lib/hybrid";
 
 export default function Investment() {
   const router = useRouter();
@@ -14,7 +13,7 @@ export default function Investment() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
   const [amount, setAmount] = useState("");
-  const [user, setUser]: any = useState(null);
+  const [hybrid, setHybrid]: any = useState(null);
   const [toast, setToast] = useState("");
 
   const showToast = (msg: string) => {
@@ -31,9 +30,9 @@ export default function Investment() {
 
   // 🔐 USER LOAD
   useEffect(() => {
-    fetchCurrentUser()
-      .then((fresh) => {
-        if (fresh) setUser(fresh);
+    fetchHybridSummary()
+      .then((hybridData) => {
+        if (hybridData) setHybrid(hybridData);
       })
       .catch(() => {
         router.replace("/login");
@@ -45,17 +44,13 @@ export default function Investment() {
     const amt = Number(amount);
 
     if (!amt || amt < 10) return showToast("Minimum investment is $10");
-    if (amt > (user?.balance || 0)) return showToast("Insufficient balance");
+    if (amt > (Number(hybrid?.depositBalance || 0) + Number(hybrid?.rewardBalance || 0))) {
+      return showToast("Insufficient Hybrid balance");
+    }
 
     try {
       setLoadingPlan(selectedPlan.key);
-
-      await API.post("/investment", {
-        amount: amt,
-        plan: selectedPlan.key,
-      });
-
-      showToast("Investment started 🚀");
+      showToast("Legacy investment plans are disabled. Use HybridEarn staking.");
 
       setSelectedPlan(null);
       setAmount("");
@@ -63,7 +58,7 @@ export default function Investment() {
       router.refresh?.();
 
     } catch (err: any) {
-      showToast(getApiErrorMessage(err, "Investment failed ❌"));
+      showToast("Investment disabled");
     } finally {
       setLoadingPlan(null);
     }
@@ -96,7 +91,7 @@ export default function Investment() {
       <div className="bg-white/5 p-4 rounded-2xl border border-white/10 text-center mb-6">
         <p className="text-xs text-gray-400">Available Balance</p>
         <h2 className="text-3xl font-bold text-green-400">
-          ${Number(user?.balance || 0).toFixed(2)}
+          ${(Number(hybrid?.depositBalance || 0) + Number(hybrid?.rewardBalance || 0)).toFixed(2)}
         </h2>
       </div>
 
@@ -163,7 +158,7 @@ export default function Investment() {
               </h2>
 
               <p className="text-xs text-gray-400 mb-3">
-                Balance: ${Number(user?.balance || 0).toFixed(2)}
+                Hybrid Balance: ${(Number(hybrid?.depositBalance || 0) + Number(hybrid?.rewardBalance || 0)).toFixed(2)}
               </p>
 
               {/* QUICK AMOUNTS */}

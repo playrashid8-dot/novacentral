@@ -1,9 +1,9 @@
 import express from "express";
 import auth from "../middleware/auth.js";
 import User from "../models/User.js";
-import Investment from "../models/Investment.js";
-import Deposit from "../models/Deposit.js";
-import Withdrawal from "../models/Withdrawal.js";
+import HybridDeposit from "../hybrid/models/HybridDeposit.js";
+import HybridWithdrawal from "../hybrid/models/HybridWithdrawal.js";
+import { getCurrentRoiRate } from "../hybrid/services/roiService.js";
 
 const router = express.Router();
 
@@ -17,24 +17,14 @@ router.get("/", auth, async (req, res) => {
     // 🔍 USER
     const user = await User.findById(userId);
 
-    // 📈 INVESTMENTS
-    const investments = await Investment.find({ userId });
+    if (!user) {
+      return res.status(404).json({ success: false, msg: "User not found", data: null });
+    }
 
-    let totalInvested = 0;
-    let totalEarned = 0;
-    let activePlans = 0;
-
-    investments.forEach((inv) => {
-      totalInvested += inv.amount;
-      totalEarned += inv.totalEarned || 0;
-
-      if (inv.status === "active") activePlans++;
-    });
-
-    // 💰 DEPOSITS
-    const deposits = await Deposit.find({
+    // 💰 HYBRID DEPOSITS
+    const deposits = await HybridDeposit.find({
       userId,
-      status: "approved",
+      status: { $in: ["credited", "swept"] },
     });
 
     let totalDeposited = 0;
@@ -42,39 +32,46 @@ router.get("/", auth, async (req, res) => {
       totalDeposited += d.amount;
     });
 
-    // 💸 WITHDRAWALS
-    const withdrawals = await Withdrawal.find({
+    // 💸 HYBRID WITHDRAWALS
+    const withdrawals = await HybridWithdrawal.find({
       userId,
-      status: "approved",
+      status: "claimed",
     });
 
     let totalWithdrawn = 0;
     withdrawals.forEach((w) => {
-      totalWithdrawn += w.amount;
+      totalWithdrawn += Number(w.grossAmount || 0);
     });
 
     // 👥 REFERRALS
     const directUsers = await User.find({ referredBy: userId });
 
-    const referralIncome =
-      user.totalEarnings - totalEarned; // approx split
+    const depositBalance = Number(user.depositBalance || 0);
+    const rewardBalance = Number(user.rewardBalance || 0);
+    const hybridBalance = depositBalance + rewardBalance;
 
     res.json({
       success: true,
       dashboard: {
-        balance: user.balance,
-        todayProfit: user.todayProfit,
+        balance: hybridBalance,
+        depositBalance,
+        rewardBalance,
+        pendingWithdraw: Number(user.pendingWithdraw || 0),
+        todayProfit: Number(user.todayProfit || 0),
 
-        totalInvested,
-        totalEarned,
+        totalInvested: depositBalance,
+        totalEarned: rewardBalance,
         totalDeposited,
         totalWithdrawn,
 
-        activePlans,
+        activePlans: 0,
         directCount: directUsers.length,
+        teamCount: Number(user.teamCount || 0),
 
-        referralIncome,
-        vipLevel: user.vipLevel,
+        referralIncome: Number(user.referralEarnings || 0),
+        vipLevel: user.level,
+        level: Number(user.level || 0),
+        roiRate: getCurrentRoiRate(user.level),
       },
     });
 

@@ -50,7 +50,9 @@ export default function Dashboard() {
       if (!data) throw new Error("No user data");
 
       setUser(data);
-      setDisplayBalance(data.balance || 0);
+      setDisplayBalance(
+        Number(hybridData?.depositBalance || 0) + Number(hybridData?.rewardBalance || 0)
+      );
       setHybrid(hybridData);
     } catch (err: any) {
       if (!silent) {
@@ -64,17 +66,10 @@ export default function Dashboard() {
 
   /* 💰 LIVE BALANCE */
   useEffect(() => {
-    if (!user?.balance) return;
-
-    let current = user.balance;
-
-    const interval = setInterval(() => {
-      current += current * 0.00005;
-      setDisplayBalance(current);
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [user]);
+    setDisplayBalance(
+      Number(hybrid?.depositBalance || 0) + Number(hybrid?.rewardBalance || 0)
+    );
+  }, [hybrid]);
 
   /* ⏱️ COOLDOWN */
   useEffect(() => {
@@ -188,8 +183,8 @@ export default function Dashboard() {
         </h1>
 
         <div className="grid grid-cols-2 gap-3 mt-5">
-          <MiniMetric title="Total Earnings" value={user?.totalEarnings} />
-          <MiniMetric title="ROI Today" value={user?.todayProfit} />
+          <MiniMetric title="Deposit Balance" value={hybrid?.depositBalance} />
+          <MiniMetric title="Reward Balance" value={hybrid?.rewardBalance} />
         </div>
 
         {cooldown > 0 && (
@@ -204,7 +199,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-3 gap-3 mt-6">
         <Action label="Deposit" icon="↓" onClick={() => router.push("/deposit")} />
         <Action label="Withdraw" icon="↑" onClick={() => router.push("/withdrawal")} />
-        <Action label="Invest" icon="◆" onClick={() => router.push("/investment")} />
+        <Action label="Stake" icon="◆" onClick={() => router.push("/investment")} />
       </div>
 
       <div className="mt-6 p-[1px] rounded-3xl bg-gradient-to-r from-cyan-500/60 via-purple-500/70 to-fuchsia-500/70 shadow-[0_0_35px_rgba(124,58,237,0.25)]">
@@ -254,10 +249,10 @@ export default function Dashboard() {
 
       {/* STATS */}
       <div className="grid grid-cols-2 gap-3 mt-6">
-        <Stat title="Earnings" value={user?.totalEarnings} />
+        <Stat title="Rewards" value={hybrid?.rewardBalance} />
         <Stat title="Today" value={user?.todayProfit} />
-        <Stat title="Invested" value={user?.totalInvested} />
-        <Stat title="Withdrawn" value={user?.totalWithdraw} />
+        <Stat title="Deposits" value={hybrid?.depositBalance} />
+        <Stat title="Pending" value={hybrid?.pendingWithdraw} />
       </div>
 
       {/* RECENT ACTIVITY */}
@@ -274,7 +269,7 @@ export default function Dashboard() {
         <div className="space-y-3">
           <Activity title="Balance Updated" value={`$${displayBalance.toFixed(2)}`} />
           <Activity title="Today ROI" value={`$${Number(user?.todayProfit || 0).toFixed(2)}`} />
-          <Activity title="Total Invested" value={`$${Number(user?.totalInvested || 0).toFixed(2)}`} />
+          <Activity title="Hybrid Deposits" value={`$${Number(hybrid?.depositBalance || 0).toFixed(2)}`} />
         </div>
       </div>
 

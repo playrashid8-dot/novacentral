@@ -50,10 +50,21 @@ export const syncUserLevel = async (userId, session = null) => {
     };
   }
 
-  const updatedUser = await User.findByIdAndUpdate(userId, update, {
-    new: true,
-    session,
-  });
+  const updatedUser = await User.findOneAndUpdate(
+    {
+      _id: userId,
+      levelBonusStage: currentBonusStage,
+    },
+    update,
+    {
+      new: true,
+      session,
+    }
+  );
+
+  if (!updatedUser) {
+    return User.findById(userId).session(session);
+  }
 
   if (bonusTotal > 0) {
     await addHybridLedgerEntries(

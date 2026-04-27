@@ -20,6 +20,12 @@ export const createWithdrawal = async (req, res) => {
   let session;
 
   try {
+    return res.status(400).json({
+      success: false,
+      msg: "Legacy withdrawals are disabled. Use the HybridEarn withdrawal API.",
+      data: null,
+    });
+
     let { amount, walletAddress } = req.body;
     const idempotencyKey = getIdempotencyKey(req);
 
@@ -267,6 +273,12 @@ export const approveWithdrawal = async (req, res) => {
   const session = await mongoose.startSession();
 
   try {
+    return res.status(400).json({
+      success: false,
+      msg: "Legacy withdrawal processing is disabled. HybridEarn withdrawals are active.",
+      data: null,
+    });
+
     let withdrawal;
 
     await session.withTransaction(async () => {
@@ -336,6 +348,12 @@ export const rejectWithdrawal = async (req, res) => {
   const session = await mongoose.startSession();
 
   try {
+    return res.status(400).json({
+      success: false,
+      msg: "Legacy withdrawal processing is disabled. HybridEarn withdrawals are active.",
+      data: null,
+    });
+
     let withdrawal;
 
     await session.withTransaction(async () => {

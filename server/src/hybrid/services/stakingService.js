@@ -57,8 +57,12 @@ export const createStake = async (userId, amount, planDays) => {
         { session }
       );
 
-      await User.findByIdAndUpdate(
-        userId,
+      const updatedUser = await User.findOneAndUpdate(
+        {
+          _id: userId,
+          rewardBalance: { $gte: sourceBreakdown.rewardBalance },
+          depositBalance: { $gte: sourceBreakdown.depositBalance },
+        },
         {
           $inc: {
             rewardBalance: -sourceBreakdown.rewardBalance,
@@ -70,6 +74,10 @@ export const createStake = async (userId, amount, planDays) => {
           session,
         }
       );
+
+      if (!updatedUser) {
+        throw new Error("Insufficient Hybrid balance");
+      }
 
       const ledgerEntries = [];
 
@@ -135,8 +143,13 @@ export const claimStake = async (userId, stakeId) => {
 
       const payout = Number((Number(stake.amount) + Number(stake.totalReward)).toFixed(8));
 
-      await HybridStake.findByIdAndUpdate(
-        stake._id,
+      const claimedStake = await HybridStake.findOneAndUpdate(
+        {
+          _id: stake._id,
+          userId,
+          status: "active",
+          endAt: { $lte: new Date() },
+        },
         {
           $set: {
             status: "claimed",
@@ -148,6 +161,10 @@ export const claimStake = async (userId, stakeId) => {
           session,
         }
       );
+
+      if (!claimedStake) {
+        throw new Error("Stake already claimed");
+      }
 
       await User.findByIdAndUpdate(
         userId,

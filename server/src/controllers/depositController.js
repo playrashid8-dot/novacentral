@@ -38,6 +38,12 @@ const logControllerError = (action, req, err) => {
 //
 export const createDeposit = async (req, res) => {
   try {
+    return res.status(400).json({
+      success: false,
+      msg: "Manual legacy deposits are disabled. Send USDT to your HybridEarn wallet.",
+      data: null,
+    });
+
     console.log("USER:", req.user);
     console.log("BODY:", req.body);
 
@@ -180,6 +186,12 @@ export const approveDeposit = async (req, res) => {
   const session = await mongoose.startSession();
 
   try {
+    return res.status(400).json({
+      success: false,
+      msg: "Manual legacy deposit approval is disabled. HybridEarn listener credits deposits automatically.",
+      data: null,
+    });
+
     let deposit;
 
     // 🔒 ATOMIC UPDATE (avoid double approve)

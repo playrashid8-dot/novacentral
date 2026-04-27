@@ -5,11 +5,13 @@ import { addHybridLedgerEntries } from "./ledgerService.js";
 
 const getHighestSalaryRule = (user) => {
   let matchedRule = null;
+  const claimedStages = new Set((user.claimedSalaryStages || []).map(Number));
 
   for (const rule of SALARY_RULES) {
     if (
       Number(user.salaryDirectCount || 0) >= rule.directCount &&
-      Number(user.salaryTeamCount || 0) >= rule.teamCount
+      Number(user.salaryTeamCount || 0) >= rule.teamCount &&
+      !claimedStages.has(rule.stage)
     ) {
       matchedRule = rule;
     }
@@ -20,7 +22,7 @@ const getHighestSalaryRule = (user) => {
 
 export const refreshSalaryStage = async (userId, session = null) => {
   const user = await User.findById(userId)
-    .select("salaryDirectCount salaryTeamCount salaryStage")
+    .select("salaryDirectCount salaryTeamCount salaryStage claimedSalaryStages")
     .session(session);
 
   if (!user) {
@@ -53,7 +55,7 @@ export const claimSalary = async (userId) => {
     await session.withTransaction(async () => {
       const user = await User.findById(userId)
         .select(
-          "salaryDirectCount salaryTeamCount salaryStage rewardBalance totalEarnings"
+          "salaryDirectCount salaryTeamCount salaryStage claimedSalaryStages rewardBalance totalEarnings"
         )
         .session(session);
 
@@ -67,17 +69,23 @@ export const claimSalary = async (userId) => {
         throw new Error("Salary stage not reached");
       }
 
-      await User.findByIdAndUpdate(
-        userId,
+      const updatedUser = await User.findOneAndUpdate(
+        {
+          _id: userId,
+          salaryDirectCount: { $gte: rule.directCount },
+          salaryTeamCount: { $gte: rule.teamCount },
+          claimedSalaryStages: { $ne: rule.stage },
+        },
         {
           $inc: {
             rewardBalance: rule.amount,
             totalEarnings: rule.amount,
           },
           $set: {
-            salaryDirectCount: 0,
-            salaryTeamCount: 0,
             salaryStage: 0,
+          },
+          $addToSet: {
+            claimedSalaryStages: rule.stage,
           },
         },
         {
@@ -85,6 +93,10 @@ export const claimSalary = async (userId) => {
           session,
         }
       );
+
+      if (!updatedUser) {
+        throw new Error("Salary already claimed");
+      }
 
       await addHybridLedgerEntries(
         [

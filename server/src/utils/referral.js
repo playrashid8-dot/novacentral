@@ -8,6 +8,9 @@ import { updateVIP } from "./vip.js";
  */
 export const distributeReferralIncome = async (userId, amount) => {
   try {
+    console.log("Legacy referral income disabled; HybridEarn referral rewards are active");
+    return;
+
     // ✅ VALIDATION
     if (!userId || !amount || amount <= 0) {
       console.log("⚠️ Invalid referral input");

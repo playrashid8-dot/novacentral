@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import API, { getApiErrorMessage } from "../../lib/api";
+import { getApiErrorMessage } from "../../lib/api";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import ProtectedRoute from "../../components/ProtectedRoute";
@@ -62,6 +62,9 @@ export default function Withdrawal() {
     hybridIdempotencyKeyRef.current = "";
   };
 
+  const spendableHybridBalance =
+    Number(hybrid?.depositBalance || 0) + Number(hybrid?.rewardBalance || 0);
+
   const loadHybrid = async () => {
     const [hybridData, withdrawals] = await Promise.all([
       fetchHybridSummary().catch(() => null),
@@ -77,6 +80,7 @@ export default function Withdrawal() {
     Promise.all([fetchCurrentUser(), loadHybrid()]).then(([fresh]) => {
       if (fresh) {
         setUser(fresh);
+        setWalletAddress(fresh.walletAddress || "");
         setHybridWalletAddress(fresh.walletAddress || "");
       }
     });
@@ -92,8 +96,8 @@ export default function Withdrawal() {
       return showToast("Amount must be greater than 0");
     }
 
-    if (amt > (user?.balance || 0)) {
-      return showToast("Insufficient balance");
+    if (amt > spendableHybridBalance) {
+      return showToast("Insufficient Hybrid balance");
     }
 
     if (!walletAddress || walletAddress.trim().length < 8) {
@@ -102,23 +106,18 @@ export default function Withdrawal() {
 
     try {
       setLoading(true);
-      const idempotencyKey = getSubmissionIdempotencyKey();
-
-      const res = await API.post(
-        "/withdrawal",
+      await requestHybridWithdraw(
         {
           amount: amt,
           walletAddress: walletAddress.trim(),
         },
-        {
-          headers: { "Idempotency-Key": idempotencyKey },
-        }
+        getSubmissionIdempotencyKey()
       );
 
-      showToast(res?.data?.msg || "Withdrawal requested");
+      showToast("Hybrid withdrawal requested");
+      setAmount("");
       resetSubmissionIdempotencyKey();
-
-      router.push("/dashboard");
+      await loadHybrid();
 
     } catch (err: any) {
       showToast(getApiErrorMessage(err, "Failed ❌"));
@@ -203,7 +202,7 @@ export default function Withdrawal() {
       <div className="bg-gradient-to-br from-purple-500/20 via-indigo-500/10 to-blue-500/10 p-5 rounded-3xl border border-purple-300/30 text-center mb-6 backdrop-blur-2xl shadow-[0_0_45px_rgba(124,58,237,0.28)]">
         <p className="text-xs text-gray-400 uppercase tracking-[0.22em]">Available Balance</p>
         <h2 className="text-4xl font-black text-white text-glow">
-          ${Number(user?.balance || 0).toFixed(2)}
+          ${spendableHybridBalance.toFixed(2)}
         </h2>
       </div>
 

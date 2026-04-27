@@ -3,22 +3,17 @@
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { fetchCurrentUser } from "../../lib/session";
 import { fetchHybridSummary } from "../../lib/hybrid";
 import ProtectedRoute from "../../components/ProtectedRoute";
 
 export default function VIP() {
   const router = useRouter();
-  const [user, setUser]: any = useState(null);
   const [hybrid, setHybrid]: any = useState(null);
 
   useEffect(() => {
-    Promise.all([fetchCurrentUser(), fetchHybridSummary().catch(() => null)]).then(
-      ([fresh, hybridData]) => {
-        if (fresh) setUser(fresh);
-        if (hybridData) setHybrid(hybridData);
-      }
-    );
+    fetchHybridSummary().then((hybridData) => {
+      if (hybridData) setHybrid(hybridData);
+    }).catch(() => null);
   }, []);
 
   const vipLevels = [
@@ -81,11 +76,11 @@ export default function VIP() {
       <div className="bg-gradient-to-br from-purple-500/20 via-indigo-500/10 to-blue-500/10 p-5 rounded-3xl border border-purple-300/30 text-center mb-6 backdrop-blur-2xl shadow-[0_0_50px_rgba(124,58,237,0.32)]">
         <p className="text-xs text-gray-400 uppercase tracking-[0.22em]">Your VIP Level</p>
         <h2 className="text-3xl font-black text-white mt-2 text-glow">
-          {user?.vipLevel || "Basic"}
+          L{Number(hybrid?.level || 0)}
         </h2>
 
         <p className="text-xs text-gray-500 mt-1">
-          Total Invested: ${Number(user?.totalInvested || 0).toFixed(2)}
+          Deposit Balance: ${Number(hybrid?.depositBalance || 0).toFixed(2)}
         </p>
       </div>
 
@@ -104,7 +99,7 @@ export default function VIP() {
       <div className="space-y-4 relative z-10">
 
         {vipLevels.map((vip, i) => {
-          const unlocked = (user?.totalInvested || 0) >= vip.min;
+          const unlocked = Number(hybrid?.depositBalance || 0) >= vip.min;
 
           return (
             <motion.div

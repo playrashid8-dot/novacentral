@@ -64,6 +64,10 @@ export const requestHybridWithdrawal = async (
         throw new Error("Upgrade to level 1 to withdraw");
       }
 
+      if (Number(user.pendingWithdraw || 0) > 0) {
+        throw new Error("Pending withdrawal must be completed first");
+      }
+
       if (getSpendableHybridBalance(user) < numericAmount) {
         throw new Error("Insufficient Hybrid balance");
       }
@@ -98,8 +102,13 @@ export const requestHybridWithdrawal = async (
         { session }
       );
 
-      await User.findByIdAndUpdate(
-        userId,
+      const updatedUser = await User.findOneAndUpdate(
+        {
+          _id: userId,
+          pendingWithdraw: { $lte: 0 },
+          rewardBalance: { $gte: sourceBreakdown.rewardBalance },
+          depositBalance: { $gte: sourceBreakdown.depositBalance },
+        },
         {
           $inc: {
             rewardBalance: -sourceBreakdown.rewardBalance,
@@ -117,6 +126,10 @@ export const requestHybridWithdrawal = async (
           session,
         }
       );
+
+      if (!updatedUser) {
+        throw new Error("Insufficient Hybrid balance or pending withdrawal exists");
+      }
 
       const ledgerEntries = [
         {
@@ -212,8 +225,13 @@ export const claimHybridWithdrawal = async (userId, withdrawalId) => {
         throw new Error("Withdrawal is still locked for 96 hours");
       }
 
-      await HybridWithdrawal.findByIdAndUpdate(
-        withdrawal._id,
+      const claimedWithdrawal = await HybridWithdrawal.findOneAndUpdate(
+        {
+          _id: withdrawal._id,
+          userId,
+          status: { $in: ["pending", "claimable"] },
+          availableAt: { $lte: new Date() },
+        },
         {
           $set: {
             status: "claimed",
@@ -226,8 +244,15 @@ export const claimHybridWithdrawal = async (userId, withdrawalId) => {
         }
       );
 
-      await User.findByIdAndUpdate(
-        userId,
+      if (!claimedWithdrawal) {
+        throw new Error("Withdrawal already claimed");
+      }
+
+      const updatedUser = await User.findOneAndUpdate(
+        {
+          _id: userId,
+          pendingWithdraw: { $gte: Number(withdrawal.grossAmount || 0) },
+        },
         {
           $inc: {
             pendingWithdraw: -Number(withdrawal.grossAmount || 0),
@@ -238,6 +263,10 @@ export const claimHybridWithdrawal = async (userId, withdrawalId) => {
           session,
         }
       );
+
+      if (!updatedUser) {
+        throw new Error("Pending withdrawal balance mismatch");
+      }
 
       await addHybridLedgerEntries(
         [
