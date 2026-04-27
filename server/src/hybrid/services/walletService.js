@@ -4,18 +4,22 @@ import WalletCounter from "../models/WalletCounter.js";
 import { encryptPrivateKey } from "../utils/crypto.js";
 
 const reserveWalletIndex = async () => {
-  const counter = await WalletCounter.findOneAndUpdate(
-    { key: "wallet_index" },
-    {
-      $inc: { value: 1 },
-    },
-    {
-      new: true,
-      upsert: true,
-    }
-  );
+  try {
+    const counter = await WalletCounter.findOneAndUpdate(
+      { key: "wallet_index" },
+      {
+        $inc: { value: 1 },
+      },
+      {
+        new: true,
+        upsert: true,
+      }
+    );
 
-  return Number(counter?.value || 0);
+    return Number(counter?.value || 0);
+  } catch (error) {
+    throw error;
+  }
 };
 
 export const generateWallet = (index) => {
