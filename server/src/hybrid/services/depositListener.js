@@ -155,10 +155,7 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
             continue;
           }
 
-          const existing = await HybridDeposit.findOne({
-            txHash,
-            userId: matchedUser._id,
-          })
+          const existing = await HybridDeposit.findOne({ txHash })
             .select("_id status")
             .lean();
 
@@ -235,9 +232,13 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
         break;
       }
 
-      if (!isManualRescan && logs.length > 0) {
-        await saveLastProcessedBlock(toBlock);
-        console.log("Deposit listener checkpoint saved:", { blockNumber: toBlock });
+      if (!isManualRescan) {
+        try {
+          await saveLastProcessedBlock(toBlock);
+          console.log("Checkpoint saved:", toBlock);
+        } catch (err) {
+          console.error("Checkpoint save failed:", err);
+        }
       }
     }
 
