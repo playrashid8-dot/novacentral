@@ -41,7 +41,7 @@ const hybridWithdrawalSchema = new mongoose.Schema(
       default: null,
       trim: true,
       lowercase: true,
-      index: true,
+      unique: true,
       sparse: true,
     },
     sourceRewardAmount: {
@@ -57,6 +57,18 @@ const hybridWithdrawalSchema = new mongoose.Schema(
     approvedAt: {
       type: Date,
       default: null,
+    },
+    approvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+    paidBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
     },
     paidAt: {
       type: Date,

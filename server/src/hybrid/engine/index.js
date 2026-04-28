@@ -1,8 +1,10 @@
 import { scanHybridDeposits } from "../services/depositListener.js";
 import { runHybridSweepBatch } from "../services/sweepService.js";
+import { autoMarkClaimable } from "../services/withdrawService.js";
 
 let hybridTimer = null;
 let sweepTimer = null;
+let claimableTimer = null;
 let isRunning = false;
 let sweepRunning = false;
 
@@ -76,8 +78,23 @@ export const startDepositListener = () => {
   runSweepEngine();
   sweepTimer = setInterval(runSweepEngine, sweepEngineMs);
 
+  const claimableMs = Number(
+    process.env.HYBRID_CLAIMABLE_INTERVAL_MS ||
+      process.env.HYBRID_CLAIMABLE_MARK_INTERVAL_MS ||
+      60000
+  );
+  const runAutoClaimable = async () => {
+    try {
+      await autoMarkClaimable();
+    } catch (err) {
+      console.error("❌ autoMarkClaimable error:", err);
+    }
+  };
+  void runAutoClaimable();
+  claimableTimer = setInterval(runAutoClaimable, claimableMs);
+
   console.log(
-    `HYBRID engine started (deposit scan ${depositScanMs}ms, sweep ${sweepEngineMs}ms)`
+    `HYBRID engine started (deposit scan ${depositScanMs}ms, sweep ${sweepEngineMs}ms, claimable ${claimableMs}ms)`
   );
 };
 

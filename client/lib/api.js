@@ -4,6 +4,35 @@ import axios from "axios";
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
+// #region agent log
+if (typeof window !== "undefined") {
+  fetch("http://127.0.0.1:7530/ingest/4afefbe1-47e6-4222-af48-f1c6fffa8a8e", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "420fb2",
+    },
+    body: JSON.stringify({
+      sessionId: "420fb2",
+      location: "lib/api.js:resolvedBaseURL",
+      message: "Axios BASE_URL resolved",
+      data: {
+        hypothesisId: "H1-env-override",
+        protocol: BASE_URL.startsWith("https") ? "https" : "http",
+        apiHost: (() => {
+          try {
+            return new URL(BASE_URL).host;
+          } catch {
+            return "parse_error";
+          }
+        })(),
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+}
+// #endregion
+
 // 🚀 INSTANCE
 const API = axios.create({
   baseURL: BASE_URL,
@@ -79,6 +108,34 @@ API.interceptors.response.use(
     // ❌ NETWORK ERROR
     if (!error.response) {
       console.error("❌ Network Error:", error.message);
+
+      // #region agent log
+      if (typeof window !== "undefined") {
+        const cfg = error.config || {};
+        const reqUrl = `${cfg.baseURL || ""}${cfg.url || ""}`;
+        fetch("http://127.0.0.1:7530/ingest/4afefbe1-47e6-4222-af48-f1c6fffa8a8e", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "420fb2",
+          },
+          body: JSON.stringify({
+            sessionId: "420fb2",
+            runId: "post-fix",
+            location: "lib/api.js:response:noResponse",
+            message: "Axios request had no HTTP response",
+            data: {
+              hypothesisId: "H4-transport-no-response",
+              axiosCode: error.code || null,
+              axiosMessage: error.message || null,
+              method: cfg.method || null,
+              reqUrl,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+      }
+      // #endregion
 
       if (typeof window !== "undefined") {
         showToast("Server not reachable ❌");

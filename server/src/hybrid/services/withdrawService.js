@@ -373,7 +373,50 @@ const verifyPayoutTransferInReceipt = async (txHash, toWalletLower, minNetAmount
   }
 };
 
-export const adminApproveHybridWithdrawal = async (withdrawalId) => {
+/**
+ * Boolean wrapper for on-chain payout verification (used by admin pay flow).
+ * Uses the same rules as verifyPayoutTransferInReceipt: successful receipt + USDT Transfer to user ≥ net.
+ */
+export const verifyPayoutTx = async (txHash, expectedAmount, userAddress) => {
+  try {
+    const raw = String(txHash || "").trim().toLowerCase();
+    if (!raw.startsWith("0x") || raw.length < 10) {
+      return false;
+    }
+    await verifyPayoutTransferInReceipt(
+      raw,
+      String(userAddress || "").toLowerCase(),
+      expectedAmount
+    );
+    return true;
+  } catch (err) {
+    console.error("Verify payout error:", err);
+    return false;
+  }
+};
+
+/** Moves time-unlocked pending withdrawals to claimable without a user call (cron). */
+export const autoMarkClaimable = async () => {
+  try {
+    const res = await HybridWithdrawal.updateMany(
+      {
+        status: "pending",
+        availableAt: { $lte: new Date() },
+      },
+      {
+        $set: { status: "claimable" },
+      }
+    );
+
+    if (res.modifiedCount > 0) {
+      console.log(`✅ ${res.modifiedCount} withdrawals moved to claimable`);
+    }
+  } catch (err) {
+    console.error("Auto claimable error:", err);
+  }
+};
+
+export const adminApproveHybridWithdrawal = async (withdrawalId, adminId = null) => {
   if (!withdrawalId) {
     throw new Error("Withdrawal ID required");
   }
@@ -398,7 +441,13 @@ export const adminApproveHybridWithdrawal = async (withdrawalId) => {
 
     const updated = await HybridWithdrawal.findOneAndUpdate(
       { _id: withdrawalId, status: { $in: ["pending", "claimable"] } },
-      { $set: { status: "approved", approvedAt: new Date() } },
+      {
+        $set: {
+          status: "approved",
+          approvedAt: new Date(),
+          ...(adminId ? { approvedBy: adminId } : {}),
+        },
+      },
       { new: true, session }
     );
 
@@ -416,10 +465,18 @@ export const adminApproveHybridWithdrawal = async (withdrawalId) => {
   }
 };
 
-export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash) => {
+export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash, adminId = null) => {
   const normalized = normalizeTxHash(txHash);
   if (!normalized) {
     throw new Error("Valid transaction hash required");
+  }
+
+  const head = await HybridWithdrawal.findById(withdrawalId).select("status").lean();
+  if (!head) {
+    throw new Error("Withdrawal not found");
+  }
+  if (head.status === "paid") {
+    throw new Error("Withdrawal already paid");
   }
 
   const preCheck = await HybridWithdrawal.findOne({
@@ -433,11 +490,10 @@ export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash) => {
     throw new Error("Withdrawal not found or not approved");
   }
 
-  await verifyPayoutTransferInReceipt(
-    normalized,
-    preCheck.walletAddress,
-    preCheck.netAmount
-  );
+  const isValid = await verifyPayoutTx(normalized, preCheck.netAmount, preCheck.walletAddress);
+  if (!isValid) {
+    throw new Error("Invalid payout transaction");
+  }
 
   const session = await mongoose.startSession();
 
@@ -454,6 +510,22 @@ export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash) => {
       throw new Error("Withdrawal not found or not approved");
     }
 
+    if (withdrawal.status === "paid") {
+      throw new Error("Withdrawal already paid");
+    }
+
+    const userBeforePay = await User.findById(withdrawal.userId)
+      .select("pendingWithdraw")
+      .session(session)
+      .lean();
+    if (
+      !userBeforePay ||
+      Number(userBeforePay.pendingWithdraw || 0) < Number(withdrawal.grossAmount || 0)
+    ) {
+      console.warn("⚠️ Pending mismatch detected");
+      throw new Error("Pending balance mismatch");
+    }
+
     const duplicateTx = await HybridWithdrawal.findOne({
       txHash: normalized,
       _id: { $ne: withdrawalId },
@@ -466,6 +538,7 @@ export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash) => {
       throw new Error("Transaction hash already used");
     }
 
+    const nowPaid = new Date();
     const paid = await HybridWithdrawal.findOneAndUpdate(
       {
         _id: withdrawalId,
@@ -475,7 +548,8 @@ export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash) => {
         $set: {
           status: "paid",
           txHash: normalized,
-          paidAt: new Date(),
+          paidAt: nowPaid,
+          ...(adminId ? { paidBy: adminId } : {}),
         },
       },
       { new: true, session }
@@ -527,6 +601,14 @@ export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash) => {
     return result;
   } catch (error) {
     await session.abortTransaction();
+    const code = error?.code ?? error?.cause?.code;
+    const isDupTx =
+      code === 11000 ||
+      /E11000/i.test(String(error?.message || "")) ||
+      /duplicate key/i.test(String(error?.message || ""));
+    if (isDupTx) {
+      throw new Error("Transaction hash already used");
+    }
     throw new Error(error.message || "Failed to mark withdrawal paid");
   } finally {
     session.endSession();

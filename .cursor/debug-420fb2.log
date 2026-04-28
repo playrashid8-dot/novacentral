@@ -1,0 +1,8 @@
+{"sessionId":"420fb2","location":"lib/api.js:resolvedBaseURL","message":"Axios BASE_URL resolved","data":{"hypothesisId":"H1-env-override","protocol":"http","hostMasked":"http://localhost:5000/api"},"timestamp":1777344310492}
+{"sessionId":"420fb2","location":"lib/api.js:resolvedBaseURL","message":"Axios BASE_URL resolved","data":{"hypothesisId":"H1-env-override","protocol":"http","apiHost":"localhost:5000"},"timestamp":1777344339740}
+{"sessionId":"420fb2","location":"lib/api.js:resolvedBaseURL","message":"Axios BASE_URL resolved","data":{"hypothesisId":"H1-env-override","protocol":"http","apiHost":"localhost:5000"},"timestamp":1777344438638}
+{"sessionId":"420fb2","location":"lib/api.js:resolvedBaseURL","message":"Axios BASE_URL resolved","data":{"hypothesisId":"H1-env-override","protocol":"http","apiHost":"localhost:5000"},"timestamp":1777344619605}
+{"sessionId":"420fb2","location":"lib/api.js:resolvedBaseURL","message":"Axios BASE_URL resolved","data":{"hypothesisId":"H1-env-override","protocol":"http","apiHost":"localhost:5000"},"timestamp":1777344619610}
+{"sessionId":"420fb2","location":"lib/api.js:resolvedBaseURL","message":"Axios BASE_URL resolved","data":{"hypothesisId":"H1-env-override","protocol":"http","apiHost":"localhost:5000"},"timestamp":1777344619613}
+{"sessionId":"420fb2","location":"lib/api.js:resolvedBaseURL","message":"Axios BASE_URL resolved","data":{"hypothesisId":"H1-env-override","protocol":"http","apiHost":"localhost:5000"},"timestamp":1777344619615}
+{"sessionId":"420fb2","location":"lib/api.js:resolvedBaseURL","message":"Axios BASE_URL resolved","data":{"hypothesisId":"H1-env-override","protocol":"http","apiHost":"localhost:5000"},"timestamp":1777344619620}

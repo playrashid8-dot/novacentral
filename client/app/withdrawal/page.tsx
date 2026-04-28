@@ -10,7 +10,7 @@ import { fetchCurrentUser } from "../../lib/session";
 import GradientButton from "../../components/GradientButton";
 import CountdownTimer from "../../components/CountdownTimer";
 import GlassCard from "../../components/GlassCard";
-import { fetchHybridSummary, fetchHybridWithdrawals, requestHybridWithdraw } from "../../lib/hybrid";
+import { fetchHybridSummary, fetchHybridWithdrawals, requestHybridWithdraw, sendWithdrawalOtp } from "../../lib/hybrid";
 
 const activePendingStatuses = ["pending", "claimable", "approved"];
 
@@ -19,6 +19,9 @@ export default function Withdrawal() {
 
   const [amount, setAmount] = useState("");
   const [walletAddress, setWalletAddress] = useState("");
+  const [withdrawPassword, setWithdrawPassword] = useState("");
+  const [withdrawOtp, setWithdrawOtp] = useState("");
+  const [otpSending, setOtpSending] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [user, setUser]: any = useState(null);
@@ -89,23 +92,48 @@ export default function Withdrawal() {
       return showToast("Wallet address is required");
     }
 
+    if (!withdrawPassword.trim() || withdrawPassword.trim().length < 8) {
+      return showToast("Enter your account password (min 8 characters)");
+    }
+
+    const otpClean = withdrawOtp.trim();
+    if (!/^\d{6}$/.test(otpClean)) {
+      return showToast("Enter the 6-digit email code");
+    }
+
     try {
       setLoading(true);
       await requestHybridWithdraw(
         {
           amount: amt,
           walletAddress: walletAddress.trim(),
+          password: withdrawPassword,
+          otp: otpClean,
         },
         globalThis.crypto?.randomUUID?.()
       );
 
       showToast("Hybrid withdrawal requested");
       setAmount("");
+      setWithdrawOtp("");
       await loadHybrid();
     } catch (err: any) {
       showToast(getApiErrorMessage(err, "Failed ❌"));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const sendOtpToEmail = async () => {
+    if (otpSending) return;
+    try {
+      setOtpSending(true);
+      await sendWithdrawalOtp();
+      showToast("Check your email for the code");
+    } catch (e: any) {
+      showToast(getApiErrorMessage(e, "Could not send code"));
+    } finally {
+      setOtpSending(false);
     }
   };
 
@@ -168,7 +196,7 @@ export default function Withdrawal() {
           <div className="mb-4">
             <p className="text-sm font-semibold text-white">Withdraw USDT</p>
             <p className="mt-1 text-xs text-gray-400">
-              Enter your payout details. Your account session is verified by secure cookie auth.
+              Confirm with your login password and a one-time code sent to your email.
             </p>
           </div>
 
@@ -189,6 +217,36 @@ export default function Withdrawal() {
             onChange={(e) => setWalletAddress(e.target.value)}
             className="w-full mt-3 bg-white/[0.06] border border-white/10 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/25 focus:shadow-[0_0_28px_rgba(124,58,237,0.3)] outline-none p-3 rounded-xl text-sm transition-all duration-300 placeholder:text-gray-600"
           />
+
+          <input
+            type="password"
+            placeholder="Account password"
+            value={withdrawPassword}
+            disabled={loading}
+            onChange={(e) => setWithdrawPassword(e.target.value)}
+            className="w-full mt-3 bg-white/[0.06] border border-white/10 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/25 outline-none p-3 rounded-xl text-sm placeholder:text-gray-600"
+          />
+
+          <div className="mt-3 flex gap-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="6-digit email code"
+              value={withdrawOtp}
+              disabled={loading}
+              onChange={(e) => setWithdrawOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              className="flex-1 bg-white/[0.06] border border-white/10 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/25 outline-none p-3 rounded-xl text-sm placeholder:text-gray-600"
+            />
+            <button
+              type="button"
+              onClick={sendOtpToEmail}
+              disabled={loading || otpSending}
+              className="shrink-0 px-4 rounded-xl bg-white/[0.08] border border-purple-500/30 text-xs font-semibold text-purple-200 hover:bg-purple-500/15 disabled:opacity-50"
+            >
+              {otpSending ? "…" : "Email code"}
+            </button>
+          </div>
 
           <GradientButton
             onClick={withdraw}

@@ -113,7 +113,7 @@ router.post("/hybrid/withdraw/approve", auth, isAdmin, async (req, res) => {
     if (!withdrawalId) {
       return res.status(400).json({ success: false, msg: "withdrawalId required", data: null });
     }
-    const data = await adminApproveHybridWithdrawal(withdrawalId);
+    const data = await adminApproveHybridWithdrawal(withdrawalId, req.user._id);
     return res.json({ success: true, msg: "Withdrawal approved", data: { withdrawal: data } });
   } catch (err) {
     return res.status(400).json({ success: false, msg: err.message, data: null });
@@ -128,7 +128,7 @@ router.post("/hybrid/withdraw/pay", auth, isAdmin, async (req, res) => {
         .status(400)
         .json({ success: false, msg: "withdrawalId and txHash required", data: null });
     }
-    const data = await adminMarkHybridWithdrawalPaid(withdrawalId, txHash);
+    const data = await adminMarkHybridWithdrawalPaid(withdrawalId, txHash, req.user._id);
     return res.json({ success: true, msg: "Withdrawal marked as paid", data });
   } catch (err) {
     return res.status(400).json({ success: false, msg: err.message, data: null });
