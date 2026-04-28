@@ -69,13 +69,9 @@ export const sendSignupOtp = async (req, res) => {
     await sendEmail(email, "Your OTP code", `Your OTP is: ${otp}\nExpires in 5 minutes.`);
 
     return sendAuthResponse(res, 200, true, "OTP sent to email", null);
-  } catch (err) {
-    if (process.env.NODE_ENV !== "production") {
-      console.error("SEND SIGNUP OTP ERROR:", err.message);
-    } else {
-      console.error("SEND SIGNUP OTP ERROR");
-    }
-    return sendAuthResponse(res, 500, false, "Failed to send OTP");
+  } catch (error) {
+    console.error("OTP ERROR:", error);
+    return sendAuthResponse(res, 500, false, error.message || "Failed to send OTP");
   }
 };
 

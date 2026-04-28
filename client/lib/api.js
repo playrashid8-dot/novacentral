@@ -117,15 +117,24 @@ API.interceptors.response.use(
   (res) => res,
 
   async (error) => {
-    // ❌ NETWORK ERROR
+    // ❌ NETWORK vs real API message
     if (!error.response) {
       console.error("❌ Network Error:", error.message);
 
       if (typeof window !== "undefined") {
-        showToast("Server not reachable ❌");
+        showToast("Network error");
       }
 
       return Promise.reject(error);
+    }
+
+    if (typeof window !== "undefined") {
+      const apiMsg = error.response.data?.msg;
+      if (apiMsg) {
+        showToast(apiMsg);
+      } else {
+        showToast("Server error");
+      }
     }
 
     const { status, data } = error.response;
