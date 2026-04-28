@@ -10,6 +10,7 @@ export default function BottomNav() {
   const nav = [
     { name: "Home", path: "/dashboard", icon: "🏠" },
     { name: "Deposit", path: "/deposit", icon: "↓" },
+    { name: "Team", path: "/team", icon: "👥" },
     { name: "History", path: "/history", icon: "📜" },
     { name: "Profile", path: "/profile", icon: "👤" },
   ];
@@ -17,7 +18,7 @@ export default function BottomNav() {
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
       <div className="mx-auto max-w-lg rounded-2xl border border-white/[0.08] bg-[#111827]/95 backdrop-blur-xl shadow-[0_-8px_40px_rgba(0,0,0,0.45)]">
-        <div className="flex justify-around gap-1 py-2.5">
+        <div className="flex justify-around gap-0.5 py-2">
           {nav.map((item) => {
             const active = path === item.path;
 
@@ -26,7 +27,7 @@ export default function BottomNav() {
                 key={item.path}
                 type="button"
                 onClick={() => router.push(item.path)}
-                className="relative flex min-w-0 flex-1 flex-col items-center px-1 py-1 text-[11px] font-semibold"
+                className="relative flex min-w-0 flex-1 flex-col items-center px-0.5 py-1 text-[10px] font-semibold"
               >
                 {active && (
                   <motion.div
@@ -36,8 +37,8 @@ export default function BottomNav() {
                   />
                 )}
                 <motion.span
-                  animate={{ scale: active ? 1.08 : 1 }}
-                  className={`relative z-10 text-base ${active ? "opacity-100" : "opacity-70"}`}
+                  animate={{ scale: active ? 1.06 : 1 }}
+                  className={`relative z-10 text-[15px] leading-none ${active ? "opacity-100" : "opacity-70"}`}
                 >
                   {item.icon}
                 </motion.span>

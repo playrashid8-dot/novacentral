@@ -17,11 +17,6 @@ const parseBoolean = (value, fallback = false) => {
   return String(value).toLowerCase() === "true";
 };
 
-const parsePort = (value) => {
-  const port = Number(value);
-  return Number.isInteger(port) && port > 0 ? port : null;
-};
-
 const criticalFields = {
   HYBRID_ADMIN_WALLET: readEnv("HYBRID_ADMIN_WALLET"),
   HYBRID_MNEMONIC: readEnv("HYBRID_MNEMONIC"),
@@ -32,10 +27,6 @@ const optionalFields = {
   HYBRID_GAS_FUNDER_PRIVATE_KEY: readEnv("HYBRID_GAS_FUNDER_PRIVATE_KEY"),
   HYBRID_BSC_RPC_URL: readEnv("HYBRID_BSC_RPC_URL"),
   HYBRID_USDT_CONTRACT: readEnv("HYBRID_USDT_CONTRACT"),
-  EMAIL_HOST: readEnv("SMTP_HOST") || readEnv("EMAIL_HOST"),
-  EMAIL_PORT: readEnv("SMTP_PORT") || readEnv("EMAIL_PORT"),
-  EMAIL_USER: readEnv("SMTP_USER") || readEnv("EMAIL_USER"),
-  EMAIL_PASS: readEnv("SMTP_PASS") || readEnv("EMAIL_PASS"),
 };
 
 const missingCritical = Object.entries(criticalFields)
@@ -54,12 +45,6 @@ if (missingOptional.length > 0) {
   console.warn(`HybridEarn optional environment variables missing: ${missingOptional.join(", ")}`);
 }
 
-const emailPort = parsePort(optionalFields.EMAIL_PORT);
-
-if (optionalFields.EMAIL_PORT && !emailPort) {
-  console.warn("HybridEarn EMAIL_PORT must be a positive integer when configured");
-}
-
 export const hybridConfig = {
   adminWallet: criticalFields.HYBRID_ADMIN_WALLET,
   gasKey: optionalFields.HYBRID_GAS_FUNDER_PRIVATE_KEY,
@@ -69,19 +54,6 @@ export const hybridConfig = {
   encryptionSecret: criticalFields.HYBRID_PRIVATE_KEY_ENCRYPTION_SECRET,
   earnEnabled: parseBoolean(process.env.HYBRID_EARN_ENABLED, true),
   sweepEnabled: parseBoolean(process.env.HYBRID_SWEEP_ENABLED, true),
-  emailConfig: {
-    host: optionalFields.EMAIL_HOST,
-    port: emailPort,
-    user: optionalFields.EMAIL_USER,
-    pass: optionalFields.EMAIL_PASS,
-    secure: emailPort === 465,
-    from:
-      readEnv("SMTP_FROM") ||
-      readEnv("EMAIL_FROM") ||
-      optionalFields.EMAIL_USER,
-    tlsRejectUnauthorized:
-      readEnv("SMTP_TLS_REJECT_UNAUTHORIZED", "true").toLowerCase() !== "false",
-  },
 };
 
 export default hybridConfig;
