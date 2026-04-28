@@ -1,6 +1,6 @@
 import axios from "axios";
 
-import { showToast } from "./toast";
+import { showSafeToast } from "./toast";
 
 /**
  * Axios base URL must end with `/api` so `/auth/*` and `/csrf-token` resolve correctly.
@@ -135,7 +135,7 @@ API.interceptors.response.use(
     if (!error.response) {
       console.error("❌ Network Error:", error.message);
       if (typeof window !== "undefined") {
-        showToast(error.message || "Network error", { fallback: "Network error" });
+        showSafeToast(error.message || "Network error", { fallback: "Network error" });
       }
       return Promise.reject(error);
     }
@@ -195,7 +195,7 @@ API.interceptors.response.use(
       "Something went wrong";
 
     if (typeof window !== "undefined") {
-      showToast(apiMsg);
+      showSafeToast(apiMsg);
     }
 
     return Promise.reject(error);

@@ -17,12 +17,12 @@ export default function ConfirmModal({
     if (!open) return;
 
     const handleEsc = (e) => {
-      if (e.key === "Escape") onCancel?.();
+      if (e.key === "Escape" && !confirmLoading) onCancel?.();
     };
 
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
-  }, [open, onCancel]);
+  }, [open, onCancel, confirmLoading]);
 
   if (!open) return null;
 
@@ -30,7 +30,7 @@ export default function ConfirmModal({
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
       role="presentation"
-      onClick={onCancel}
+      onClick={() => !confirmLoading && onCancel?.()}
     >
       <div
         className="w-full max-w-md rounded-2xl border border-white/15 bg-[#12121a] p-6 shadow-2xl"

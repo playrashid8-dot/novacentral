@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { fetchCurrentUser } from "../../lib/session";
-import { showToast } from "../../lib/toast";
+import { showSafeToast } from "../../lib/toast";
 import Loader from "./Loader";
 
 export const API_BASE =
@@ -128,7 +128,7 @@ export default function AdminLayout({ title, subtitle, children }) {
         if (active) {
           const msg = error?.message || "Access Denied";
           setAccessDenied(msg);
-          showToast(msg);
+          showSafeToast(msg);
         }
       } finally {
         if (active) setChecking(false);

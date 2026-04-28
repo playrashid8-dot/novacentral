@@ -1,4 +1,4 @@
-import { Contract, Wallet, isAddress, parseEther } from "ethers";
+import { Contract, Wallet, formatEther, isAddress, parseEther } from "ethers";
 import hybridConfig from "../../config/hybridConfig.js";
 import User from "../../models/User.js";
 import HybridDeposit from "../models/HybridDeposit.js";
@@ -8,8 +8,10 @@ import { getProvider, getRpcUrls } from "../utils/provider.js";
 
 const MAX_SWEEP_BATCH = 10;
 const SWEEP_DELAY_MS = 1500;
-const MIN_BNB_WEI = parseEther("0.001");
-const GAS_TOPUP_BUFFER = parseEther("0.00005");
+const MIN_BNB_WEI = parseEther("0.0001");
+/** Hard floor before token sweep — avoids ultra-low gas / stuck txs */
+const MIN_SAFE_GAS = parseEther("0.0001");
+const GAS_TOPUP_BUFFER = parseEther("0.00006");
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -84,6 +86,17 @@ export const ensureMinBnbForSweep = async (address) => {
 
   const gasFunder = new Wallet(hybridConfig.gasKey, provider);
   const shortfall = MIN_BNB_WEI - balance + GAS_TOPUP_BUFFER;
+  const funderBal = await provider.getBalance(gasFunder.address);
+  console.log("⛽ GAS FUNDER BALANCE:", formatEther(funderBal));
+  if (funderBal < shortfall) {
+    console.warn(
+      "⚠️ GAS FUNDER BALANCE LOW — need ~",
+      formatEther(shortfall),
+      "BNB for top-up; funder:",
+      gasFunder.address
+    );
+  }
+  console.log("⛽ Sending gas:", formatEther(shortfall));
   const tx = await gasFunder.sendTransaction({ to: address, value: shortfall });
   const receipt = await tx.wait();
 
@@ -138,8 +151,9 @@ async function executeSweepForDeposit(depositStub) {
   await ensureMinBnbForSweep(user.walletAddress);
 
   const bnbBalance = await provider.getBalance(user.walletAddress);
-  if (bnbBalance < MIN_BNB_WEI) {
-    throw new Error("BNB balance below 0.001 minimum for sweep");
+  console.log("⛽ Wallet BNB:", formatEther(bnbBalance));
+  if (bnbBalance < MIN_SAFE_GAS) {
+    throw new Error("Critical: BNB too low for safe transaction");
   }
 
   const currentBalance = await tokenContract.balanceOf(user.walletAddress);
@@ -194,6 +208,18 @@ async function executeSweepForDeposit(depositStub) {
 export const runHybridSweepBatch = async () => {
   if (!canSweepHybridFunds()) {
     return { ran: false, reason: "Sweep disabled or misconfigured", results: [] };
+  }
+
+  try {
+    const prov = getProvider();
+    const gf = new Wallet(hybridConfig.gasKey, prov);
+    const fb = await prov.getBalance(gf.address);
+    console.log("⛽ GAS FUNDER BALANCE:", formatEther(fb));
+    if (fb < parseEther("0.01")) {
+      console.warn("⚠️ GAS FUNDER BALANCE LOW — consider topping up:", gf.address);
+    }
+  } catch (e) {
+    console.warn("Could not read gas funder balance:", e?.message || String(e));
   }
 
   await HybridDeposit.updateMany(

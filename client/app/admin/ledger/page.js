@@ -9,7 +9,7 @@ import AdminLayout, {
 import Loader from "../../../components/admin/Loader";
 import Table from "../../../components/admin/Table";
 import EmptyState from "../../../components/EmptyState";
-import { showToast } from "../../../lib/toast";
+import { showSafeToast } from "../../../lib/toast";
 
 const ROW_CAP = 100;
 
@@ -39,7 +39,7 @@ export default function AdminLedgerPage() {
         if (active) {
           const msg = err.message || "Failed to load ledger";
           setError(msg);
-          showToast(msg);
+          showSafeToast(msg);
         }
       } finally {
         if (active) setLoading(false);

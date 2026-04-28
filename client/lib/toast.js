@@ -1,5 +1,7 @@
 /**
- * Single shared toast DOM + short-window dedupe to avoid interceptor + catch double-firing.
+ * Shared toast DOM.
+ * showToast — short-window dedupe for direct UI calls.
+ * showSafeToast — collapses identical bursts; different messages show immediately; same message can show again after 1.5s.
  */
 
 let lastToastMsg = "";
@@ -7,13 +9,15 @@ let lastToastAt = 0;
 
 const DEDUPE_MS = 800;
 
+/** @type {string} last normalized message shown via showSafeToast */
+let lastToast = "";
+let lastTime = 0;
+
 /**
  * @param {string} [rawMessage]
- * @param {{ force?: boolean, fallback?: string }} [opts]
+ * @param {{ fallback?: string }} [opts]
  */
-export function showToast(rawMessage, opts = {}) {
-  if (typeof window === "undefined") return;
-
+function normalizeMessage(rawMessage, opts = {}) {
   let message =
     typeof rawMessage === "string"
       ? rawMessage.trim()
@@ -25,6 +29,17 @@ export function showToast(rawMessage, opts = {}) {
         ? String(opts.fallback).trim()
         : "Something went wrong";
   }
+  return message;
+}
+
+/**
+ * @param {string} [rawMessage]
+ * @param {{ force?: boolean, fallback?: string }} [opts]
+ */
+export function showToast(rawMessage, opts = {}) {
+  if (typeof window === "undefined") return;
+
+  const message = normalizeMessage(rawMessage, opts);
 
   const now = Date.now();
   if (!opts.force && message === lastToastMsg && now - lastToastAt < DEDUPE_MS) {
@@ -40,4 +55,27 @@ export function showToast(rawMessage, opts = {}) {
   document.body.appendChild(div);
 
   setTimeout(() => div.remove(), 2500);
+}
+
+/**
+ * For axios interceptor and other global/error paths: avoids spam while allowing
+ * distinct errors back-to-back and repeating the same message after 1.5s.
+ * @param {string} [rawMessage]
+ * @param {{ fallback?: string }} [opts]
+ */
+export function showSafeToast(rawMessage, opts = {}) {
+  if (typeof window === "undefined") return;
+
+  const message = normalizeMessage(rawMessage, opts);
+  if (!message) return;
+
+  const now = Date.now();
+
+  // Allow different message instantly; same message again only after 1.5s
+  if (message !== lastToast || now - lastTime > 1500) {
+    showToast(rawMessage, { ...opts, force: true });
+
+    lastToast = message;
+    lastTime = now;
+  }
 }

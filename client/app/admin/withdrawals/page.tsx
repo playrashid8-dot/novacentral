@@ -9,7 +9,7 @@ import ConfirmModal from "../../../components/admin/ConfirmModal";
 import { withdrawalStatusClasses } from "../../../components/admin/adminStatusClasses";
 import { pushAdminLog } from "../../../lib/adminActivityLog";
 import EmptyState from "../../../components/EmptyState";
-import { showToast } from "../../../lib/toast";
+import { showSafeToast } from "../../../lib/toast";
 
 const PAGE_SIZE = 10;
 const ROW_CAP = 100;
@@ -46,7 +46,7 @@ export default function AdminWithdrawalsPage() {
     } catch (err: any) {
       const msg = err?.message || "Failed to load withdrawals";
       setError(msg);
-      showToast(msg);
+      showSafeToast(msg);
     } finally {
       setLoading(false);
     }
@@ -92,7 +92,7 @@ export default function AdminWithdrawalsPage() {
       if (!txHash) {
         const msg = "Enter a transaction hash before marking paid";
         setError(msg);
-        showToast(msg);
+        showSafeToast(msg);
         setConfirm(null);
         return;
       }
@@ -137,7 +137,7 @@ export default function AdminWithdrawalsPage() {
     } catch (err: any) {
       const msg = err?.message || "Action failed";
       setError(msg);
-      showToast(msg);
+      showSafeToast(msg);
       pushAdminLog({
         level: "error",
         action: `Withdrawal ${kind} failed`,

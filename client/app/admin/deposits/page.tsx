@@ -11,7 +11,7 @@ import Table from "../../../components/admin/Table";
 import AdminPagination from "../../../components/admin/AdminPagination";
 import { depositStatusClasses } from "../../../components/admin/adminStatusClasses";
 import EmptyState from "../../../components/EmptyState";
-import { showToast } from "../../../lib/toast";
+import { showSafeToast } from "../../../lib/toast";
 
 const PAGE_SIZE = 10;
 const ROW_CAP = 100;
@@ -39,7 +39,7 @@ export default function AdminDepositsPage() {
     } catch (err: any) {
       const msg = err?.message || "Failed to load deposits";
       setError(msg);
-      showToast(msg);
+      showSafeToast(msg);
     } finally {
       setLoading(false);
     }

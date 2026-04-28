@@ -12,7 +12,7 @@ import {
   buildWithdrawDailySeries,
 } from "../../../lib/adminChartSeries";
 import { getAdminLogs } from "../../../lib/adminActivityLog";
-import { showToast } from "../../../lib/toast";
+import { showSafeToast } from "../../../lib/toast";
 
 const ChartsLazy = dynamic(
   () => import("../../../components/admin/AdminAnalyticsCharts"),
@@ -66,7 +66,7 @@ export default function AdminDashboardPage() {
         if (active) {
           const msg = err?.message || "Failed to load dashboard";
           setError(msg);
-          showToast(msg);
+          showSafeToast(msg);
         }
       } finally {
         if (active) setLoading(false);

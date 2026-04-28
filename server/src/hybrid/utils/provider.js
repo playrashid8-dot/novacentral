@@ -63,7 +63,14 @@ export const withProviderRetry = async (fn, retries = null) => {
       return result;
     } catch (err) {
       lastError = err;
-      console.error("RPC failed:", err?.message);
+      const msg = String(err?.message || err || "");
+      console.error("RPC failed:", msg);
+      if (/429|rate limit|too many|limit exceeded|exceeded/i.test(msg)) {
+        console.warn("⚠️ RPC rate/limit stress detected");
+      }
+      if (/401|403|unauthorized|not allowed|invalid api key/i.test(msg)) {
+        console.warn("⚠️ RPC auth / permission issue — check HYBRID_BSC_RPC_URL credentials");
+      }
 
       consecutiveRpcFailures += 1;
       if (consecutiveRpcFailures >= SWITCH_AFTER_CONSECUTIVE_FAILURES) {

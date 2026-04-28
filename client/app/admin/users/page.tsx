@@ -12,7 +12,7 @@ import AdminPagination from "../../../components/admin/AdminPagination";
 import ConfirmModal from "../../../components/admin/ConfirmModal";
 import { pushAdminLog } from "../../../lib/adminActivityLog";
 import EmptyState from "../../../components/EmptyState";
-import { showToast } from "../../../lib/toast";
+import { showSafeToast } from "../../../lib/toast";
 
 const PAGE_SIZE = 10;
 const ROW_CAP = 100;
@@ -50,7 +50,7 @@ export default function AdminUsersPage() {
         if (active) {
           const msg = err?.message || "Failed to load users";
           setError(msg);
-          showToast(msg);
+          showSafeToast(msg);
         }
       } finally {
         if (active) setLoading(false);
@@ -114,7 +114,7 @@ export default function AdminUsersPage() {
     } catch (err: any) {
       const msg = err?.message || "Request failed";
       setError(msg);
-      showToast(msg);
+      showSafeToast(msg);
       pushAdminLog({ level: "error", action: "User block/unblock failed", detail: msg });
     } finally {
       setProcessingId("");

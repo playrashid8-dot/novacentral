@@ -25,7 +25,16 @@ export default function PageWrapper({
   if (loading) {
     return useSkeletonLoading ? <PageSkeleton /> : <Loader />;
   }
-  if (!skipEmpty && !data) {
+
+  const isDataEmpty =
+    !data ||
+    (Array.isArray(data) && data.length === 0) ||
+    (typeof data === "object" &&
+      data !== null &&
+      !Array.isArray(data) &&
+      Object.keys(data).length === 0);
+
+  if (!skipEmpty && isDataEmpty) {
     return <EmptyState text={emptyText} />;
   }
   return children;
