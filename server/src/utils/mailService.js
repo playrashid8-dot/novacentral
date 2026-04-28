@@ -1,12 +1,8 @@
 import nodemailer from "nodemailer";
 
-export const isMailConfigured = () =>
-  Boolean(
-    process.env.EMAIL_USER &&
-      String(process.env.EMAIL_USER).trim() &&
-      process.env.EMAIL_PASS &&
-      String(process.env.EMAIL_PASS).trim()
-  );
+export const isMailConfigured = () => {
+  return !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+};
 
 export const transporter = nodemailer.createTransport({
   service: "gmail",
