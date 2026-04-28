@@ -4,7 +4,11 @@ import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import Image from "next/image";
-import API, { getApiErrorMessage, initCSRF } from "../../lib/api";
+import API, {
+  getApiErrorMessage,
+  initCSRF,
+  suppressDuplicateCatchToast,
+} from "../../lib/api";
 
 import PrimaryButton from "../../components/PrimaryButton";
 
@@ -53,7 +57,12 @@ function SignupInner() {
   };
 
   const handleSendSignupOtp = async () => {
+    if (otpSending) return;
+
     const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      return showToast("Enter email first");
+    }
     if (!isValidEmail(cleanEmail)) {
       return showToast("Enter a valid email first ⚠️");
     }
@@ -64,7 +73,9 @@ function SignupInner() {
       await API.post("/auth/send-signup-otp", { email: cleanEmail });
       showToast("Check your email for the code 📬");
     } catch (err: any) {
-      showToast(getApiErrorMessage(err, "Could not send code ❌"));
+      if (!suppressDuplicateCatchToast(err)) {
+        showToast(getApiErrorMessage(err, "Could not send code ❌"));
+      }
     } finally {
       setOtpSending(false);
     }
@@ -72,6 +83,8 @@ function SignupInner() {
 
   /* 🚀 SIGNUP */
   const handleSignup = async () => {
+    if (loading) return;
+
     const cleanUsername = username.trim();
     const cleanEmail = email.trim().toLowerCase();
     const cleanPhone = normalizePhone(number.trim());
@@ -122,7 +135,9 @@ function SignupInner() {
       }, 800);
 
     } catch (err: any) {
-      showToast(getApiErrorMessage(err, "Signup failed ❌"));
+      if (!suppressDuplicateCatchToast(err)) {
+        showToast(getApiErrorMessage(err, "Signup failed ❌"));
+      }
     } finally {
       setLoading(false);
     }
@@ -173,7 +188,7 @@ function SignupInner() {
                 disabled={otpSending}
                 className="shrink-0 px-3 rounded-xl bg-white/10 border border-purple-500/40 text-xs font-semibold text-purple-200 hover:bg-purple-500/20 disabled:opacity-50"
               >
-                {otpSending ? "…" : "Send code"}
+                {otpSending ? "Sending..." : "Send code"}
               </button>
             </div>
           </div>

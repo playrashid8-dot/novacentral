@@ -4,7 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Image from "next/image";
-import API, { getApiErrorMessage, initCSRF } from "../../lib/api";
+import API, {
+  getApiErrorMessage,
+  initCSRF,
+  suppressDuplicateCatchToast,
+} from "../../lib/api";
 import { resetLogoutState } from "../../lib/auth";
 import PrimaryButton from "../../components/PrimaryButton";
 
@@ -22,6 +26,8 @@ export default function Login() {
   };
 
   const handleLogin = async () => {
+    if (loading) return;
+
     const cleanUsername = username.trim();
     const cleanPassword = password.trim();
 
@@ -51,7 +57,9 @@ export default function Login() {
       router.replace("/dashboard");
 
     } catch (err: any) {
-      showToast(getApiErrorMessage(err, "Login failed ❌"));
+      if (!suppressDuplicateCatchToast(err)) {
+        showToast(getApiErrorMessage(err, "Login failed ❌"));
+      }
     } finally {
       setLoading(false);
     }

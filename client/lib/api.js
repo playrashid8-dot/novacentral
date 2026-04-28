@@ -138,7 +138,11 @@ API.interceptors.response.use(
     if (!error.response) {
       console.error("❌ Network Error:", error.message);
       if (typeof window !== "undefined") {
-        showSafeToast(error.message || "Network error", { fallback: "Network error" });
+        const networkMsg =
+          error.code === "ECONNABORTED"
+            ? "Request timed out — try again"
+            : error.message || "Network error";
+        showSafeToast(networkMsg, { fallback: "Network error" });
       }
       return Promise.reject(error);
     }
@@ -209,6 +213,9 @@ export const getApiErrorMessage = (error, fallback = "Something went wrong ❌")
   if (!error) return fallback;
 
   if (!error.response) {
+    if (error.code === "ECONNABORTED") {
+      return "Request timed out — try again";
+    }
     return "Network error";
   }
 
@@ -219,5 +226,19 @@ export const getApiErrorMessage = (error, fallback = "Something went wrong ❌")
     fallback
   );
 };
+
+/**
+ * Axios API interceptor already showed a toast for this error.
+ * Skip page-level duplicate toast except: CSRF bootstrap (standalone axios), 401 (handled by logout).
+ * @param {import("axios").AxiosError} error
+ */
+export function suppressDuplicateCatchToast(error) {
+  if (!error?.config) return false;
+  const url = String(error.config.url || "");
+  if (url.includes("csrf-token")) return false;
+  const status = error.response?.status;
+  if (status === 401) return false;
+  return true;
+}
 
 export default API;

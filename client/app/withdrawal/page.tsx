@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getApiErrorMessage } from "../../lib/api";
+import { getApiErrorMessage, suppressDuplicateCatchToast } from "../../lib/api";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import ProtectedRoute from "../../components/ProtectedRoute";
@@ -130,7 +130,9 @@ export default function Withdrawal() {
       setWithdrawOtp("");
       await loadHybrid();
     } catch (err: any) {
-      showToast(getApiErrorMessage(err, "Failed ❌"));
+      if (!suppressDuplicateCatchToast(err)) {
+        showToast(getApiErrorMessage(err, "Failed ❌"));
+      }
     } finally {
       setLoading(false);
     }
@@ -138,6 +140,10 @@ export default function Withdrawal() {
 
   const sendOtpToEmail = async () => {
     if (otpSending) return;
+    const accountEmail = String(user?.email || "").trim();
+    if (!accountEmail) {
+      return showToast("Email required — add email to your account");
+    }
     try {
       setOtpSending(true);
       const envelope = await sendWithdrawalOtp();
@@ -147,7 +153,9 @@ export default function Withdrawal() {
           : "Check your email for the code",
       );
     } catch (e: any) {
-      showToast(getApiErrorMessage(e, "Could not send code"));
+      if (!suppressDuplicateCatchToast(e)) {
+        showToast(getApiErrorMessage(e, "Could not send code"));
+      }
     } finally {
       setOtpSending(false);
     }
@@ -265,7 +273,7 @@ export default function Withdrawal() {
               disabled={loading || otpSending}
               className="shrink-0 px-4 py-3 rounded-xl bg-white/[0.08] border border-purple-500/30 text-xs font-semibold text-purple-200 hover:bg-purple-500/15 disabled:opacity-50 shadow-md transition hover:shadow-lg"
             >
-              {otpSending ? "…" : "Email code"}
+              {otpSending ? "Sending..." : "Email code"}
             </button>
           </div>
 
