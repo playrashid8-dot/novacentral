@@ -41,34 +41,39 @@ const csrfProtection = csrf({
   },
 });
 
-const allowedOrigins = [
-  "http://localhost:3000",
-  "https://novacentral.vercel.app",
-  ...(process.env.ALLOWED_ORIGINS || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean),
-];
-
 function isCorsOriginAllowed(origin) {
   if (!origin) return true;
+
+  const allowedOrigins = [
+    "http://localhost:3000",
+    "https://novacentral.vercel.app",
+    ...(process.env.ALLOWED_ORIGINS || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  ];
+
   if (allowedOrigins.includes(origin)) return true;
-  try {
-    const { hostname, protocol } = new URL(origin);
-    if (protocol === "https:" && hostname.endsWith(".vercel.app")) return true;
-  } catch {
-    /* ignore invalid origin */
-  }
+
+  // allow all Vercel preview deployments (https://*.vercel.app)
+  if (origin.endsWith(".vercel.app")) return true;
+
   return false;
 }
 
 const corsOptions = {
   origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+
     if (isCorsOriginAllowed(origin)) {
-      callback(null, true);
-    } else {
-      callback(null, false);
+      return callback(null, true);
     }
+
+    console.error("❌ Blocked by CORS:", origin);
+
+    const err = new Error("CORS not allowed");
+    err.status = 403;
+    return callback(err);
   },
   credentials: true,
   methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
@@ -121,6 +126,7 @@ app.get("/api/csrf-token", (req, res) => {
     httpOnly: false,
     secure: isProd,
     sameSite: isProd ? "none" : "lax",
+    path: "/", // ensure global access
   });
 
   res.json({
