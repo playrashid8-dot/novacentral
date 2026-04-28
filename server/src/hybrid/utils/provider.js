@@ -1,15 +1,17 @@
 import { JsonRpcProvider } from "ethers";
 
-/** Ordered list: primary env → fallback env → Binance seeds (same provider order every process start) */
-const BSC_PUBLIC_SEEDS = [
-  "https://bsc-dataseed1.binance.org",
-  "https://bsc-dataseed2.binance.org",
-];
+/**
+ * Defaults avoid Binance public dataseeds (often rate-limit / eth_getLogs issues).
+ * Set HYBRID_BSC_RPC_URL to NodeReal (or another dedicated endpoint), e.g.
+ * https://bsc-mainnet.nodereal.io/v1/YOUR_KEY
+ */
+const BSC_PUBLIC_FALLBACKS = ["https://rpc.ankr.com/bsc", "https://bsc.publicnode.com"];
 
 const RPC_URLS = [
   String(process.env.HYBRID_BSC_RPC_URL || "").trim(),
   String(process.env.HYBRID_BSC_RPC_FALLBACK || "").trim(),
-  ...BSC_PUBLIC_SEEDS,
+  String(process.env.HYBRID_BSC_RPC_BACKUP || "").trim(),
+  ...BSC_PUBLIC_FALLBACKS,
 ]
   .map((url) => String(url || "").trim())
   .filter(Boolean);
@@ -65,6 +67,11 @@ export const withProviderRetry = async (fn, retries = null) => {
       lastError = err;
       const msg = String(err?.message || err || "");
       console.error("RPC failed:", msg);
+      if (/[-]?32005|limit exceeded|query returned more than|range is too large/i.test(msg)) {
+        console.warn(
+          "⚠️ RPC rejected eth_getLogs / heavy query (-32005-style) — rotate HYBRID_BSC_RPC_URL or reduce scan range"
+        );
+      }
       if (/429|rate limit|too many|limit exceeded|exceeded/i.test(msg)) {
         console.warn("⚠️ RPC rate/limit stress detected");
       }

@@ -1,15 +1,14 @@
-import { Contract, Wallet, formatEther, isAddress, parseEther } from "ethers";
+import { Contract, Wallet, formatEther, formatUnits, isAddress, parseEther } from "ethers";
 import hybridConfig from "../../config/hybridConfig.js";
 import User from "../../models/User.js";
 import HybridDeposit from "../models/HybridDeposit.js";
 import { decryptPrivateKey } from "../utils/crypto.js";
-import { BSC_USDT_ABI } from "../utils/constants.js";
+import { BSC_USDT_ABI, HYBRID_TOKEN } from "../utils/constants.js";
 import { getProvider, getRpcUrls } from "../utils/provider.js";
 
 const MAX_SWEEP_BATCH = 10;
 const SWEEP_DELAY_MS = 1500;
-const MIN_BNB_WEI = parseEther("0.0001");
-/** Hard floor before token sweep — avoids ultra-low gas / stuck txs */
+/** Hard floor before token sweep — must align with ensureMinBnbForSweep top-up target */
 const MIN_SAFE_GAS = parseEther("0.0002");
 const GAS_TOPUP_BUFFER = parseEther("0.00012");
 
@@ -66,6 +65,7 @@ export const sendGas = async (address) => {
       txHash: String(receipt?.hash || gasTx.hash || "").toLowerCase(),
     };
   } catch (error) {
+    console.error("❌ ERROR:", error?.message || String(error));
     throw new Error(`Failed to send sweep gas: ${error.message}`);
   }
 };
@@ -78,16 +78,21 @@ export const ensureMinBnbForSweep = async (address) => {
   }
 
   const provider = getProvider();
-  const balance = await provider.getBalance(address);
+  const checksumAddr = address;
+  const balance = await provider.getBalance(checksumAddr);
 
-  if (balance >= MIN_BNB_WEI) {
+  console.log("⛽ Wallet BNB:", formatEther(balance));
+  console.log("⛽ Required:", formatEther(MIN_SAFE_GAS));
+
+  if (balance >= MIN_SAFE_GAS) {
     return { toppedUp: false };
   }
 
   const gasFunder = new Wallet(hybridConfig.gasKey, provider);
-  const shortfall = MIN_BNB_WEI - balance + GAS_TOPUP_BUFFER;
-  const funderBal = await provider.getBalance(gasFunder.address);
-  console.log("⛽ GAS FUNDER BALANCE:", formatEther(funderBal));
+  console.log("⛽ gasKey loaded — funder:", gasFunder.address);
+  const shortfall = MIN_SAFE_GAS - balance + GAS_TOPUP_BUFFER;
+  const funderBal = await gasFunder.getBalance();
+  console.log("⛽ gasFunder.getBalance():", formatEther(funderBal));
   if (funderBal < shortfall) {
     console.warn(
       "⚠️ GAS FUNDER BALANCE LOW — need ~",
@@ -97,15 +102,18 @@ export const ensureMinBnbForSweep = async (address) => {
     );
   }
   console.log("⛽ Sending gas:", formatEther(shortfall));
-  const tx = await gasFunder.sendTransaction({ to: address, value: shortfall });
+  const tx = await gasFunder.sendTransaction({ to: checksumAddr, value: shortfall });
   const receipt = await tx.wait();
 
   if (!receipt || receipt.status !== 1) {
+    console.error("❌ ERROR:", "Gas top-up transaction failed or not mined with status 1");
     throw new Error("Gas top-up transaction failed");
   }
 
-  const after = await provider.getBalance(address);
-  if (after < MIN_BNB_WEI) {
+  const after = await provider.getBalance(checksumAddr);
+  console.log("⛽ Wallet BNB after gas tx:", formatEther(after));
+  if (after < MIN_SAFE_GAS) {
+    console.error("❌ ERROR:", "BNB still below MIN_SAFE_GAS after top-up");
     throw new Error("BNB still below minimum after top-up");
   }
 
@@ -151,25 +159,34 @@ async function executeSweepForDeposit(depositStub) {
   await ensureMinBnbForSweep(user.walletAddress);
 
   const bnbBalance = await provider.getBalance(user.walletAddress);
-  console.log("⛽ Wallet BNB:", formatEther(bnbBalance));
+  console.log("⛽ Wallet BNB (pre-sweep):", formatEther(bnbBalance));
   if (bnbBalance < MIN_SAFE_GAS) {
+    console.error("❌ ERROR:", "Critical: BNB too low for safe transaction");
     throw new Error("Critical: BNB too low for safe transaction");
   }
 
   const currentBalance = await tokenContract.balanceOf(user.walletAddress);
+  console.log("💰 USDT Balance:", formatUnits(currentBalance, HYBRID_TOKEN.decimals));
 
   if (currentBalance <= 0n) {
     return { skipped: true, reason: "No USDT balance to sweep" };
   }
 
+  console.log(
+    "💸 Sweeping USDT:",
+    formatUnits(currentBalance, HYBRID_TOKEN.decimals),
+    HYBRID_TOKEN.symbol
+  );
   const sweepTx = await tokenContract.transfer(hybridConfig.adminWallet, currentBalance);
   const receipt = await sweepTx.wait();
 
   if (!receipt || receipt.status !== 1) {
+    console.error("❌ ERROR:", "Sweep transaction reverted or missing receipt");
     throw new Error("Sweep transaction reverted or missing receipt");
   }
 
   const sweepTxHash = String(receipt.hash || sweepTx.hash || "").toLowerCase();
+  console.log("✅ Sweep success:", sweepTxHash);
 
   const updated = await HybridDeposit.findOneAndUpdate(
     {
@@ -214,7 +231,8 @@ export const runHybridSweepBatch = async () => {
     const prov = getProvider();
     const gf = new Wallet(hybridConfig.gasKey, prov);
     const fb = await prov.getBalance(gf.address);
-    console.log("⛽ GAS FUNDER BALANCE:", formatEther(fb));
+    console.log("⛽ Funder:", gf.address);
+    console.log("⛽ Balance:", formatEther(fb));
     if (fb < parseEther("0.01")) {
       console.warn("⚠️ GAS FUNDER BALANCE LOW — consider topping up:", gf.address);
     }
@@ -246,7 +264,7 @@ export const runHybridSweepBatch = async () => {
       const r = await executeSweepForDeposit(d);
       results.push({ depositId: String(d._id), ...r });
     } catch (err) {
-      console.error("Hybrid sweep error:", String(d._id), err);
+      console.error("❌ ERROR:", `[${String(d._id)}]`, err?.message || String(err));
       await HybridDeposit.findByIdAndUpdate(d._id, {
         $set: { errorMessage: String(err.message || "Sweep failed").slice(0, 300) },
       }).catch(() => {});

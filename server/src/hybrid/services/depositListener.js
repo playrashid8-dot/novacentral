@@ -16,6 +16,9 @@ const MAX_BLOCK_RANGE = 1000;
 /** Reorg / fake-log safety: always ≥ 2 (see business rules) */
 const CONFIRMATIONS = 3;
 
+/** Canonical BSC mainnet USDT — mismatch suggests misconfigured HYBRID_USDT_CONTRACT */
+const BSC_MAINNET_USDT = "0x55d398326f99059ff775485246999027b3197955";
+
 const isEnabled = (value) => String(value).toLowerCase() === "true";
 
 const decodeTopicAddress = (topic = "") =>
@@ -78,6 +81,12 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
     }
 
     getProvider();
+    const usdtContractNorm = String(process.env.HYBRID_USDT_CONTRACT || "")
+      .trim()
+      .toLowerCase();
+    if (!usdtContractNorm || usdtContractNorm !== BSC_MAINNET_USDT) {
+      console.warn("⚠️ HYBRID_USDT_CONTRACT should be BSC USDT:", BSC_MAINNET_USDT, "got:", usdtContractNorm || "(empty)");
+    }
     const iface = new Interface(BSC_USDT_ABI);
     const isManualRescan = fromBlockOverride !== null || toBlockOverride !== null;
     let chainTip;
@@ -89,6 +98,25 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
       chainTip = await withProviderRetry((p) => p.getBlockNumber());
       latestBlock = Math.max(0, chainTip - CONFIRMATIONS);
     }
+
+    try {
+      const USDT_CONTRACT = String(process.env.HYBRID_USDT_CONTRACT || "").trim();
+      if (USDT_CONTRACT) {
+        const diagFrom = Math.max(0, chainTip - 50);
+        const probeLogs = await withProviderRetry((provider) =>
+          provider.getLogs({
+            address: USDT_CONTRACT,
+            fromBlock: diagFrom,
+            toBlock: chainTip,
+            topics: [TRANSFER_TOPIC],
+          })
+        );
+        console.log("📊 Logs count:", probeLogs.length);
+      }
+    } catch (probeErr) {
+      console.error("📊 getLogs probe failed:", probeErr?.message || String(probeErr));
+    }
+
     const SAFE_START_BLOCK = Math.max(0, chainTip - SAFE_LOOKBACK_BLOCKS);
     const storedBlock =
       fromBlockOverride !== null ? Number(fromBlockOverride) - 1 : await getLastProcessedBlock();
@@ -116,19 +144,22 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
       try {
         logs = await withProviderRetry((provider) =>
           provider.getLogs({
-            address: process.env.HYBRID_USDT_CONTRACT,
+            address: String(process.env.HYBRID_USDT_CONTRACT || "").trim(),
             fromBlock,
             toBlock,
             topics: [TRANSFER_TOPIC],
           })
         );
       } catch (err) {
-        console.error("RPC ERROR:", err?.message || String(err));
+        console.error("❌ ERROR:", err?.message || String(err));
         await new Promise((r) => setTimeout(r, 3000));
         continue;
       }
 
       console.log("Deposit listener logs fetched:", { count: logs.length });
+      if (logs.length === 0) {
+        console.log("Deposit listener: no Transfer logs in this chunk (may still advance checkpoint)");
+      }
 
       const toAddresses = [
         ...new Set(
@@ -144,6 +175,8 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
             $in: [{ $toLower: { $ifNull: ["$walletAddress", ""] } }, toAddresses],
           },
         }).select("_id walletAddress");
+
+        console.log("👤 Users loaded:", users.length);
 
         const usersByWallet = new Map(
           users.map((user) => [(user.walletAddress || "").toLowerCase(), user])
@@ -170,6 +203,8 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
             continue;
           }
 
+          console.log("🎯 Target wallet:", matchedUser.walletAddress);
+
           const existing = await HybridDeposit.findOne({ txHash })
             .select("_id status")
             .lean();
@@ -195,6 +230,14 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
             continue;
           }
 
+          console.log("📥 Checking deposits for:", String(matchedUser.walletAddress || "").toLowerCase());
+          console.log("📥 Deposit detected:", {
+            txHash: shortTx(txHash),
+            amount,
+            to: shortAddr(toAddress),
+            block: log.blockNumber,
+          });
+
           let deposit = null;
 
           try {
@@ -205,15 +248,13 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
               amount,
               blockNumber: log.blockNumber,
               fromAddress,
-              tokenAddress: process.env.HYBRID_USDT_CONTRACT,
+              tokenAddress: String(process.env.HYBRID_USDT_CONTRACT || "").trim(),
             });
           } catch (err) {
             chunkHadCreditFailure = true;
-            console.error("Deposit credit failed:", err?.message || String(err));
+            console.error("❌ ERROR:", err?.message || String(err));
             continue;
           }
-
-          console.log("Deposit credited");
 
           processed += 1;
         }
@@ -247,7 +288,7 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
 
     return { skipped: false, processed };
   } catch (err) {
-    console.error("Listener crashed, retrying in 3s…", err?.message || String(err));
+    console.error("❌ ERROR:", err?.message || String(err));
     await new Promise((r) => setTimeout(r, 3000));
     throw err;
   }

@@ -26,6 +26,7 @@ export const creditHybridDeposit = async ({
 
   try {
     let deposit = null;
+    let creditedNew = false;
 
     await session.withTransaction(async () => {
       const creditedDeposit = await HybridDeposit.findOne({
@@ -106,6 +107,8 @@ export const creditHybridDeposit = async ({
         );
       }
 
+      creditedNew = true;
+
       await User.findByIdAndUpdate(
         userId,
         {
@@ -143,8 +146,13 @@ export const creditHybridDeposit = async ({
       await syncUserLevel(userId, session);
     });
 
+    if (creditedNew && deposit) {
+      console.log("✅ Deposit credited:", normalizedTxHash);
+    }
+
     return deposit;
   } catch (error) {
+    console.error("❌ ERROR:", error?.message || String(error));
     if (error?.code === 11000) {
       const existing = await HybridDeposit.findOne({ txHash: normalizedTxHash });
 

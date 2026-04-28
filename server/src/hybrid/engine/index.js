@@ -11,6 +11,8 @@ let sweepRunning = false;
 const isEnabled = (value) => String(value).toLowerCase() === "true";
 
 const runListener = async () => {
+  console.log("🔁 Listener tick...");
+
   if (isRunning) {
     console.log("🔁 Polling active: previous deposit scan still running");
     return;
@@ -26,7 +28,7 @@ const runListener = async () => {
       console.log(`HYBRID listener processed ${result.processed || 0} deposits`);
     }
   } catch (error) {
-    console.error("❌ Deposit listener error:", error);
+    console.error("❌ ERROR:", error?.message || String(error));
   } finally {
     isRunning = false;
   }
@@ -49,7 +51,7 @@ const runSweepEngine = async () => {
       );
     }
   } catch (error) {
-    console.error("❌ Hybrid sweep engine error:", error);
+    console.error("❌ ERROR:", error?.message || String(error));
   } finally {
     sweepRunning = false;
   }
@@ -72,6 +74,8 @@ export const startDepositListener = () => {
   );
   const sweepEngineMs = Number(process.env.HYBRID_SWEEP_ENGINE_INTERVAL_MS || 60000);
 
+  console.log("🚀 Deposit listener started");
+
   runListener();
   hybridTimer = setInterval(runListener, depositScanMs);
 
@@ -87,7 +91,7 @@ export const startDepositListener = () => {
     try {
       await autoMarkClaimable();
     } catch (err) {
-      console.error("❌ autoMarkClaimable error:", err);
+      console.error("❌ ERROR:", err?.message || String(err));
     }
   };
   void runAutoClaimable();
