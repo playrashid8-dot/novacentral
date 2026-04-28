@@ -4,7 +4,7 @@ import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import Image from "next/image";
-import API, { getApiErrorMessage } from "../../lib/api";
+import API, { getApiErrorMessage, initCSRF } from "../../lib/api";
 
 /* ==============================
    🔥 WRAPPER (FIX BUILD ERROR)
@@ -58,6 +58,7 @@ function SignupInner() {
 
     try {
       setOtpSending(true);
+      await initCSRF();
       await API.post("/auth/send-signup-otp", { email: cleanEmail });
       showToast("Check your email for the code 📬");
     } catch (err: any) {

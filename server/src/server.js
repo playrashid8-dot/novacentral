@@ -29,9 +29,9 @@ if (!process.env.JWT_SECRET) {
   throw new Error("JWT_SECRET missing");
 }
 
+const app = express();
 const csrfProtection = csrf({ cookie: true });
 
-const app = express();
 const allowedOrigins = [
   "http://localhost:3000",
   "https://novacentral.vercel.app",
@@ -99,20 +99,23 @@ app.use((req, res, next) => {
 app.use(cookieParser());
 // ✅ BODY PARSER (LIMITED SIZE)
 app.use(express.json({ limit: "10kb" }));
-app.use("/api", csrfProtection);
+// ✅ CSRF (after cookieParser + JSON — required for cookie-based secrets)
+app.use(csrfProtection);
+
 app.get("/api/csrf-token", (req, res) => {
-  const csrfToken = req.csrfToken();
-  // Readable cookie so the browser client can mirror it in X-CSRF-Token (csurf accepts this header)
-  res.cookie("XSRF-TOKEN", csrfToken, {
+  const token = req.csrfToken();
+
+  res.cookie("XSRF-TOKEN", token, {
     httpOnly: false,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
   });
+
   res.json({
     success: true,
-    msg: "ok",
-    data: { csrfToken },
+    msg: "CSRF token generated",
+    data: { csrfToken: token },
   });
 });
 
