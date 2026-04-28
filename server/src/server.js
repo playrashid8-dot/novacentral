@@ -31,15 +31,13 @@ if (!process.env.JWT_SECRET) {
 
 const app = express();
 
-/** Cross-site cookies (Vercel → API): SameSite=None + Secure on both _csrf and XSRF-TOKEN */
-const crossSiteCookies = process.env.NODE_ENV === "production";
+const isProd = process.env.NODE_ENV === "production";
 
 const csrfProtection = csrf({
   cookie: {
     httpOnly: true,
-    path: "/",
-    secure: crossSiteCookies,
-    sameSite: crossSiteCookies ? "none" : "lax",
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",
   },
 });
 
@@ -51,8 +49,27 @@ const allowedOrigins = [
     .map((s) => s.trim())
     .filter(Boolean),
 ];
+
+function isCorsOriginAllowed(origin) {
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  try {
+    const { hostname, protocol } = new URL(origin);
+    if (protocol === "https:" && hostname.endsWith(".vercel.app")) return true;
+  } catch {
+    /* ignore invalid origin */
+  }
+  return false;
+}
+
 const corsOptions = {
-  origin: allowedOrigins,
+  origin: function (origin, callback) {
+    if (isCorsOriginAllowed(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, false);
+    }
+  },
   credentials: true,
   methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
   allowedHeaders: [
@@ -87,28 +104,8 @@ process.on("uncaughtException", (err) => {
    🔐 GLOBAL SECURITY
 ============================== */
 
-// ✅ CORS
+// ✅ CORS (dynamic origin — credentials + Vercel preview *.vercel.app)
 app.use(cors(corsOptions));
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-
-  if (allowedOrigins.includes(origin)) {
-    res.header("Access-Control-Allow-Origin", origin);
-  }
-
-  res.header("Access-Control-Allow-Credentials", "true");
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Content-Type, CSRF-Token, csrf-token, X-CSRF-Token, X-XSRF-Token, X-Requested-With"
-  );
-  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,PATCH,OPTIONS");
-
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(204);
-  }
-
-  next();
-});
 
 // ✅ COOKIES FIRST (needed before CSRF / body-dependent verification)
 app.use(cookieParser());
@@ -122,9 +119,8 @@ app.get("/api/csrf-token", (req, res) => {
 
   res.cookie("XSRF-TOKEN", token, {
     httpOnly: false,
-    path: "/",
-    secure: crossSiteCookies,
-    sameSite: crossSiteCookies ? "none" : "lax",
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",
   });
 
   res.json({
