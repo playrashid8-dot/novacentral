@@ -11,7 +11,7 @@ import CountdownTimer from "../../components/CountdownTimer";
 import GlassCard from "../../components/GlassCard";
 import PrimaryButton from "../../components/PrimaryButton";
 import { withdrawalStatusClass } from "../../lib/helpers";
-import { fetchHybridSummary, fetchHybridWithdrawals, requestHybridWithdraw, sendWithdrawalOtp } from "../../lib/hybrid";
+import { fetchHybridSummary, fetchHybridWithdrawals, requestHybridWithdraw } from "../../lib/hybrid";
 
 const activePendingStatuses = ["pending", "claimable", "approved"];
 
@@ -21,11 +21,8 @@ export default function Withdrawal() {
   const [amount, setAmount] = useState("");
   const [walletAddress, setWalletAddress] = useState("");
   const [withdrawPassword, setWithdrawPassword] = useState("");
-  const [withdrawOtp, setWithdrawOtp] = useState("");
-  const [otpSending, setOtpSending] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
-  const [user, setUser]: any = useState(null);
   const [toast, setToast] = useState("");
   const [hybrid, setHybrid]: any = useState(null);
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
@@ -77,7 +74,6 @@ export default function Withdrawal() {
   useEffect(() => {
     Promise.all([fetchCurrentUser(), loadHybrid()]).then(([fresh]) => {
       if (fresh) {
-        setUser(fresh);
         setWalletAddress(fresh.walletAddress || "");
       }
     });
@@ -104,13 +100,8 @@ export default function Withdrawal() {
       return showToast("Wallet address is required");
     }
 
-    if (!withdrawPassword.trim() || withdrawPassword.trim().length < 8) {
-      return showToast("Enter your account password (min 8 characters)");
-    }
-
-    const otpClean = withdrawOtp.trim();
-    if (!/^\d{6}$/.test(otpClean)) {
-      return showToast("Enter the 6-digit email code");
+    if (!withdrawPassword.trim()) {
+      return showToast("Enter password");
     }
 
     try {
@@ -120,14 +111,12 @@ export default function Withdrawal() {
           amount: amt,
           walletAddress: walletAddress.trim(),
           password: withdrawPassword,
-          otp: otpClean,
         },
         globalThis.crypto?.randomUUID?.()
       );
 
       showToast("Hybrid withdrawal requested");
       setAmount("");
-      setWithdrawOtp("");
       await loadHybrid();
     } catch (err: any) {
       if (!suppressDuplicateCatchToast(err)) {
@@ -135,29 +124,6 @@ export default function Withdrawal() {
       }
     } finally {
       setLoading(false);
-    }
-  };
-
-  const sendOtpToEmail = async () => {
-    if (otpSending) return;
-    const accountEmail = String(user?.email || "").trim();
-    if (!accountEmail) {
-      return showToast("Email required — add email to your account");
-    }
-    try {
-      setOtpSending(true);
-      const envelope = await sendWithdrawalOtp();
-      showToast(
-        envelope.msg && String(envelope.msg).trim()
-          ? String(envelope.msg).trim()
-          : "Check your email for the code",
-      );
-    } catch (e: any) {
-      if (!suppressDuplicateCatchToast(e)) {
-        showToast(getApiErrorMessage(e, "Could not send code"));
-      }
-    } finally {
-      setOtpSending(false);
     }
   };
 
@@ -221,7 +187,7 @@ export default function Withdrawal() {
           <div className="mb-4">
             <p className="text-sm font-semibold text-white">Withdraw USDT</p>
             <p className="mt-1 text-xs text-gray-400">
-              Confirm with your login password and a one-time code sent to your email.
+              Confirm with your account password.
             </p>
           </div>
 
@@ -255,27 +221,6 @@ export default function Withdrawal() {
             onChange={(e) => setWithdrawPassword(e.target.value)}
             className="w-full mt-3 bg-white/[0.06] border border-white/10 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/25 outline-none p-3 rounded-xl text-sm placeholder:text-gray-600"
           />
-
-          <div className="mt-3 flex min-w-0 gap-2 flex-wrap sm:flex-nowrap">
-            <input
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              placeholder="6-digit email code"
-              value={withdrawOtp}
-              disabled={loading}
-              onChange={(e) => setWithdrawOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              className="min-w-0 flex-1 bg-white/[0.06] border border-white/10 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/25 outline-none p-3 rounded-xl text-sm placeholder:text-gray-600"
-            />
-            <button
-              type="button"
-              onClick={sendOtpToEmail}
-              disabled={loading || otpSending}
-              className="shrink-0 px-4 py-3 rounded-xl bg-white/[0.08] border border-purple-500/30 text-xs font-semibold text-purple-200 hover:bg-purple-500/15 disabled:opacity-50 shadow-md transition hover:shadow-lg"
-            >
-              {otpSending ? "Sending..." : "Email code"}
-            </button>
-          </div>
 
           <PrimaryButton
             type="button"

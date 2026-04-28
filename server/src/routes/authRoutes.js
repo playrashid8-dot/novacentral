@@ -5,9 +5,6 @@ import {
   login,
   logout,
   me,
-  sendSignupOtp,
-  sendOtp,
-  sendWithdrawOtp,
 } from "../controllers/authController.js";
 import auth from "../middleware/auth.js";
 
@@ -30,36 +27,6 @@ const registerLimiter = rateLimit({
 });
 
 /* ==============================
-   📧 SIGNUP OTP RATE LIMIT
-============================== */
-const sendSignupOtpLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => ipKeyGenerator(req.ip),
-  message: {
-    success: false,
-    msg: "Too many OTP requests, try later",
-    data: null,
-  },
-});
-
-const sendWithdrawOtpLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) =>
-    req.user?._id ? String(req.user._id) : ipKeyGenerator(req.ip),
-  message: {
-    success: false,
-    msg: "Too many OTP requests, try later",
-    data: null,
-  },
-});
-
-/* ==============================
    🔐 STRICT LIMIT (LOGIN)
 ============================== */
 const loginLimiter = rateLimit({
@@ -74,17 +41,6 @@ const loginLimiter = rateLimit({
     data: null,
   },
 });
-
-/* ==============================
-   📧 SIGNUP OTP (public)
-============================== */
-router.post("/send-signup-otp", sendSignupOtpLimiter, sendSignupOtp);
-router.post("/send-otp", sendSignupOtpLimiter, sendOtp);
-
-/* ==============================
-   📧 WITHDRAW OTP (authenticated)
-============================== */
-router.post("/send-withdraw-otp", auth, sendWithdrawOtpLimiter, sendWithdrawOtp);
 
 /* ==============================
    🔥 REGISTER

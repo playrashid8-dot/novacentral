@@ -35,8 +35,6 @@ function SignupInner() {
   const [number, setNumber] = useState("");
   const [password, setPassword] = useState("");
   const [referral, setReferral] = useState("");
-  const [otp, setOtp] = useState("");
-  const [otpSending, setOtpSending] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState("");
@@ -54,31 +52,6 @@ function SignupInner() {
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(""), 2500);
-  };
-
-  const handleSendSignupOtp = async () => {
-    if (otpSending) return;
-
-    const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail) {
-      return showToast("Enter email first");
-    }
-    if (!isValidEmail(cleanEmail)) {
-      return showToast("Enter a valid email first ⚠️");
-    }
-
-    try {
-      setOtpSending(true);
-      await initCSRF();
-      await API.post("/auth/send-signup-otp", { email: cleanEmail });
-      showToast("Check your email for the code 📬");
-    } catch (err: any) {
-      if (!suppressDuplicateCatchToast(err)) {
-        showToast(getApiErrorMessage(err, "Could not send code ❌"));
-      }
-    } finally {
-      setOtpSending(false);
-    }
   };
 
   /* 🚀 SIGNUP */
@@ -110,11 +83,6 @@ function SignupInner() {
       return showToast("Password must be at least 8 characters 🔒");
     }
 
-    const otpClean = otp.trim();
-    if (!/^\d{6}$/.test(otpClean)) {
-      return showToast("Enter the 6-digit code from your email ⚠️");
-    }
-
     try {
       setLoading(true);
 
@@ -125,7 +93,6 @@ function SignupInner() {
         password: cleanPassword,
         number: cleanPhone,
         referralCode: referral.trim(),
-        otp: otpClean,
       });
 
       showToast("Account created 🚀");
@@ -172,28 +139,7 @@ function SignupInner() {
           </h2>
 
           <Input label="Username" value={username} setValue={setUsername} />
-          <div className="mb-3">
-            <p className="text-xs text-gray-400 mb-1">Email</p>
-            <div className="flex gap-2">
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Email"
-                className="flex-1 bg-white/5 border border-white/10 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none p-3 rounded-xl text-sm placeholder:text-gray-500"
-              />
-              <button
-                type="button"
-                onClick={handleSendSignupOtp}
-                disabled={otpSending}
-                className="shrink-0 px-3 rounded-xl bg-white/10 border border-purple-500/40 text-xs font-semibold text-purple-200 hover:bg-purple-500/20 disabled:opacity-50"
-              >
-                {otpSending ? "Sending..." : "Send code"}
-              </button>
-            </div>
-          </div>
-
-          <Input label="Verification code (6 digits)" value={otp} setValue={setOtp} />
+          <Input label="Email" value={email} setValue={setEmail} type="email" />
           <Input label="Phone Number" value={number} setValue={setNumber} />
           <Input label="Password" value={password} setValue={setPassword} type="password" />
           <Input label="Referral Code (optional)" value={referral} setValue={setReferral} />

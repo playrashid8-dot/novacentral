@@ -25,12 +25,6 @@ export const fetchHybridWithdrawals = async () => {
   return response.data?.withdrawals || [];
 };
 
-/** Sends OTP to the logged-in user's email (hybrid withdraw). */
-export const sendWithdrawalOtp = async () => {
-  const res = await API.post("/withdraw/send-otp", {});
-  return normalize(res.data);
-};
-
 export const fetchHybridStakes = async () => {
   const res = await API.get("/stake/my");
   const response = normalize(res.data);
@@ -56,7 +50,6 @@ export const requestHybridWithdraw = async (payload, idempotencyKey) => {
       amount: payload.amount,
       walletAddress: payload.walletAddress,
       password: payload.password,
-      otp: payload.otp,
     },
     {
       headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,

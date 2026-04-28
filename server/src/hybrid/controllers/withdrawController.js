@@ -1,7 +1,5 @@
 import bcrypt from "bcryptjs";
 import User from "../../models/User.js";
-import { OTP_PURPOSE } from "../../models/Otp.js";
-import { verifyOtp } from "../../controllers/authController.js";
 import {
   claimHybridWithdrawal,
   getHybridWithdrawals,
@@ -13,18 +11,14 @@ const getIdempotencyKey = (req) => req.get("Idempotency-Key")?.trim() || null;
 
 export const requestWithdraw = async (req, res) => {
   try {
-    const { amount, walletAddress, password, otp } = req.body;
+    const { amount, walletAddress, password } = req.body;
 
-    if (!password || String(password).length < 8) {
-      return sendError(res, 400, "Password required (minimum 8 characters)", null);
+    const passwordStr = password != null ? String(password) : "";
+    if (!passwordStr.trim()) {
+      return sendError(res, 400, "Password required", null);
     }
 
-    const otpStr = otp != null ? String(otp).trim() : "";
-    if (!/^[0-9]{6}$/.test(otpStr)) {
-      return sendError(res, 400, "Valid 6-digit OTP required", null);
-    }
-
-    const user = await User.findById(req.user._id).select("+password email isBlocked");
+    const user = await User.findById(req.user._id).select("+password isBlocked");
 
     if (!user) {
       return sendError(res, 404, "User not found", null);
@@ -34,21 +28,10 @@ export const requestWithdraw = async (req, res) => {
       return sendError(res, 403, "Account blocked", null);
     }
 
-    const email = String(user.email || "").toLowerCase().trim();
-    if (!email) {
-      return sendError(res, 400, "User email not found", null);
-    }
+    const isMatch = await bcrypt.compare(passwordStr, user.password);
 
-    const isPasswordValid = await bcrypt.compare(String(password || ""), user.password);
-
-    if (!isPasswordValid) {
+    if (!isMatch) {
       return sendError(res, 400, "Invalid password");
-    }
-
-    const isValidOtp = await verifyOtp(email, otpStr, OTP_PURPOSE.WITHDRAW);
-
-    if (!isValidOtp) {
-      return sendError(res, 400, "Invalid or expired OTP");
     }
 
     const result = await requestHybridWithdrawal(
