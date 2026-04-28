@@ -1,17 +1,13 @@
 import { JsonRpcProvider } from "ethers";
 
 /**
- * Defaults avoid Binance public dataseeds (often rate-limit / eth_getLogs issues).
- * Set HYBRID_BSC_RPC_URL to NodeReal (or another dedicated endpoint), e.g.
- * https://bsc-mainnet.nodereal.io/v1/YOUR_KEY
+ * RPC priority (env only): HYBRID_BSC_RPC_URL (main, e.g. NodeReal) →
+ * HYBRID_BSC_RPC_FALLBACK (e.g. publicnode) → HYBRID_BSC_RPC_BACKUP (e.g. ankr).
  */
-const BSC_PUBLIC_FALLBACKS = ["https://rpc.ankr.com/bsc", "https://bsc.publicnode.com"];
-
 const RPC_URLS = [
   String(process.env.HYBRID_BSC_RPC_URL || "").trim(),
   String(process.env.HYBRID_BSC_RPC_FALLBACK || "").trim(),
   String(process.env.HYBRID_BSC_RPC_BACKUP || "").trim(),
-  ...BSC_PUBLIC_FALLBACKS,
 ]
   .map((url) => String(url || "").trim())
   .filter(Boolean);
@@ -21,8 +17,8 @@ const uniqueRpcs = [...new Set(RPC_URLS)];
 
 let currentIndex = 0;
 
-/** Switch to next RPC only after this many consecutive failures on the current RPC */
-const SWITCH_AFTER_CONSECUTIVE_FAILURES = 3;
+/** Switch to next RPC after this many consecutive failures on the current endpoint */
+const SWITCH_AFTER_CONSECUTIVE_FAILURES = 1;
 
 let consecutiveRpcFailures = 0;
 
@@ -42,8 +38,9 @@ const switchRpc = () => {
   if (uniqueRpcs.length === 0) {
     return;
   }
+  console.log("🔁 Switching RPC...");
   currentIndex = (currentIndex + 1) % uniqueRpcs.length;
-  console.log("🔁 Switching RPC →", uniqueRpcs[currentIndex]);
+  console.log("   Using:", uniqueRpcs[currentIndex]);
 };
 
 /** Enough attempts to allow multiple strikes per RPC before rotation + failover chain */
@@ -66,7 +63,7 @@ export const withProviderRetry = async (fn, retries = null) => {
     } catch (err) {
       lastError = err;
       const msg = String(err?.message || err || "");
-      console.error("RPC failed:", msg);
+      console.error("❌ ERROR:", msg);
       if (/[-]?32005|limit exceeded|query returned more than|range is too large/i.test(msg)) {
         console.warn(
           "⚠️ RPC rejected eth_getLogs / heavy query (-32005-style) — rotate HYBRID_BSC_RPC_URL or reduce scan range"
@@ -96,14 +93,12 @@ export const checkRpcHealth = async () => {
     return false;
   }
   try {
-    const provider = getProvider();
-    await provider.getBlockNumber();
+    await withProviderRetry((p) => p.getBlockNumber(), Math.max(6, uniqueRpcs.length * 3));
     return true;
-  } catch {
+  } catch (err) {
+    console.error("❌ ERROR:", err?.message || String(err));
     return false;
   }
 };
 
-export const provider = uniqueRpcs.length > 0 ? getProvider() : null;
-
-export default provider;
+export default getProvider;

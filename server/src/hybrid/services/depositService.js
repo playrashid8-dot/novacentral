@@ -147,7 +147,7 @@ export const creditHybridDeposit = async ({
     });
 
     if (creditedNew && deposit) {
-      console.log("✅ Deposit credited:", normalizedTxHash);
+      console.log("✅ Deposit credited");
     }
 
     return deposit;
@@ -192,7 +192,8 @@ export const enrichHybridDepositsWithConfirmations = async (deposits) => {
         confirmationStatus,
       };
     });
-  } catch {
+  } catch (err) {
+    console.error("❌ ERROR:", err?.message || String(err));
     return deposits.map((d) => ({
       ...d,
       currentBlock: null,

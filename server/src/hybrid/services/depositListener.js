@@ -114,7 +114,7 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
         console.log("📊 Logs count:", probeLogs.length);
       }
     } catch (probeErr) {
-      console.error("📊 getLogs probe failed:", probeErr?.message || String(probeErr));
+      console.error("❌ ERROR:", probeErr?.message || String(probeErr));
     }
 
     const SAFE_START_BLOCK = Math.max(0, chainTip - SAFE_LOOKBACK_BLOCKS);
@@ -156,7 +156,7 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
         continue;
       }
 
-      console.log("Deposit listener logs fetched:", { count: logs.length });
+      console.log("📊 Logs count:", logs.length);
       if (logs.length === 0) {
         console.log("Deposit listener: no Transfer logs in this chunk (may still advance checkpoint)");
       }
@@ -203,7 +203,10 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
             continue;
           }
 
-          console.log("🎯 Target wallet:", matchedUser.walletAddress);
+          const userWalletLower = String(matchedUser.walletAddress || "").trim().toLowerCase();
+          if (toAddress === userWalletLower) {
+            console.log("🎯 Target wallet matched");
+          }
 
           const existing = await HybridDeposit.findOne({ txHash })
             .select("_id status")
@@ -230,8 +233,9 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
             continue;
           }
 
-          console.log("📥 Checking deposits for:", String(matchedUser.walletAddress || "").toLowerCase());
-          console.log("📥 Deposit detected:", {
+          console.log("📥 Deposit detected");
+          console.log("📥 Checking deposits for:", userWalletLower);
+          console.log("📥 Deposit detail:", {
             txHash: shortTx(txHash),
             amount,
             to: shortAddr(toAddress),
@@ -279,7 +283,7 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
           await saveLastProcessedBlock(toBlock);
           console.log("Checkpoint saved:", toBlock);
         } catch (err) {
-          console.error("Checkpoint save failed:", err);
+          console.error("❌ ERROR:", err?.message || String(err));
         }
       }
 

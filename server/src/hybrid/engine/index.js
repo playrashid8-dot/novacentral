@@ -1,6 +1,9 @@
 import { scanHybridDeposits } from "../services/depositListener.js";
-import { runHybridSweepBatch } from "../services/sweepService.js";
+import { runHybridSweepBatch, canSweepHybridFunds } from "../services/sweepService.js";
 import { autoMarkClaimable } from "../services/withdrawService.js";
+import { checkRpcHealth, getCurrentRpcUrl, getProvider } from "../utils/provider.js";
+import hybridConfig from "../../config/hybridConfig.js";
+import { Wallet, parseEther, formatEther } from "ethers";
 
 let hybridTimer = null;
 let sweepTimer = null;
@@ -9,6 +12,48 @@ let isRunning = false;
 let sweepRunning = false;
 
 const isEnabled = (value) => String(value).toLowerCase() === "true";
+
+const logHybridBootstrapStatus = async () => {
+  const listenerOk = hybridTimer != null;
+  const rpcOk = await checkRpcHealth();
+  const usdt = String(process.env.HYBRID_USDT_CONTRACT || "").trim().toLowerCase();
+  const contractOk = usdt === "0x55d398326f99059ff775485246999027b3197955";
+  let gasOk = false;
+
+  try {
+    if (!hybridConfig.gasKey) {
+      console.error("❌ ERROR:", "HYBRID_GAS_FUNDER_PRIVATE_KEY not configured");
+    } else if (rpcOk) {
+      const gf = new Wallet(hybridConfig.gasKey, getProvider());
+      const fb = await gf.getBalance();
+      gasOk = fb >= parseEther("0.001");
+      console.log("⛽ Funder:", gf.address);
+      console.log("⛽ Balance:", formatEther(fb));
+      if (!gasOk) {
+        console.error(
+          "❌ ERROR:",
+          `Gas funder BNB below 0.001 (has ${formatEther(fb)} BNB)`
+        );
+      }
+    }
+  } catch (err) {
+    console.error("❌ ERROR:", err?.message || String(err));
+  }
+
+  const sweepReady = canSweepHybridFunds() && gasOk;
+  const depositDetectOk =
+    rpcOk && contractOk && isEnabled(process.env.HYBRID_EARN_ENABLED);
+  const creditOk = isEnabled(process.env.HYBRID_EARN_ENABLED);
+
+  console.log(`Listener Running: ${listenerOk ? "✅" : "❌"}`);
+  console.log(
+    `RPC Working: ${rpcOk ? "✅" : "❌"}${rpcOk && getCurrentRpcUrl() ? ` (${getCurrentRpcUrl()})` : ""}`
+  );
+  console.log(`Deposit Detection: ${depositDetectOk ? "✅" : "❌"}`);
+  console.log(`Credit System: ${creditOk ? "✅" : "❌"}`);
+  console.log(`Gas Transfer: ${gasOk ? "✅" : "❌"}`);
+  console.log(`Sweep: ${sweepReady ? "✅" : "❌"}`);
+};
 
 const runListener = async () => {
   console.log("🔁 Listener tick...");
@@ -100,6 +145,8 @@ export const startDepositListener = () => {
   console.log(
     `HYBRID engine started (deposit scan ${depositScanMs}ms, sweep ${sweepEngineMs}ms, claimable ${claimableMs}ms)`
   );
+
+  void logHybridBootstrapStatus();
 };
 
 export const startHybridEngine = startDepositListener;

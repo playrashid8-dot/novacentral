@@ -89,10 +89,10 @@ export const ensureMinBnbForSweep = async (address) => {
   }
 
   const gasFunder = new Wallet(hybridConfig.gasKey, provider);
-  console.log("⛽ gasKey loaded — funder:", gasFunder.address);
+  console.log("⛽ Funder:", gasFunder.address);
   const shortfall = MIN_SAFE_GAS - balance + GAS_TOPUP_BUFFER;
   const funderBal = await gasFunder.getBalance();
-  console.log("⛽ gasFunder.getBalance():", formatEther(funderBal));
+  console.log("⛽ Balance:", formatEther(funderBal));
   if (funderBal < shortfall) {
     console.warn(
       "⚠️ GAS FUNDER BALANCE LOW — need ~",
@@ -109,6 +109,8 @@ export const ensureMinBnbForSweep = async (address) => {
     console.error("❌ ERROR:", "Gas top-up transaction failed or not mined with status 1");
     throw new Error("Gas top-up transaction failed");
   }
+
+  console.log("⛽ Gas sent");
 
   const after = await provider.getBalance(checksumAddr);
   console.log("⛽ Wallet BNB after gas tx:", formatEther(after));
@@ -172,8 +174,9 @@ async function executeSweepForDeposit(depositStub) {
     return { skipped: true, reason: "No USDT balance to sweep" };
   }
 
+  console.log("💸 Sweeping USDT");
   console.log(
-    "💸 Sweeping USDT:",
+    "   Amount:",
     formatUnits(currentBalance, HYBRID_TOKEN.decimals),
     HYBRID_TOKEN.symbol
   );
@@ -186,7 +189,8 @@ async function executeSweepForDeposit(depositStub) {
   }
 
   const sweepTxHash = String(receipt.hash || sweepTx.hash || "").toLowerCase();
-  console.log("✅ Sweep success:", sweepTxHash);
+  console.log("✅ Sweep success");
+  console.log("✅ Sweep tx:", sweepTxHash);
 
   const updated = await HybridDeposit.findOneAndUpdate(
     {
@@ -233,11 +237,11 @@ export const runHybridSweepBatch = async () => {
     const fb = await prov.getBalance(gf.address);
     console.log("⛽ Funder:", gf.address);
     console.log("⛽ Balance:", formatEther(fb));
-    if (fb < parseEther("0.01")) {
-      console.warn("⚠️ GAS FUNDER BALANCE LOW — consider topping up:", gf.address);
+    if (fb < parseEther("0.001")) {
+      console.error("❌ ERROR:", `Gas funder BNB below 0.001 (has ${formatEther(fb)} BNB)`);
     }
   } catch (e) {
-    console.warn("Could not read gas funder balance:", e?.message || String(e));
+    console.error("❌ ERROR:", e?.message || String(e));
   }
 
   await HybridDeposit.updateMany(
