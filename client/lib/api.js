@@ -128,15 +128,6 @@ API.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    if (typeof window !== "undefined") {
-      const apiMsg = error.response.data?.msg;
-      if (apiMsg) {
-        showToast(apiMsg);
-      } else {
-        showToast("Server error");
-      }
-    }
-
     const { status, data } = error.response;
     const cfg = error.config || {};
     const msg = String(data?.msg || "").toLowerCase();
@@ -190,7 +181,7 @@ API.interceptors.response.use(
       console.error("🔥 Server Error:", data);
 
       if (typeof window !== "undefined") {
-        showToast("Server error, try again later ❌");
+        showToast(data?.msg || data?.message || "Server error");
       }
     }
 
@@ -202,7 +193,7 @@ export const getApiErrorMessage = (error, fallback = "Something went wrong ❌")
   if (!error) return fallback;
 
   if (!error.response) {
-    return "Server not reachable ❌";
+    return "Network error";
   }
 
   return (
