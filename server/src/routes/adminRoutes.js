@@ -110,8 +110,8 @@ router.get("/withdrawals/pending", auth, isAdmin, async (req, res) => {
 router.post("/hybrid/withdraw/approve", auth, isAdmin, async (req, res) => {
   try {
     const { withdrawalId } = req.body || {};
-    if (!withdrawalId) {
-      return res.status(400).json({ success: false, msg: "withdrawalId required", data: null });
+    if (!withdrawalId || String(withdrawalId).trim() === "") {
+      return res.status(400).json({ success: false, msg: "Invalid ID", data: {} });
     }
     const data = await adminApproveHybridWithdrawal(withdrawalId, req.user._id);
     return res.json({ success: true, msg: "Withdrawal approved", data: { withdrawal: data } });
@@ -123,10 +123,11 @@ router.post("/hybrid/withdraw/approve", auth, isAdmin, async (req, res) => {
 router.post("/hybrid/withdraw/pay", auth, isAdmin, async (req, res) => {
   try {
     const { withdrawalId, txHash } = req.body || {};
-    if (!withdrawalId || !txHash) {
-      return res
-        .status(400)
-        .json({ success: false, msg: "withdrawalId and txHash required", data: null });
+    if (!withdrawalId || String(withdrawalId).trim() === "") {
+      return res.status(400).json({ success: false, msg: "Invalid ID", data: {} });
+    }
+    if (!txHash || String(txHash).trim() === "") {
+      return res.status(400).json({ success: false, msg: "txHash required", data: {} });
     }
     const data = await adminMarkHybridWithdrawalPaid(withdrawalId, txHash, req.user._id);
     return res.json({ success: true, msg: "Withdrawal marked as paid", data });
@@ -138,8 +139,8 @@ router.post("/hybrid/withdraw/pay", auth, isAdmin, async (req, res) => {
 router.post("/hybrid/withdraw/reject", auth, isAdmin, async (req, res) => {
   try {
     const { withdrawalId } = req.body || {};
-    if (!withdrawalId) {
-      return res.status(400).json({ success: false, msg: "withdrawalId required", data: null });
+    if (!withdrawalId || String(withdrawalId).trim() === "") {
+      return res.status(400).json({ success: false, msg: "Invalid ID", data: {} });
     }
     const data = await adminRejectHybridWithdrawal(withdrawalId);
     return res.json({ success: true, msg: "Withdrawal rejected and refunded", data: { withdrawal: data } });
@@ -190,6 +191,11 @@ router.get("/users", auth, isAdmin, async (req, res) => {
 // 🔒 block
 router.post("/block/:id", auth, isAdmin, async (req, res) => {
   try {
+    const { id } = req.params;
+    if (!id || String(id).trim() === "") {
+      return res.status(400).json({ success: false, msg: "Invalid ID", data: {} });
+    }
+
     const user = await User.findByIdAndUpdate(req.params.id, { isBlocked: true }, { new: true });
     if (!user) {
       return res.status(404).json({ success: false, msg: "User not found", data: null });
@@ -203,6 +209,11 @@ router.post("/block/:id", auth, isAdmin, async (req, res) => {
 // 🔓 unblock
 router.post("/unblock/:id", auth, isAdmin, async (req, res) => {
   try {
+    const { id } = req.params;
+    if (!id || String(id).trim() === "") {
+      return res.status(400).json({ success: false, msg: "Invalid ID", data: {} });
+    }
+
     const user = await User.findByIdAndUpdate(req.params.id, { isBlocked: false }, { new: true });
     if (!user) {
       return res.status(404).json({ success: false, msg: "User not found", data: null });
@@ -216,6 +227,11 @@ router.post("/unblock/:id", auth, isAdmin, async (req, res) => {
 // 💰 reset wallet (dangerous → admin only)
 router.post("/reset-wallet/:id", auth, isAdmin, async (req, res) => {
   try {
+    const { id } = req.params;
+    if (!id || String(id).trim() === "") {
+      return res.status(400).json({ success: false, msg: "Invalid ID", data: {} });
+    }
+
     const user = await User.findByIdAndUpdate(
       req.params.id,
       {

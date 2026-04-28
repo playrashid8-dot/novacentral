@@ -204,6 +204,10 @@ export const register = async (req, res) => {
     number = number?.trim();
     otp = String(otp || "").trim();
 
+    if (!email || !otp) {
+      return sendAuthResponse(res, 400, false, "Email and OTP required");
+    }
+
     // ✅ VALIDATION
     if (!username || !email || !password || !number || !otp) {
       return sendAuthResponse(res, 400, false, "All fields required including OTP");

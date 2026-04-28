@@ -28,7 +28,7 @@ export const requestHybridWithdrawal = async (
   walletAddress,
   idempotencyKey = null
 ) => {
-  const numericAmount = Number(amount);
+  const numericAmount = Number(amount || 0);
   const normalizedWallet = walletAddress?.trim();
 
   if (!Number.isFinite(numericAmount) || numericAmount < WITHDRAW_MIN_AMOUNT) {

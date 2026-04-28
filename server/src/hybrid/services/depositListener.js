@@ -1,4 +1,4 @@
-import { Interface, formatUnits } from "ethers";
+import { Interface, formatUnits, id } from "ethers";
 import User from "../../models/User.js";
 import HybridDeposit from "../models/HybridDeposit.js";
 import HybridSetting from "../models/HybridSetting.js";
@@ -6,10 +6,12 @@ import { creditHybridDeposit } from "./depositService.js";
 import { BSC_USDT_ABI, HYBRID_TOKEN, MIN_HYBRID_DEPOSIT } from "../utils/constants.js";
 import { getProvider, getCurrentRpcUrl, getRpcUrls, withProviderRetry } from "../utils/provider.js";
 
-const TRANSFER_TOPIC =
-  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55aeb1d5b1d";
+/** Canonical Transfer event topic — avoids mismatched hard-coded hashes */
+const TRANSFER_TOPIC = id("Transfer(address,address,uint256)");
 const MIN_DEPOSIT_AMOUNT = MIN_HYBRID_DEPOSIT;
 const FIRST_RUN_SCAN_BLOCKS = 20000;
+/** BSC RPCs often reject eth_getLogs over large spans — keep chunks bounded */
+const MAX_BLOCK_RANGE = 2000;
 /** Reorg / fake-log safety: always ≥ 2 (see business rules) */
 const CONFIRMATIONS = 3;
 
@@ -90,21 +92,15 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
       throw new Error("Invalid block range for deposit scan");
     }
 
-      if (latestBlock <= storedBlock) {
-        console.log("Deposit listener up to date");
+    if (latestBlock <= storedBlock) {
+      console.log("Deposit listener up to date");
       return { skipped: false, processed: 0 };
     }
 
     let processed = 0;
-    const chunkSize = 1000;
 
-    for (let fromBlock = storedBlock + 1; fromBlock <= latestBlock; fromBlock += chunkSize) {
-      if (fromBlock > latestBlock) {
-        console.log("Skipping invalid block range");
-        continue;
-      }
-
-      const toBlock = Math.min(fromBlock + chunkSize - 1, latestBlock);
+    for (let fromBlock = storedBlock + 1; fromBlock <= latestBlock; ) {
+      const toBlock = Math.min(latestBlock, fromBlock + MAX_BLOCK_RANGE - 1);
       let chunkHadCreditFailure = false;
 
       console.log("Hybrid deposit scan");
@@ -122,6 +118,7 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
         );
       } catch (err) {
         console.error("Log fetch failed:", err?.message || String(err));
+        await new Promise((r) => setTimeout(r, 2000));
         break;
       }
 
@@ -143,7 +140,7 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
         }).select("_id walletAddress");
 
         const usersByWallet = new Map(
-          users.map((user) => [user.walletAddress.toLowerCase(), user])
+          users.map((user) => [(user.walletAddress || "").toLowerCase(), user])
         );
 
         console.log("Deposit listener wallet match summary:", {
@@ -238,6 +235,8 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
           console.error("Checkpoint save failed:", err);
         }
       }
+
+      fromBlock = toBlock + 1;
     }
 
     return { skipped: false, processed };

@@ -1,6 +1,14 @@
 import { JsonRpcProvider } from "ethers";
 
+/** Default public endpoints — merged with env so limits/pruned-node errors fail over cleanly */
+const DEFAULT_BSC_RPCS = [
+  "https://bsc-dataseed.binance.org/",
+  "https://rpc.ankr.com/bsc",
+  "https://bsc.publicnode.com",
+];
+
 const RPC_URLS = [
+  ...DEFAULT_BSC_RPCS,
   process.env.HYBRID_BSC_RPC_URL,
   process.env.HYBRID_BSC_RPC_FALLBACK_1,
   process.env.HYBRID_BSC_RPC_FALLBACK_2,

@@ -85,7 +85,7 @@ export default function Withdrawal() {
   const withdraw = async () => {
     if (loading) return;
 
-    const amt = Number(amount);
+    const amt = Number(amount || 0);
 
     if (withdrawMin == null) {
       return showToast("Loading withdrawal rules…");

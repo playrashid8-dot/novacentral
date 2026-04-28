@@ -5,7 +5,7 @@ import cookieParser from "cookie-parser";
 import csrf from "csurf";
 import helmet from "helmet";
 import morgan from "morgan";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 
 // 🔥 DB
 import connectDB from "./config/db.js";
@@ -24,6 +24,10 @@ import { startHybridEngine } from "./hybrid/engine/index.js";
 
 // 🔧 CONFIG
 dotenv.config();
+
+if (!process.env.JWT_SECRET) {
+  throw new Error("JWT_SECRET missing");
+}
 
 const csrfProtection = csrf({
   cookie: {
@@ -54,12 +58,12 @@ app.set("trust proxy", 1);
 ============================== */
 await connectDB();
 
-process.on("unhandledRejection", (reason) => {
-  console.error("Unhandled Rejection:", reason);
+process.on("unhandledRejection", (err) => {
+  console.error("UNHANDLED:", err);
 });
 
 process.on("uncaughtException", (err) => {
-  console.error("Uncaught Exception:", err);
+  console.error("CRASH:", err);
 });
 
 /* ==============================
@@ -123,6 +127,7 @@ const globalLimiter = rateLimit({
   max: 300,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
 });
 
 app.use(globalLimiter);
@@ -133,6 +138,7 @@ app.use(globalLimiter);
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 50,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
   message: {
     success: false,
     msg: "Too many requests, try again later ❌",

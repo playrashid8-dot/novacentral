@@ -214,6 +214,8 @@ export const runHybridSweepBatch = async () => {
 
   for (let i = 0; i < deposits.length; i += 1) {
     const d = deposits[i];
+    if (d.sweeped) continue;
+
     try {
       const r = await executeSweepForDeposit(d);
       results.push({ depositId: String(d._id), ...r });

@@ -20,8 +20,6 @@ const walletCounterSchema = new mongoose.Schema(
   }
 );
 
-walletCounterSchema.index({ key: 1 }, { unique: true });
-
 const WalletCounter =
   mongoose.models.WalletCounter ||
   mongoose.model("WalletCounter", walletCounterSchema);

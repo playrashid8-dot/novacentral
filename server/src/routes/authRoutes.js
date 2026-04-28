@@ -21,6 +21,7 @@ const registerLimiter = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
   message: {
     success: false,
     msg: "Too many registrations, try later",
@@ -36,6 +37,7 @@ const sendSignupOtpLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
   message: {
     success: false,
     msg: "Too many OTP requests, try later",
@@ -48,7 +50,8 @@ const sendWithdrawOtpLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => (req.user?._id ? String(req.user._id) : ipKeyGenerator(req.ip)),
+  keyGenerator: (req) =>
+    req.user?._id ? String(req.user._id) : ipKeyGenerator(req.ip),
   message: {
     success: false,
     msg: "Too many OTP requests, try later",
@@ -64,6 +67,7 @@ const loginLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
   message: {
     success: false,
     msg: "Too many login attempts, try later",

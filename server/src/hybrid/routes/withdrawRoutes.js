@@ -11,7 +11,8 @@ const sendWithdrawOtpLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => (req.user?._id ? String(req.user._id) : ipKeyGenerator(req.ip)),
+  keyGenerator: (req) =>
+    req.user?._id ? String(req.user._id) : ipKeyGenerator(req.ip),
   message: {
     success: false,
     msg: "Too many OTP requests, try later",

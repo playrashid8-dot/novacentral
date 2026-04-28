@@ -11,8 +11,8 @@ export const createStake = async (userId, amount, planDays) => {
 
   try {
     let result = null;
-    const numericAmount = Number(amount);
-    const numericPlanDays = Number(planDays);
+    const numericAmount = Number(amount || 0);
+    const numericPlanDays = Number(planDays || 0);
     const plan = STAKE_PLANS[numericPlanDays];
 
     if (!plan) {
