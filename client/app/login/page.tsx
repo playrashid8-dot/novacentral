@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Image from "next/image";
-import API, { getApiErrorMessage } from "../../lib/api";
+import API, { getApiErrorMessage, initCSRF } from "../../lib/api";
 import { resetLogoutState } from "../../lib/auth";
 
 export default function Login() {
@@ -40,6 +40,7 @@ export default function Login() {
       setLoading(true);
       resetLogoutState();
 
+      await initCSRF();
       await API.post("/auth/login", {
         username: cleanUsername,
         password: cleanPassword,

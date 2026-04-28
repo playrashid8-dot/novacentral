@@ -30,11 +30,26 @@ if (!process.env.JWT_SECRET) {
 }
 
 const app = express();
-const csrfProtection = csrf({ cookie: true });
+
+/** Cross-site cookies (Vercel → API): SameSite=None + Secure on both _csrf and XSRF-TOKEN */
+const crossSiteCookies = process.env.NODE_ENV === "production";
+
+const csrfProtection = csrf({
+  cookie: {
+    httpOnly: true,
+    path: "/",
+    secure: crossSiteCookies,
+    sameSite: crossSiteCookies ? "none" : "lax",
+  },
+});
 
 const allowedOrigins = [
   "http://localhost:3000",
   "https://novacentral.vercel.app",
+  ...(process.env.ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
 ];
 const corsOptions = {
   origin: allowedOrigins,
@@ -107,9 +122,9 @@ app.get("/api/csrf-token", (req, res) => {
 
   res.cookie("XSRF-TOKEN", token, {
     httpOnly: false,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
     path: "/",
+    secure: crossSiteCookies,
+    sameSite: crossSiteCookies ? "none" : "lax",
   });
 
   res.json({

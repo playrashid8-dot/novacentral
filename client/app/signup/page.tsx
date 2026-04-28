@@ -103,6 +103,7 @@ function SignupInner() {
     try {
       setLoading(true);
 
+      await initCSRF();
       await API.post("/auth/register", {
         username: cleanUsername,
         email: cleanEmail,
