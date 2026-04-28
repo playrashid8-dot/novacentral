@@ -4,7 +4,17 @@ import axios from "axios";
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
-// 🚀 INSTANCE
+/** @returns {string|null} */
+function readXsrfCookie() {
+  if (typeof document === "undefined") return null;
+  const row = document.cookie
+    .split("; ")
+    .find((r) => r.startsWith("XSRF-TOKEN="));
+  if (!row) return null;
+  return decodeURIComponent(row.split("=").slice(1).join("="));
+}
+
+// 🚀 INSTANCE — must send cookies for CSRF + httpOnly auth
 const API = axios.create({
   baseURL: BASE_URL,
   timeout: 15000,
@@ -14,17 +24,14 @@ const API = axios.create({
   },
 });
 
-const bareClient = axios.create({
-  baseURL: BASE_URL,
-  timeout: 15000,
-  withCredentials: true,
-});
 
 let csrfTokenCache = null;
 
+/** Prime CSRF secret + XSRF-TOKEN cookie before unsafe requests */
 const fetchCsrfToken = async () => {
-  const { data } = await bareClient.get("/csrf-token");
-  csrfTokenCache = data?.data?.csrfToken || null;
+  const csrfUrl = `${BASE_URL.replace(/\/$/, "")}/csrf-token`;
+  const { data } = await axios.get(csrfUrl, { withCredentials: true });
+  csrfTokenCache = readXsrfCookie() || data?.data?.csrfToken || null;
   return csrfTokenCache;
 };
 
@@ -34,6 +41,14 @@ let isRedirecting = false;
 export const resetRedirectState = () => {
   isRedirecting = false;
 };
+
+function attachCsrfHeaders(config, token) {
+  if (!token) return;
+  config.headers = config.headers || {};
+  config.headers["X-CSRF-Token"] = token;
+  config.headers["csrf-token"] = token;
+  config.headers["CSRF-Token"] = token;
+}
 
 /* ==============================
    🔐 REQUEST INTERCEPTOR
@@ -51,19 +66,26 @@ API.interceptors.request.use(async (config) => {
 
   const method = String(config.method || "get").toLowerCase();
   const url = String(config.url || "");
-  if (["post", "put", "patch", "delete"].includes(method) && !url.includes("csrf-token")) {
-    if (!csrfTokenCache) {
+  const isUnsafe = ["post", "put", "patch", "delete"].includes(method);
+  const skipCsrf = url.includes("csrf-token");
+
+  if (isUnsafe && !skipCsrf) {
+    let token = readXsrfCookie() || csrfTokenCache;
+
+    if (!token) {
       try {
         await fetchCsrfToken();
+        token = readXsrfCookie() || csrfTokenCache;
       } catch {
         // CSRF will fail later with a clear response
       }
     }
-    if (csrfTokenCache) {
-      config.headers = config.headers || {};
-      config.headers["CSRF-Token"] = csrfTokenCache;
-      config.headers["csrf-token"] = csrfTokenCache;
+
+    if (!token) {
+      token = readXsrfCookie();
     }
+
+    attachCsrfHeaders(config, token);
   }
 
   return config;
@@ -100,10 +122,9 @@ API.interceptors.response.use(
       csrfTokenCache = null;
       try {
         await fetchCsrfToken();
+        const token = readXsrfCookie() || csrfTokenCache;
         cfg._csrfRetry = true;
-        cfg.headers = cfg.headers || {};
-        cfg.headers["CSRF-Token"] = csrfTokenCache;
-        cfg.headers["csrf-token"] = csrfTokenCache;
+        attachCsrfHeaders(cfg, token);
         return API(cfg);
       } catch {
         // fall through

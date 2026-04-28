@@ -29,14 +29,7 @@ if (!process.env.JWT_SECRET) {
   throw new Error("JWT_SECRET missing");
 }
 
-const csrfProtection = csrf({
-  cookie: {
-    key: "_csrf",
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-  },
-});
+const csrfProtection = csrf({ cookie: true });
 
 const app = express();
 const allowedOrigins = [
@@ -46,6 +39,15 @@ const allowedOrigins = [
 const corsOptions = {
   origin: allowedOrigins,
   credentials: true,
+  methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "CSRF-Token",
+    "csrf-token",
+    "X-CSRF-Token",
+    "X-XSRF-Token",
+    "X-Requested-With",
+  ],
 };
 
 /* ==============================
@@ -82,7 +84,7 @@ app.use((req, res, next) => {
   res.header("Access-Control-Allow-Credentials", "true");
   res.header(
     "Access-Control-Allow-Headers",
-    "Content-Type, CSRF-Token, csrf-token, X-CSRF-Token, X-Requested-With"
+    "Content-Type, CSRF-Token, csrf-token, X-CSRF-Token, X-XSRF-Token, X-Requested-With"
   );
   res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,PATCH,OPTIONS");
 
@@ -93,15 +95,24 @@ app.use((req, res, next) => {
   next();
 });
 
+// ✅ COOKIES FIRST (needed before CSRF / body-dependent verification)
+app.use(cookieParser());
 // ✅ BODY PARSER (LIMITED SIZE)
 app.use(express.json({ limit: "10kb" }));
-app.use(cookieParser());
 app.use("/api", csrfProtection);
 app.get("/api/csrf-token", (req, res) => {
+  const csrfToken = req.csrfToken();
+  // Readable cookie so the browser client can mirror it in X-CSRF-Token (csurf accepts this header)
+  res.cookie("XSRF-TOKEN", csrfToken, {
+    httpOnly: false,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  });
   res.json({
     success: true,
     msg: "ok",
-    data: { csrfToken: req.csrfToken() },
+    data: { csrfToken },
   });
 });
 
