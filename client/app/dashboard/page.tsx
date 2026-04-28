@@ -110,7 +110,7 @@ export default function Dashboard() {
   const salaryTeamNeed = Number(stage1Rule?.teamCount ?? 10);
   const totalEarnings = Number(
     user?.totalEarnings ??
-      Number(hybrid?.rewardBalance || 0) + Number(user?.todayProfit || 0)
+      Number(hybrid?.rewardBalance ?? 0) + Number(user?.todayProfit ?? 0)
   );
   const salaryStage = Number(hybrid?.salaryStage || 0);
   const salaryReward = Number(
@@ -161,6 +161,16 @@ export default function Dashboard() {
           className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full"
         />
       </div>
+    );
+  }
+
+  if (!user || !user?._id) {
+    return (
+      <ProtectedRoute>
+        <div className="min-h-screen flex flex-col items-center justify-center bg-[#040406] px-4 text-center text-gray-400">
+          <p className="text-sm">No data available</p>
+        </div>
+      </ProtectedRoute>
     );
   }
 
@@ -253,22 +263,17 @@ export default function Dashboard() {
             </span>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 mt-4">
-            <MiniMetric title="Deposit Balance" value={hybrid?.depositBalance} />
-            <MiniMetric title="Reward Balance" value={hybrid?.rewardBalance} />
-          </div>
-
           <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs text-gray-400">Current ROI Rate</p>
                 <p className="mt-1 text-sm font-bold text-cyan-300">
-                  {(Number(hybrid?.roiRate || 0) * 100).toFixed(2)}% daily
+                  {(Number(hybrid?.roiRate ?? 0) * 100).toFixed(2)}% daily
                 </p>
               </div>
               <GradientButton
                 onClick={handleClaimRoi}
-                disabled={roiLoading || Number(hybrid?.roiRate || 0) <= 0 || roiCooldownMs > 0}
+                disabled={roiLoading || Number(hybrid?.roiRate ?? 0) <= 0 || roiCooldownMs > 0}
                 loading={roiLoading}
                 className="w-auto px-4 py-3 text-xs"
               >
@@ -315,12 +320,10 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* STATS */}
+      {/* STATS — single row aligned with HybridEarn summary */}
       <div className="grid grid-cols-2 gap-3 mt-6">
-        <StatCard title="Deposit Balance" value={`$${Number(hybrid?.depositBalance || 0).toFixed(2)}`} tone="purple" />
-        <StatCard title="Reward Balance" value={`$${Number(hybrid?.rewardBalance || 0).toFixed(2)}`} tone="cyan" />
-        <StatCard title="Total Earnings" value={`$${totalEarnings.toFixed(2)}`} tone="green" />
-        <StatCard title="Pending Withdraw" value={`$${Number(hybrid?.pendingWithdraw || 0).toFixed(2)}`} tone="purple" />
+        <StatCard title="Pending Withdraw" value={`$${Number(hybrid?.pendingWithdraw ?? 0).toFixed(2)}`} tone="purple" />
+        <StatCard title="Active Stake" value={`$${Number(hybrid?.activeStakeAmount ?? 0).toFixed(2)}`} tone="cyan" />
       </div>
 
       <div className="mt-6 rounded-3xl border border-white/10 bg-white/[0.05] p-4 backdrop-blur-2xl">

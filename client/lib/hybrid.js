@@ -1,44 +1,52 @@
-import API from "./api";
+import API, { normalize } from "./api";
 
 export const fetchHybridSummary = async () => {
   const res = await API.get("/hybrid/deposit/summary");
-  return res.data?.data || null;
+  const response = normalize(res.data);
+  const data = response.data;
+  return data && typeof data === "object" && Object.keys(data).length ? data : null;
 };
 
 export const claimHybridRoi = async () => {
   const res = await API.post("/roi/claim");
-  return res.data?.data || null;
+  const response = normalize(res.data);
+  return response.data && Object.keys(response.data).length ? response.data : null;
 };
 
 export const claimHybridSalary = async () => {
   const res = await API.post("/salary/claim");
-  return res.data?.data || null;
+  const response = normalize(res.data);
+  return response.data && Object.keys(response.data).length ? response.data : null;
 };
 
 export const fetchHybridWithdrawals = async () => {
   const res = await API.get("/withdraw/my");
-  return res.data?.data?.withdrawals || [];
+  const response = normalize(res.data);
+  return response.data?.withdrawals || [];
 };
 
 /** Sends OTP to the logged-in user's email (hybrid withdraw). */
 export const sendWithdrawalOtp = async () => {
   const res = await API.post("/withdraw/send-otp", {});
-  return res.data;
+  return normalize(res.data);
 };
 
 export const fetchHybridStakes = async () => {
   const res = await API.get("/stake/my");
-  return res.data?.data?.stakes || [];
+  const response = normalize(res.data);
+  return response.data?.stakes || [];
 };
 
 export const createHybridStake = async (payload) => {
   const res = await API.post("/stake/create", payload);
-  return res.data?.data || null;
+  const response = normalize(res.data);
+  return response.data && Object.keys(response.data).length ? response.data : null;
 };
 
 export const claimHybridStake = async (stakeId) => {
   const res = await API.post("/stake/claim", { stakeId });
-  return res.data?.data || null;
+  const response = normalize(res.data);
+  return response.data && Object.keys(response.data).length ? response.data : null;
 };
 
 export const requestHybridWithdraw = async (payload, idempotencyKey) => {
@@ -55,10 +63,12 @@ export const requestHybridWithdraw = async (payload, idempotencyKey) => {
     }
   );
 
-  return res.data?.data || null;
+  const response = normalize(res.data);
+  return response.data && Object.keys(response.data).length ? response.data : null;
 };
 
 export const claimHybridWithdraw = async (withdrawalId) => {
   const res = await API.post("/withdraw/claim", { withdrawalId });
-  return res.data?.data || null;
+  const response = normalize(res.data);
+  return response.data && Object.keys(response.data).length ? response.data : null;
 };

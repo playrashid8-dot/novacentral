@@ -10,6 +10,7 @@ import GlassCard from "../../components/GlassCard";
 import ProgressBar from "../../components/ProgressBar";
 import CountdownTimer from "../../components/CountdownTimer";
 import { claimHybridStake, createHybridStake, fetchHybridSummary, fetchHybridStakes } from "../../lib/hybrid";
+import Loader from "../../components/Loader";
 
 export default function Investment() {
   const router = useRouter();
@@ -21,6 +22,7 @@ export default function Investment() {
   const [stakes, setStakes] = useState<any[]>([]);
   const [toast, setToast] = useState("");
   const [claimingStake, setClaimingStake] = useState<string | null>(null);
+  const [pageLoading, setPageLoading] = useState(true);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -43,21 +45,31 @@ export default function Investment() {
       })
       .catch(() => {
         router.replace("/login");
-      });
+      })
+      .finally(() => setPageLoading(false));
   }, [router]);
 
   // 🚀 INVEST
   const confirmInvest = async () => {
     const amt = Number(amount);
 
-    if (!amt || amt < 10) return showToast("Minimum investment is $10");
-    if (amt > (Number(hybrid?.depositBalance || 0) + Number(hybrid?.rewardBalance || 0))) {
+    if (!amount.trim() || !Number.isFinite(amt) || amt <= 0) {
+      showToast("Enter a valid amount");
+      return;
+    }
+
+    if (amt < 10) {
+      showToast("Minimum stake is $10");
+      return;
+    }
+
+    if (amt > (Number(hybrid?.depositBalance ?? 0) + Number(hybrid?.rewardBalance ?? 0))) {
       return showToast("Insufficient Hybrid balance");
     }
 
     try {
       setLoadingPlan(selectedPlan.key);
-      await createHybridStake({ amount: amt, planDays: selectedPlan.days });
+      const result = await createHybridStake({ amount: amt, planDays: selectedPlan.days });
       showToast("Stake created successfully");
 
       setSelectedPlan(null);
@@ -70,7 +82,7 @@ export default function Investment() {
       setStakes(stakeData || []);
 
     } catch (err: any) {
-      showToast(err?.response?.data?.msg || "Failed to create stake");
+      showToast(err?.response?.data?.msg || "Something went wrong");
     } finally {
       setLoadingPlan(null);
     }
@@ -95,9 +107,34 @@ export default function Investment() {
     }
   };
 
+  if (pageLoading) {
+    return (
+      <ProtectedRoute>
+        <Loader />
+      </ProtectedRoute>
+    );
+  }
+
+  if (!hybrid) {
+    return (
+      <ProtectedRoute>
+        <div className="min-h-screen max-w-[420px] mx-auto px-4 py-10 flex flex-col items-center justify-center bg-[#040406] text-gray-400">
+          <p className="text-sm text-center">No data available</p>
+          <button
+            type="button"
+            onClick={() => router.push("/dashboard")}
+            className="mt-4 w-full max-w-xs rounded-xl bg-white/[0.08] border border-white/10 p-3 text-sm text-purple-200"
+          >
+            Back to dashboard
+          </button>
+        </div>
+      </ProtectedRoute>
+    );
+  }
+
   return (
     <ProtectedRoute>
-    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 text-white relative bg-[#040406]">
+    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 pb-8 text-white relative bg-[#040406] overflow-x-hidden">
       <AppToast message={toast} />
 
       {/* 🌌 BACKGROUND */}

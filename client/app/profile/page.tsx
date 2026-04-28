@@ -11,22 +11,49 @@ import { fetchHybridSummary } from "../../lib/hybrid";
 import BottomNav from "../../components/BottomNav";
 import GlassCard from "../../components/GlassCard";
 import StatCard from "../../components/StatCard";
+import Loader from "../../components/Loader";
+import EmptyState from "../../components/EmptyState";
+import { maskAddress } from "../../lib/helpers";
 
 export default function Profile() {
   const router = useRouter();
   const [user, setUser]: any = useState(null);
   const [hybrid, setHybrid]: any = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([fetchCurrentUser(), fetchHybridSummary().catch(() => null)]).then(([fresh, hybridData]) => {
-      if (fresh) setUser(fresh);
-      if (hybridData) setHybrid(hybridData);
-    });
+    Promise.all([fetchCurrentUser(), fetchHybridSummary().catch(() => null)])
+      .then(([fresh, hybridData]) => {
+        if (fresh) setUser(fresh);
+        if (hybridData) setHybrid(hybridData);
+      })
+      .finally(() => setLoading(false));
   }, []);
+
+  if (loading) {
+    return (
+      <ProtectedRoute>
+        <Loader />
+      </ProtectedRoute>
+    );
+  }
+
+  if (!user?._id) {
+    return (
+      <ProtectedRoute>
+        <div className="min-h-screen max-w-[420px] mx-auto px-4 py-10 flex flex-col items-center justify-center bg-[#040406]">
+          <EmptyState text="No data available" />
+        </div>
+      </ProtectedRoute>
+    );
+  }
+
+  const walletDisplayRaw = hybrid?.walletAddress || user?.walletAddress || "";
+  const walletMasked = walletDisplayRaw ? maskAddress(walletDisplayRaw) : "Generating wallet";
 
   return (
     <ProtectedRoute>
-    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 pb-28 text-white relative bg-[#040406]">
+    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 pb-28 text-white relative bg-[#040406] overflow-x-hidden">
 
       {/* 🌌 BACKGROUND */}
       <div className="absolute w-[500px] h-[500px] bg-purple-600 opacity-20 blur-[150px] top-[-150px] left-[-150px]" />
@@ -86,8 +113,8 @@ export default function Profile() {
       </motion.div>
 
       <div className="mt-5 grid grid-cols-2 gap-3">
-        <StatCard title="Deposit" value={`$${Number(hybrid?.depositBalance || 0).toFixed(2)}`} tone="purple" />
-        <StatCard title="Rewards" value={`$${Number(hybrid?.rewardBalance || 0).toFixed(2)}`} tone="cyan" />
+        <StatCard title="Deposit" value={`$${Number(hybrid?.depositBalance ?? 0).toFixed(2)}`} tone="purple" />
+        <StatCard title="Rewards" value={`$${Number(hybrid?.rewardBalance ?? 0).toFixed(2)}`} tone="cyan" />
       </div>
 
       <GlassCard glow="cyan" className="mt-5">
@@ -95,7 +122,7 @@ export default function Profile() {
         <div className="space-y-3 text-sm">
           <Info label="Username" value={user?.username || "-"} />
           <Info label="Email" value={user?.email || "-"} />
-          <Info label="Wallet Address" value={hybrid?.walletAddress || user?.walletAddress || "Generating wallet"} />
+          <Info label="Wallet Address" value={walletMasked} />
           <Info label="Level" value={`VIP ${Number(hybrid?.level || user?.level || 0)}`} />
           <Info label="Referral Code" value={user?.referralCode || "N/A"} />
         </div>
@@ -127,7 +154,7 @@ export default function Profile() {
 
         <button
           onClick={() => router.push("/deposit")}
-          className="w-full bg-white/5 p-3 rounded-xl border border-white/10 text-sm hover:bg-purple-500/20"
+          className="w-full rounded-xl bg-white/5 p-3 border border-white/10 text-sm hover:bg-purple-500/20 transition"
         >
           Deposit
         </button>

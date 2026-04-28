@@ -1,8 +1,15 @@
 "use client";
 
-import API from "./api";
+import API, { normalize } from "./api";
 
 export const fetchCurrentUser = async () => {
   const res = await API.get("/user/me");
-  return res.data?.data ?? res.data?.user ?? null;
+  const raw = res.data || {};
+  const response = normalize(raw);
+  const fromData =
+    response.data && typeof response.data === "object" && "_id" in response.data
+      ? response.data
+      : null;
+  const fromLegacy = raw.user && typeof raw.user === "object" && "_id" in raw.user ? raw.user : null;
+  return fromData ?? fromLegacy;
 };

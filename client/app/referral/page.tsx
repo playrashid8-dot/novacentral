@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import API, { getApiErrorMessage } from "../../lib/api";
+import API, { getApiErrorMessage, normalize } from "../../lib/api";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import AppToast from "../../components/AppToast";
 import { fetchCurrentUser } from "../../lib/session";
 import { claimHybridSalary, fetchHybridSummary } from "../../lib/hybrid";
 import GradientButton from "../../components/GradientButton";
 import ProgressBar from "../../components/ProgressBar";
+import Loader from "../../components/Loader";
 
 export default function Referral() {
   const [copied, setCopied] = useState(false);
@@ -17,6 +18,7 @@ export default function Referral() {
   const [user, setUser]: any = useState(null);
   const [hybrid, setHybrid] = useState<any>(null);
   const [salaryLoading, setSalaryLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -32,10 +34,17 @@ export default function Referral() {
           fetchHybridSummary().catch(() => null),
         ]);
         if (fresh) setUser(fresh);
-        setStats(res.data?.data ?? res.data?.stats ?? null);
+        const response = normalize(res.data);
+        const payload =
+          response.data && typeof response.data === "object" && Object.keys(response.data).length
+            ? response.data
+            : null;
+        setStats(payload);
         setHybrid(hybridData);
       } catch (err: any) {
         showToast(getApiErrorMessage(err, "Failed to load referral stats ❌"));
+      } finally {
+        setPageLoading(false);
       }
     };
     loadStats();
@@ -71,7 +80,7 @@ export default function Referral() {
     try {
       setSalaryLoading(true);
       const result = await claimHybridSalary();
-      showToast(`Salary claimed: $${Number(result?.amount || 0).toFixed(2)}`);
+      showToast(`Salary claimed: $${Number(result?.amount ?? 0).toFixed(2)}`);
       const hybridData = await fetchHybridSummary().catch(() => null);
       setHybrid(hybridData);
     } catch (err: any) {
@@ -81,9 +90,17 @@ export default function Referral() {
     }
   };
 
+  if (pageLoading) {
+    return (
+      <ProtectedRoute>
+        <Loader />
+      </ProtectedRoute>
+    );
+  }
+
   return (
     <ProtectedRoute>
-    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 text-white relative bg-[#040406]">
+    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 pb-10 text-white relative bg-[#040406] overflow-x-hidden">
       <AppToast message={toast} />
 
       {/* 🌌 BACKGROUND */}
@@ -103,7 +120,7 @@ export default function Referral() {
       >
         <p className="text-xs text-gray-400">Total Referral Earnings</p>
         <h2 className="text-3xl font-bold text-green-400 mt-1">
-          ${Number(hybrid?.referralEarnings || stats?.referralEarnings || user?.referralEarnings || 0).toFixed(2)}
+          ${Number(hybrid?.referralEarnings ?? stats?.referralEarnings ?? user?.referralEarnings ?? 0).toFixed(2)}
         </h2>
       </motion.div>
 
@@ -121,7 +138,7 @@ export default function Referral() {
 
           <GradientButton
             onClick={copyLink}
-            className="mt-3 py-2"
+            className="mt-3 w-full rounded-xl p-3"
           >
             {copied ? "Copied ✅" : "Copy Link"}
           </GradientButton>
@@ -175,12 +192,10 @@ export default function Referral() {
 
       <div className="mt-5 p-[1px] rounded-2xl bg-gradient-to-r from-yellow-400/70 via-purple-500/70 to-cyan-400/70">
         <div className="rounded-2xl bg-[#08080d]/95 p-4 backdrop-blur-2xl">
-          <p className="text-sm font-semibold text-white">HybridEarn Referral Income</p>
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            <IncomeLevel level="Level 1" rate="10%" />
-            <IncomeLevel level="Level 2" rate="6%" />
-            <IncomeLevel level="Level 3" rate="5%" />
-          </div>
+          <p className="text-sm font-semibold text-white">Referral income</p>
+          <p className="mt-2 text-xs leading-relaxed text-gray-400">
+            Referral rewards follow your live HybridEarn balances and rules. Figures on this page come from your account data only.
+          </p>
         </div>
       </div>
 
@@ -244,15 +259,6 @@ function Stat({ title, value }: any) {
       <h4 className="font-bold text-sm text-purple-400 mt-1">
         {value}
       </h4>
-    </div>
-  );
-}
-
-function IncomeLevel({ level, rate }: any) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.06] p-3 text-center">
-      <p className="text-[10px] text-gray-400">{level}</p>
-      <p className="mt-1 text-lg font-black text-yellow-200">{rate}</p>
     </div>
   );
 }

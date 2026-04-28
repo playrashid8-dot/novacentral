@@ -134,3 +134,33 @@ export const getStatusColor = (status) => {
       return "text-gray-400";
   }
 };
+
+/** Withdrawal / generic tx status → Tailwind classes (visual clarity). */
+export const withdrawalStatusClass = (status) => {
+  const s = String(status || "").toLowerCase();
+  switch (s) {
+    case "pending":
+    case "claimable":
+      return "text-yellow-300";
+    case "approved":
+    case "paid":
+    case "claimed":
+    case "confirmed":
+      return "text-emerald-300";
+    case "failed":
+    case "rejected":
+      return "text-red-400";
+    default:
+      return "text-gray-400";
+  }
+};
+
+/** Deposit chain + credit status → Tailwind classes */
+export const depositRowStatusClass = (deposit) => {
+  const chain = String(deposit?.confirmationStatus || "").toLowerCase();
+  if (chain === "confirmed") return "text-emerald-300";
+  if (chain === "confirming") return "text-yellow-300";
+  const st = String(deposit?.status || "").toLowerCase();
+  if (st === "failed") return "text-red-400";
+  return "text-gray-400";
+};

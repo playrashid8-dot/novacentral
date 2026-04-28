@@ -10,6 +10,7 @@ import { fetchCurrentUser } from "../../lib/session";
 import GradientButton from "../../components/GradientButton";
 import CountdownTimer from "../../components/CountdownTimer";
 import GlassCard from "../../components/GlassCard";
+import { withdrawalStatusClass } from "../../lib/helpers";
 import { fetchHybridSummary, fetchHybridWithdrawals, requestHybridWithdraw, sendWithdrawalOtp } from "../../lib/hybrid";
 
 const activePendingStatuses = ["pending", "claimable", "approved"];
@@ -152,7 +153,7 @@ export default function Withdrawal() {
 
   return (
     <ProtectedRoute>
-    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 text-white relative bg-[#040406]">
+    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 pb-10 text-white relative bg-[#040406] overflow-x-hidden">
       <AppToast message={toast} />
 
       <div className="absolute w-[500px] h-[500px] bg-purple-600 opacity-20 blur-[150px] top-[-150px] left-[-150px]" />
@@ -267,7 +268,7 @@ export default function Withdrawal() {
             onClick={withdraw}
             disabled={loading || withdrawMin == null}
             loading={loading}
-            className="mt-5"
+            className="mt-5 w-full rounded-xl p-3"
           >
             {loading ? "Processing..." : "Withdraw"}
           </GradientButton>
@@ -288,7 +289,7 @@ export default function Withdrawal() {
                     Net ${Number(w.netAmount ?? 0).toFixed(2)}{" "}
                     <span className="text-gray-500">· Gross ${Number(w.grossAmount ?? 0).toFixed(2)}</span>
                   </p>
-                  <p className="text-[10px] text-gray-500">{w.status}</p>
+                  <p className={`text-[10px] font-medium ${withdrawalStatusClass(w.status)}`}>{w.status}</p>
                 </div>
                 <p className="text-[10px] text-gray-500">
                   {w.createdAt ? new Date(w.createdAt).toLocaleDateString() : ""}

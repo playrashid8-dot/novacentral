@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import API from "../../lib/api";
+import API, { normalize } from "../../lib/api";
 import { fetchHybridSummary, fetchHybridWithdrawals } from "../../lib/hybrid";
 import { logout } from "../../lib/auth";
 import BottomNav from "../../components/BottomNav";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import GlassCard from "../../components/GlassCard";
+import Loader from "../../components/Loader";
+import EmptyState from "../../components/EmptyState";
 
 export default function History() {
   const router = useRouter();
@@ -22,15 +24,19 @@ export default function History() {
 
   const loadHistory = async () => {
     try {
-      const [res, hybridData, withdrawalData] = await Promise.all([
-        API.get("/history").catch(() => ({ data: { data: [] } })),
+      const [raw, hybridData, withdrawalData] = await Promise.all([
+        API.get("/history").catch(() => ({ data: {} })),
         fetchHybridSummary().catch(() => null),
         fetchHybridWithdrawals().catch(() => []),
       ]);
 
-      const legacyHistory = Array.isArray(res.data?.data)
-        ? res.data.data
-        : (res.data?.data?.history ?? res.data?.history ?? []);
+      const body = raw?.data || {};
+      const envelope = normalize(body);
+      const d = envelope.data as any;
+      let legacyHistory: any[] = [];
+      if (Array.isArray(d)) legacyHistory = d;
+      else if (d && Array.isArray(d.history)) legacyHistory = d.history;
+      else if (Array.isArray(body.history)) legacyHistory = body.history;
       const deposits = (hybridData?.deposits || []).map((item: any) => ({
         ...item,
         type: "deposit",
@@ -52,9 +58,9 @@ export default function History() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-white">
-        Loading...
-      </div>
+      <ProtectedRoute>
+        <Loader />
+      </ProtectedRoute>
     );
   }
 
@@ -78,7 +84,7 @@ export default function History() {
 
   return (
     <ProtectedRoute>
-    <div className="min-h-screen max-w-[420px] mx-auto px-4 pb-28 text-white relative">
+    <div className="min-h-screen max-w-[420px] mx-auto px-4 pb-28 text-white relative overflow-x-hidden bg-[#040406]">
 
       {/* HEADER */}
       <div className="flex justify-between items-center pt-5">
@@ -116,9 +122,9 @@ export default function History() {
       <div className="mt-5 space-y-3">
 
         {filtered.length === 0 && (
-          <p className="text-center text-gray-500 mt-10">
-            No {tabs.find((tab) => tab.key === activeTab)?.label.toLowerCase()} records yet
-          </p>
+          <EmptyState
+            text={`No ${tabs.find((tab) => tab.key === activeTab)?.label.toLowerCase() ?? "matching"} records yet`}
+          />
         )}
 
         {filtered.map((item, i) => (

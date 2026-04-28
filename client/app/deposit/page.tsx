@@ -8,6 +8,10 @@ import AppToast from "../../components/AppToast";
 import { fetchCurrentUser } from "../../lib/session";
 import { fetchHybridSummary } from "../../lib/hybrid";
 import GlassCard from "../../components/GlassCard";
+import { depositRowStatusClass, maskAddress } from "../../lib/helpers";
+
+/** Matches server HYBRID_DEPOSIT_CONFIRMATIONS_REQUIRED (UI display only). */
+const DEPOSIT_CONFIRMATIONS_REQUIRED = 3;
 
 export default function Deposit() {
   const router = useRouter();
@@ -73,7 +77,7 @@ export default function Deposit() {
 
   return (
     <ProtectedRoute>
-    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 text-white relative overflow-hidden bg-[#040406]">
+    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 pb-10 text-white relative overflow-x-hidden bg-[#040406]">
       <AppToast message={toast} />
 
       {/* 🌌 BACKGROUND */}
@@ -131,7 +135,7 @@ export default function Deposit() {
                 <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-purple-300/30 border-t-purple-300" />
               )}
               <span className="truncate text-xs text-gray-200">
-                {wallet || "Generating wallet..."}
+                {wallet ? maskAddress(wallet) : walletLoading ? "Generating wallet…" : "…"}
               </span>
             </div>
 
@@ -172,37 +176,43 @@ export default function Deposit() {
       </div>
 
       {!!hybrid?.deposits?.length && (
-        <div className="mt-5 bg-white/[0.06] p-4 rounded-2xl border border-white/10 backdrop-blur-2xl">
+        <div className="mt-5 bg-white/[0.06] p-4 rounded-2xl border border-white/10 backdrop-blur-2xl overflow-hidden">
           <p className="text-sm font-semibold text-white">Recent Hybrid Deposits</p>
           <div className="mt-3 space-y-2">
             {hybrid.deposits.slice(0, 3).map((deposit: any) => {
-              const chainOk = deposit.confirmationStatus === "confirmed";
-              const chainPending = deposit.confirmationStatus === "confirming";
-              const chainLabel = chainOk
-                ? "✅ confirmed"
-                : chainPending
-                  ? "⏳ confirming"
-                  : deposit.confirmationStatus === "unknown"
-                    ? "… confirming"
-                    : null;
+              const conf = Number(deposit?.confirmations ?? 0);
+              const failed =
+                deposit?.confirmationStatus === "failed" ||
+                String(deposit?.status || "").toLowerCase().includes("fail");
+              const statusClass = failed
+                ? "text-red-400"
+                : conf >= DEPOSIT_CONFIRMATIONS_REQUIRED
+                  ? "text-emerald-400"
+                  : "text-yellow-300";
+
               return (
               <div
                 key={deposit._id}
-                className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-3 py-3"
+                className="flex items-start justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-3"
               >
-                <div>
-                  <p className="text-xs text-white">${Number(deposit.amount || 0).toFixed(2)}</p>
-                  <p
-                    className={`text-[10px] ${
-                      chainOk ? "text-emerald-300/90" : chainPending ? "text-amber-200/90" : "text-gray-500"
-                    }`}
-                  >
-                    {[chainLabel, deposit.status].filter(Boolean).join(" · ")}
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-white">${Number(deposit.amount ?? 0).toFixed(2)}</p>
+                  <p className={`text-[10px] mt-0.5 ${depositRowStatusClass(deposit)}`}>
+                    {deposit.status ?? "—"}
                   </p>
                 </div>
-                <p className="text-[10px] text-gray-500">
-                  {deposit.createdAt ? new Date(deposit.createdAt).toLocaleDateString() : "Auto"}
-                </p>
+                <div className="text-right shrink-0 space-y-1">
+                  <p className={`text-[10px] font-medium ${statusClass}`}>
+                    {conf < DEPOSIT_CONFIRMATIONS_REQUIRED ? (
+                      <span>Confirming ({conf}/{DEPOSIT_CONFIRMATIONS_REQUIRED})</span>
+                    ) : (
+                      <span className="text-emerald-400">Confirmed</span>
+                    )}
+                  </p>
+                  <p className="text-[10px] text-gray-500">
+                    {deposit.createdAt ? new Date(deposit.createdAt).toLocaleDateString() : "—"}
+                  </p>
+                </div>
               </div>
             );
             })}

@@ -48,6 +48,19 @@ export const resetRedirectState = () => {
 };
 
 /**
+ * Normalize API envelope so UI always reads { success, msg, data } consistently.
+ * @param {object} [res] Axios response body (payload), not the full Axios response
+ */
+export const normalize = (res) => {
+  const payload = res && typeof res === "object" ? res : {};
+  return {
+    success: payload.success,
+    msg: payload.msg,
+    data: payload.data || {},
+  };
+};
+
+/**
  * Prime csurf secret cookie + mirrored XSRF-TOKEN before unsafe requests.
  * @param {boolean} [force=false] Fetch again (e.g. after 403 / rotation)
  */

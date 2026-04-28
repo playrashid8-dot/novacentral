@@ -1,4 +1,5 @@
 import API, { resetRedirectState } from "./api";
+import { fetchCurrentUser } from "./session";
 
 // 🚫 prevent multiple logout redirects
 let isLoggingOut = false;
@@ -21,8 +22,7 @@ export const isAuth = async () => {
 // 🛡️ ADMIN CHECK (session)
 export const checkAdminSession = async () => {
   try {
-    const res = await API.get("/user/me");
-    const user = res.data?.data ?? res.data?.user;
+    const user = await fetchCurrentUser();
     return isAdmin(user);
   } catch {
     return false;

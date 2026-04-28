@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { fetchHybridSummary } from "../../lib/hybrid";
 import ProtectedRoute from "../../components/ProtectedRoute";
+import EmptyState from "../../components/EmptyState";
+import Loader from "../../components/Loader";
 
 type LevelRule = {
   level: number;
@@ -17,14 +19,24 @@ type LevelRule = {
 export default function VIP() {
   const router = useRouter();
   const [hybrid, setHybrid]: any = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchHybridSummary()
       .then((hybridData) => {
         if (hybridData) setHybrid(hybridData);
       })
-      .catch(() => null);
+      .catch(() => null)
+      .finally(() => setLoading(false));
   }, []);
+
+  if (loading) {
+    return (
+      <ProtectedRoute>
+        <Loader />
+      </ProtectedRoute>
+    );
+  }
 
   const levelRules: LevelRule[] = Array.isArray(hybrid?.levelRules) ? hybrid.levelRules : [];
   const currentLevel = Number(hybrid?.level ?? 0);
@@ -32,54 +44,24 @@ export default function VIP() {
   const roiLabel = (level: number) =>
     level === 1 ? "1%" : level === 2 ? "1.5%" : level === 3 ? "2%" : "—";
 
-  const vipLevels = levelRules.length
-    ? levelRules.map((rule) => ({
-        name: `VIP ${rule.level}`,
-        level: rule.level,
-        requirement: `Deposit ≥ ${rule.minDeposit} · ${rule.directCount} direct / ${rule.teamCount} team`,
-        roi: roiLabel(rule.level),
-        benefits: [
-          `Level ${rule.level} daily ROI`,
-          "HybridEarn access",
-          rule.bonus ? `Level bonus $${rule.bonus}` : "Team milestones",
-        ],
-        color:
-          rule.level === 1
-            ? "from-purple-500 to-indigo-500"
-            : rule.level === 2
-              ? "from-blue-500 to-cyan-500"
-              : "from-fuchsia-500 via-purple-500 to-blue-500",
-        recommended: rule.level === 3,
-      }))
-    : [
-        {
-          name: "VIP 1",
-          level: 1,
-          requirement: "Deposit ≥ 50",
-          roi: "1%",
-          benefits: ["Starter daily ROI", "HybridEarn access", "Deposit milestone"],
-          color: "from-purple-500 to-indigo-500",
-          recommended: false,
-        },
-        {
-          name: "VIP 2",
-          level: 2,
-          requirement: "5 direct + 15 team",
-          roi: "1.5%",
-          benefits: ["Higher daily ROI", "Team growth boost", "Premium badge"],
-          color: "from-blue-500 to-cyan-500",
-          recommended: false,
-        },
-        {
-          name: "VIP 3",
-          level: 3,
-          requirement: "18 direct + 45 team",
-          roi: "2%",
-          benefits: ["Maximum daily ROI", "VIP Ultra glow", "Exclusive rewards"],
-          color: "from-fuchsia-500 via-purple-500 to-blue-500",
-          recommended: true,
-        },
-      ];
+  const vipLevels = levelRules.map((rule) => ({
+    name: `VIP ${rule.level}`,
+    level: rule.level,
+    requirement: `Deposit ≥ ${rule.minDeposit} · ${rule.directCount} direct / ${rule.teamCount} team`,
+    roi: roiLabel(rule.level),
+    benefits: [
+      `Level ${rule.level} daily ROI`,
+      "HybridEarn access",
+      rule.bonus ? `Level bonus $${rule.bonus}` : "Team milestones",
+    ],
+    color:
+      rule.level === 1
+        ? "from-purple-500 to-indigo-500"
+        : rule.level === 2
+          ? "from-blue-500 to-cyan-500"
+          : "from-fuchsia-500 via-purple-500 to-blue-500",
+    recommended: rule.level === 3,
+  }));
 
   return (
     <ProtectedRoute>
@@ -133,68 +115,72 @@ export default function VIP() {
 
       {/* VIP CARDS */}
       <div className="space-y-4 relative z-10">
+        {!hybrid?.levelRules?.length ? (
+          <EmptyState text="No VIP ladder data yet. Open HybridEarn after your summary loads." />
+        ) : (
+          <>
+            {vipLevels.map((vip, i) => {
+              const unlocked = currentLevel >= vip.level;
+              const current = currentLevel === vip.level;
 
-        {vipLevels.map((vip, i) => {
-          const unlocked = currentLevel >= vip.level;
-          const current = currentLevel === vip.level;
+              return (
+                <motion.div
+                  key={i}
+                  whileHover={{ scale: 1.03 }}
+                  className={`p-[1px] rounded-3xl bg-gradient-to-r ${vip.color} ${
+                    current || vip.recommended ? "vip-pulse shadow-[0_0_60px_rgba(168,85,247,0.45)]" : ""
+                  }`}
+                >
+                  <div className="bg-[#08080d]/95 p-5 rounded-3xl backdrop-blur-2xl relative overflow-hidden">
+                    {current && (
+                      <span className="absolute right-4 top-4 rounded-full bg-purple-500/20 border border-purple-300/40 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-purple-100">
+                        Current Level
+                      </span>
+                    )}
 
-          return (
-            <motion.div
-              key={i}
-              whileHover={{ scale: 1.03 }}
-              className={`p-[1px] rounded-3xl bg-gradient-to-r ${vip.color} ${
-                current || vip.recommended ? "vip-pulse shadow-[0_0_60px_rgba(168,85,247,0.45)]" : ""
-              }`}
-            >
-              <div className="bg-[#08080d]/95 p-5 rounded-3xl backdrop-blur-2xl relative overflow-hidden">
-                {current && (
-                  <span className="absolute right-4 top-4 rounded-full bg-purple-500/20 border border-purple-300/40 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-purple-100">
-                    Current Level
-                  </span>
-                )}
+                    <div className="flex justify-between items-center">
+                      <h2 className="font-black text-xl bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent">{vip.name}</h2>
 
-                <div className="flex justify-between items-center">
-                  <h2 className="font-black text-xl bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent">{vip.name}</h2>
+                      {unlocked ? (
+                        <span className="text-xs text-green-300 rounded-full bg-green-400/10 border border-green-400/20 px-3 py-1">Unlocked</span>
+                      ) : (
+                        <span className="text-xs text-gray-400 rounded-full bg-white/5 border border-white/10 px-3 py-1">Locked</span>
+                      )}
+                    </div>
 
-                  {unlocked ? (
-                    <span className="text-xs text-green-300 rounded-full bg-green-400/10 border border-green-400/20 px-3 py-1">Unlocked</span>
-                  ) : (
-                    <span className="text-xs text-gray-400 rounded-full bg-white/5 border border-white/10 px-3 py-1">Locked</span>
-                  )}
-                </div>
+                    <div className="grid grid-cols-2 gap-3 mt-5">
+                      <VIPMetric label="ROI" value={vip.roi} />
+                      <VIPMetric label="Requirement" value={vip.requirement} />
+                    </div>
 
-                <div className="grid grid-cols-2 gap-3 mt-5">
-                  <VIPMetric label="ROI" value={vip.roi} />
-                  <VIPMetric label="Requirement" value={vip.requirement} />
-                </div>
+                    <p className="text-xs text-gray-400 mt-4">
+                      Requirement: <span className="font-bold text-white">{vip.requirement}</span>
+                    </p>
 
-                <p className="text-xs text-gray-400 mt-4">
-                  Requirement: <span className="font-bold text-white">{vip.requirement}</span>
-                </p>
+                    <ul className="mt-4 space-y-2">
+                      {vip.benefits.map((benefit) => (
+                        <li key={benefit} className="flex items-center gap-2 text-xs text-gray-300">
+                          <span className="h-1.5 w-1.5 rounded-full bg-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.8)]" />
+                          {benefit}
+                        </li>
+                      ))}
+                    </ul>
 
-                <ul className="mt-4 space-y-2">
-                  {vip.benefits.map((benefit) => (
-                    <li key={benefit} className="flex items-center gap-2 text-xs text-gray-300">
-                      <span className="h-1.5 w-1.5 rounded-full bg-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.8)]" />
-                      {benefit}
-                    </li>
-                  ))}
-                </ul>
+                    {!unlocked && (
+                      <button
+                        onClick={() => router.push("/deposit")}
+                        className="mt-5 w-full bg-gradient-to-r from-[#7c3aed] via-[#a855f7] to-[#4f46e5] p-3 rounded-xl text-sm font-bold shadow-[0_0_30px_rgba(124,58,237,0.5)] hover:scale-105 hover:shadow-[0_0_42px_rgba(168,85,247,0.72)] transition-all duration-300"
+                      >
+                        Go to Deposit
+                      </button>
+                    )}
 
-                {!unlocked && (
-                  <button
-                    onClick={() => router.push("/deposit")}
-                    className="mt-5 w-full bg-gradient-to-r from-[#7c3aed] via-[#a855f7] to-[#4f46e5] p-3 rounded-xl text-sm font-bold shadow-[0_0_30px_rgba(124,58,237,0.5)] hover:scale-105 hover:shadow-[0_0_42px_rgba(168,85,247,0.72)] transition-all duration-300"
-                  >
-                    Go to Deposit
-                  </button>
-                )}
-
-              </div>
-            </motion.div>
-          );
-        })}
-
+                  </div>
+                </motion.div>
+              );
+            })}
+          </>
+        )}
       </div>
 
       {/* INFO */}
