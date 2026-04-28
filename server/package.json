@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test:e2e-hybrid": "node scripts/e2eHybridRuntimeTest.js"
   },
   "keywords": [
     "nova",
