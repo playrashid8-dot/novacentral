@@ -19,10 +19,19 @@ html {
 }
 
 body {
-  background: #040406;
+  background: #0b0f19;
   color: white;
   font-family: system-ui, sans-serif;
   overflow-x: hidden;
+}
+
+:root {
+  --brand-primary: #6366f1;
+  --brand-success: #22c55e;
+  --brand-warning: #f59e0b;
+  --brand-danger: #ef4444;
+  --brand-dark: #0b0f19;
+  --brand-card: #111827;
 }
 
 ::selection {

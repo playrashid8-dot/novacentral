@@ -8,7 +8,6 @@ import Image from "next/image";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import { fetchCurrentUser } from "../../lib/session";
 import { fetchHybridSummary } from "../../lib/hybrid";
-import BottomNav from "../../components/BottomNav";
 import GlassCard from "../../components/GlassCard";
 import StatCard from "../../components/StatCard";
 import Loader from "../../components/Loader";
@@ -182,8 +181,6 @@ export default function Profile() {
       >
         Logout
       </button>
-
-      <BottomNav />
 
     </div>
     </ProtectedRoute>

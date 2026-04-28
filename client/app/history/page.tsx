@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import API, { normalize } from "../../lib/api";
 import { fetchHybridSummary, fetchHybridWithdrawals } from "../../lib/hybrid";
 import { logout } from "../../lib/auth";
-import BottomNav from "../../components/BottomNav";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import GlassCard from "../../components/GlassCard";
 import Loader from "../../components/Loader";
 import EmptyState from "../../components/EmptyState";
+import StatusBadge, { tierFromHistoryItem } from "../../components/StatusBadge";
 
 export default function History() {
   const router = useRouter();
@@ -84,33 +85,39 @@ export default function History() {
 
   return (
     <ProtectedRoute>
-    <div className="min-h-screen max-w-[420px] mx-auto px-4 pb-28 text-white relative overflow-x-hidden bg-[#040406]">
+    <div className="relative w-full max-w-full overflow-x-hidden pb-4 text-white">
 
       {/* HEADER */}
-      <div className="flex justify-between items-center pt-5">
+      <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-[10px] uppercase tracking-[0.3em] text-purple-300/70">Real Records</p>
-          <h1 className="text-2xl font-black bg-gradient-to-r from-purple-300 via-fuchsia-300 to-blue-300 bg-clip-text text-transparent">History</h1>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-indigo-300/80">
+            Transactions
+          </p>
+          <h1 className="mt-1 bg-gradient-to-r from-white via-indigo-100 to-indigo-300 bg-clip-text text-2xl font-black text-transparent">
+            History
+          </h1>
         </div>
 
         <button
+          type="button"
           onClick={() => router.push("/dashboard")}
-          className="text-sm text-gray-400"
+          className="w-full rounded-2xl border border-white/[0.1] bg-[#111827] px-4 py-2.5 text-sm font-semibold text-gray-300 shadow-md transition hover:scale-[1.02] sm:w-auto"
         >
           Back
         </button>
       </div>
 
-      <GlassCard glow="purple" className="mt-5">
-        <div className="grid grid-cols-4 gap-2">
+      <GlassCard glow="purple" className="mt-5 border-[#6366F1]/15">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {tabs.map((tab) => (
             <button
               key={tab.key}
+              type="button"
               onClick={() => setActiveTab(tab.key)}
-              className={`rounded-xl px-2 py-2 text-[11px] font-semibold transition ${
+              className={`rounded-xl px-2 py-2.5 text-[11px] font-semibold transition ${
                 activeTab === tab.key
-                  ? "bg-purple-500 text-white shadow-[0_0_18px_rgba(168,85,247,0.45)]"
-                  : "bg-white/[0.06] text-gray-400"
+                  ? "bg-[#6366F1] text-white shadow-[0_0_24px_rgba(99,102,241,0.35)]"
+                  : "bg-white/[0.06] text-gray-400 hover:bg-white/[0.09]"
               }`}
             >
               {tab.label}
@@ -119,57 +126,72 @@ export default function History() {
         </div>
       </GlassCard>
 
-      <div className="mt-5 space-y-3">
-
-        {filtered.length === 0 && (
+      <div className="mt-6">
+        {filtered.length === 0 ? (
           <EmptyState
+            title="Nothing here yet"
             text={`No ${tabs.find((tab) => tab.key === activeTab)?.label.toLowerCase() ?? "matching"} records yet`}
           />
-        )}
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#111827]/70 ring-1 ring-white/[0.05]">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-white/[0.07] bg-black/30 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                    <th className="whitespace-nowrap px-4 py-3">Type</th>
+                    <th className="whitespace-nowrap px-4 py-3">Amount</th>
+                    <th className="whitespace-nowrap px-4 py-3">Status</th>
+                    <th className="whitespace-nowrap px-4 py-3 text-right">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((item, i) => {
+                    const amt = Number(
+                      item.type === "withdrawal" || String(item.type || "").includes("withdraw")
+                        ? item.netAmount ?? item.amount
+                        : item.amount || item.totalReward || 0
+                    );
+                    const tier = tierFromHistoryItem(item);
 
-        {filtered.map((item, i) => (
-          <div
-            key={item._id || i}
-            className="bg-white/5 border border-white/10 p-4 rounded-2xl backdrop-blur-2xl"
-          >
-            <div className="flex justify-between items-center">
-
-              {/* TYPE */}
-              <span className={`text-sm font-semibold ${getTypeColor(item.type)}`}>
-                {String(item.type || activeTab).toUpperCase()}
-              </span>
-
-              {/* STATUS */}
-              <span className={`text-xs ${getRowStatusColor(item)}`}>
-                {formatHistoryStatus(item)}
-              </span>
+                    return (
+                      <motion.tr
+                        key={item._id || i}
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.25, delay: Math.min(i * 0.03, 0.35) }}
+                        className="border-b border-white/[0.05] last:border-0 hover:bg-white/[0.03]"
+                      >
+                        <td className="px-4 py-3 align-middle">
+                          <span className={`text-xs font-bold ${getTypeColor(item.type)}`}>
+                            {String(item.type || activeTab).toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 align-middle font-semibold tabular-nums text-white">
+                          ${amt.toFixed(2)}
+                          {item.type === "withdrawal" && item.grossAmount != null ? (
+                            <span className="mt-0.5 block text-[10px] font-normal text-gray-500">
+                              Gross ${Number(item.grossAmount).toFixed(2)}
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-3 align-middle">
+                          <StatusBadge tier={tier}>{shortStatusLabel(item)}</StatusBadge>
+                          <p className="mt-1 max-w-[200px] truncate text-[10px] text-gray-500">
+                            {formatHistoryStatus(item)}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3 align-middle text-right text-xs text-gray-400 tabular-nums">
+                          {item.createdAt ? new Date(item.createdAt).toLocaleString() : "—"}
+                        </td>
+                      </motion.tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-
-            {/* AMOUNT */}
-            <p className="text-lg font-bold mt-1 text-green-400">
-              $
-              {Number(
-                item.type === "withdrawal" || String(item.type || "").includes("withdraw")
-                  ? item.netAmount ?? item.amount
-                  : item.amount || item.totalReward || 0
-              ).toFixed(2)}
-              {item.type === "withdrawal" && item.grossAmount != null ? (
-                <span className="ml-1 text-xs font-normal text-gray-500">
-                  (net · gross ${Number(item.grossAmount).toFixed(2)})
-                </span>
-              ) : null}
-            </p>
-
-            {/* DATE */}
-            <p className="text-xs text-gray-500 mt-1">
-              {item.createdAt ? new Date(item.createdAt).toLocaleString() : "No date"}
-            </p>
           </div>
-        ))}
-
+        )}
       </div>
-
-      <BottomNav />
     </div>
     </ProtectedRoute>
   );
@@ -194,25 +216,6 @@ function getTypeColor(type: string) {
   }
 }
 
-/* 🎨 STATUS COLOR */
-function getStatusColor(status: string) {
-  switch (status) {
-    case "approved":
-    case "paid":
-    case "claimed":
-    case "success":
-    case "swept":
-      return "text-green-400";
-    case "pending":
-    case "credited":
-      return "text-yellow-400";
-    case "rejected":
-      return "text-red-400";
-    default:
-      return "text-gray-400";
-  }
-}
-
 function formatHistoryStatus(item: any) {
   const t = String(item.type || "").toLowerCase();
   if (t.includes("deposit") && item.confirmationStatus) {
@@ -228,11 +231,11 @@ function formatHistoryStatus(item: any) {
   return item.status;
 }
 
-function getRowStatusColor(item: any) {
-  const t = String(item.type || "").toLowerCase();
-  if (t.includes("deposit")) {
-    if (item.confirmationStatus === "confirmed") return "text-emerald-300";
-    if (item.confirmationStatus === "confirming") return "text-amber-200";
-  }
-  return getStatusColor(item.status);
+function shortStatusLabel(item: any) {
+  const tier = tierFromHistoryItem(item);
+  if (tier === "success") return "Confirmed";
+  if (tier === "warning") return "Pending";
+  if (tier === "danger") return "Failed";
+  const raw = String(item.status ?? "—");
+  return raw.length > 22 ? `${raw.slice(0, 20)}…` : raw;
 }

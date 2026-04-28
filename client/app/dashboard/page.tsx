@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { getApiErrorMessage } from "../../lib/api";
 import { logout } from "../../lib/auth";
 import { fetchCurrentUser } from "../../lib/session";
@@ -13,6 +13,7 @@ import ProtectedRoute from "../../components/ProtectedRoute";
 import GradientButton from "../../components/GradientButton";
 import StatCard from "../../components/StatCard";
 import ProgressBar from "../../components/ProgressBar";
+import PageSkeleton from "../../components/Skeleton";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -121,6 +122,12 @@ export default function Dashboard() {
   const teamProgress = Number(hybrid?.salaryTeamCount || hybrid?.teamCount || 0);
   const activeStakes = (hybrid?.stakes || []).filter((stake: any) => stake.status === "active");
 
+  const dailyRoiUsdEst =
+    Number(hybrid?.activeStakeAmount ?? 0) * Number(hybrid?.roiRate ?? 0);
+  const activeDepositsUsd = Number(hybrid?.depositBalance ?? 0);
+  const withdrawableUsd =
+    Number(hybrid?.depositBalance ?? 0) + Number(hybrid?.rewardBalance ?? 0);
+
   const handleClaimRoi = async () => {
     if (roiLoading) return;
 
@@ -154,20 +161,18 @@ export default function Dashboard() {
   /* ⏳ LOADER */
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#040406]">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 1 }}
-          className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full"
-        />
-      </div>
+      <ProtectedRoute>
+        <div className="min-h-[70vh] w-full py-6">
+          <PageSkeleton />
+        </div>
+      </ProtectedRoute>
     );
   }
 
   if (!user || !user?._id) {
     return (
       <ProtectedRoute>
-        <div className="min-h-screen flex flex-col items-center justify-center bg-[#040406] px-4 text-center text-gray-400">
+        <div className="flex min-h-[50vh] flex-col items-center justify-center px-4 py-16 text-center text-gray-400">
           <p className="text-sm">No data available</p>
         </div>
       </ProtectedRoute>
@@ -176,81 +181,114 @@ export default function Dashboard() {
 
   return (
     <ProtectedRoute>
-    <div className="min-h-screen max-w-[420px] mx-auto px-4 pb-28 text-white relative overflow-hidden">
+    <div className="relative w-full max-w-full overflow-x-hidden pb-4 text-white">
       <AppToast message={toast} />
 
       {/* HEADER */}
-      <div className="flex justify-between items-center pt-5 relative z-10">
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35 }}
+        className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+      >
         <div>
-          <p className="text-[10px] uppercase tracking-[0.35em] text-purple-300/70">
-            VIP Ultra UI
+          <p className="text-[10px] font-semibold uppercase tracking-[0.35em] text-indigo-300/80">
+            Portfolio
           </p>
-          <h1 className="font-black text-2xl bg-gradient-to-r from-purple-300 via-fuchsia-300 to-blue-300 bg-clip-text text-transparent">
-            HybridEarn Dashboard
+          <h1 className="mt-1 bg-gradient-to-r from-white via-indigo-100 to-indigo-300 bg-clip-text text-2xl font-black text-transparent sm:text-3xl">
+            Dashboard
           </h1>
         </div>
 
         <button
+          type="button"
           onClick={logout}
-          className="text-xs text-red-300 bg-red-500/10 border border-red-400/20 rounded-full px-4 py-2 hover:bg-red-500/20 transition-all duration-300"
+          className="w-full shrink-0 rounded-2xl border border-red-500/25 bg-red-500/10 px-4 py-2.5 text-xs font-semibold text-red-200 shadow-md transition hover:scale-[1.02] hover:bg-red-500/20 sm:w-auto"
         >
           Logout
         </button>
-      </div>
+      </motion.div>
 
       {/* PROFILE */}
-      <div className="flex items-center gap-3 mt-6 bg-white/[0.05] border border-white/10 rounded-2xl p-3 backdrop-blur-2xl shadow-[0_18px_55px_rgba(0,0,0,0.35)]">
-        <div className="p-[2px] rounded-full bg-gradient-to-br from-purple-400 via-fuchsia-400 to-blue-400 shadow-[0_0_25px_rgba(168,85,247,0.45)]">
-          <Image
-            src="/logo.png"
-            alt="user"
-            width={55}
-            height={55}
-            className="rounded-full bg-black"
-          />
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.05 }}
+        className="mt-6 flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-[#111827]/90 p-3 shadow-lg ring-1 ring-white/[0.04] backdrop-blur-xl"
+      >
+        <div className="rounded-full bg-gradient-to-br from-[#6366F1] to-indigo-700 p-[2px] shadow-[0_0_24px_rgba(99,102,241,0.45)]">
+          <Image src="/logo.png" alt="" width={52} height={52} className="rounded-full bg-black" />
         </div>
 
-        <div className="min-w-0">
-          <p className="text-gray-400 text-xs uppercase tracking-[0.18em]">Welcome Back</p>
-          <h2 className="font-bold text-lg truncate">{user?.username}</h2>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Welcome back</p>
+          <h2 className="truncate text-lg font-bold">{user?.username}</h2>
           <p className="text-[11px] text-gray-500">
-            VIP {currentVipLevel} ID: {user?._id?.slice(0, 6)}
+            VIP {currentVipLevel} · Ref{" "}
+            <span className="font-mono text-gray-400">{user?._id ? String(user._id).slice(0, 8) : "—"}</span>
           </p>
         </div>
-      </div>
+      </motion.div>
 
-      {/* BALANCE */}
-      <div className="mt-6 p-[1px] rounded-3xl bg-gradient-to-br from-purple-400 via-fuchsia-500 to-blue-500 shadow-[0_0_55px_rgba(124,58,237,0.45)]">
-        <div className="bg-[#08080d]/90 p-5 rounded-3xl backdrop-blur-2xl">
-        <p className="text-xs text-gray-400 uppercase tracking-[0.22em]">Total Earnings</p>
+      {/* METRIC CARDS */}
+      <motion.div
+        initial="hidden"
+        animate="show"
+        variants={{
+          hidden: {},
+          show: { transition: { staggerChildren: 0.07 } },
+        }}
+        className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2"
+      >
+        <MetricHeroCard
+          title="Total balance"
+          subtitle="Deposit + rewards"
+          value={`$${displayBalance.toFixed(2)}`}
+          gradient="from-[#6366F1]/40 via-indigo-600/25 to-[#111827]"
+        />
+        <MetricHeroCard
+          title="Daily ROI"
+          subtitle={`Est. +$${dailyRoiUsdEst.toFixed(2)} / day on stake`}
+          value={`${(Number(hybrid?.roiRate ?? 0) * 100).toFixed(2)}%`}
+          accent="text-emerald-400"
+          gradient="from-emerald-500/25 via-[#6366F1]/15 to-[#111827]"
+        />
+        <MetricHeroCard
+          title="Active deposits"
+          subtitle="Principal on platform"
+          value={`$${activeDepositsUsd.toFixed(2)}`}
+          gradient="from-amber-500/20 via-[#6366F1]/10 to-[#111827]"
+        />
+        <MetricHeroCard
+          title="Withdrawable"
+          subtitle="Available to request"
+          value={`$${withdrawableUsd.toFixed(2)}`}
+          gradient="from-cyan-500/20 via-indigo-600/20 to-[#111827]"
+        />
+      </motion.div>
 
-        <h1 className="text-4xl font-black text-white mt-2 text-glow">
-          ${totalEarnings.toFixed(2)}
-        </h1>
-
-        <div className="grid grid-cols-3 gap-3 mt-5">
-          <MiniMetric title="Deposit Balance" value={hybrid?.depositBalance} />
-          <MiniMetric title="Reward Balance" value={hybrid?.rewardBalance} />
-          <MiniMetric title="Total Earnings" value={totalEarnings} />
+      <div className="mt-4 rounded-2xl border border-white/[0.06] bg-[#111827]/60 px-4 py-3 ring-1 ring-white/[0.04]">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-500">Lifetime earnings</p>
+        <p className="mt-1 text-2xl font-black tracking-tight text-white">${totalEarnings.toFixed(2)}</p>
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <MiniMetric title="Deposit balance" value={hybrid?.depositBalance} />
+          <MiniMetric title="Reward balance" value={hybrid?.rewardBalance} />
+          <MiniMetric title="Today profit" value={user?.todayProfit} />
         </div>
-
         {cooldown > 0 && (
-          <p className="text-xs text-yellow-400 mt-2">
-            ⏳ Withdraw in {formatTime(cooldown)}
-          </p>
+          <p className="mt-3 text-xs font-medium text-amber-400">Withdraw in {formatTime(cooldown)}</p>
         )}
-        </div>
       </div>
 
-      {/* 🔥 ACTION BUTTONS (FIXED) */}
-      <div className="grid grid-cols-3 gap-3 mt-6">
+      {/* 🔥 ACTION BUTTONS */}
+      <div className="mt-6 grid grid-cols-3 gap-3">
         <Action label="Deposit" icon="↓" onClick={() => router.push("/deposit")} />
         <Action label="Withdraw" icon="↑" onClick={() => router.push("/withdrawal")} />
         <Action label="Stake" icon="◆" onClick={() => router.push("/staking")} />
       </div>
 
-      <div className="mt-6 p-[1px] rounded-3xl bg-gradient-to-r from-cyan-500/60 via-purple-500/70 to-fuchsia-500/70 shadow-[0_0_35px_rgba(124,58,237,0.25)]">
-        <div className="bg-[#08080d]/90 p-5 rounded-3xl backdrop-blur-2xl">
+      <div className="mt-6 overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-r from-cyan-500/20 via-[#6366F1]/25 to-fuchsia-500/20 p-[1px] shadow-[0_0_40px_rgba(99,102,241,0.15)]">
+        <div className="rounded-[22px] bg-[#111827]/95 p-5 backdrop-blur-xl">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-[10px] uppercase tracking-[0.25em] text-cyan-200/80">
@@ -373,10 +411,41 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* 🔻 BOTTOM NAV (UPDATED) */}
-      <BottomNav />
     </div>
     </ProtectedRoute>
+  );
+}
+
+const metricCardVariants: Record<"hidden" | "show", { opacity: number; y: number }> = {
+  hidden: { opacity: 0, y: 18 },
+  show: { opacity: 1, y: 0 },
+};
+
+function MetricHeroCard({
+  title,
+  subtitle,
+  value,
+  gradient,
+  accent = "text-white",
+}: {
+  title: string;
+  subtitle: string;
+  value: string;
+  gradient: string;
+  accent?: string;
+}) {
+  return (
+    <motion.div
+      variants={metricCardVariants}
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      whileHover={{ scale: 1.01 }}
+      className={`relative overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-br p-5 shadow-[0_12px_40px_rgba(0,0,0,0.35)] ring-1 ring-white/[0.05] ${gradient}`}
+    >
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_90%_10%,rgba(255,255,255,0.09),transparent_50%)]" />
+      <p className="relative text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400">{title}</p>
+      <p className={`relative mt-3 text-3xl font-black tracking-tight tabular-nums ${accent}`}>{value}</p>
+      <p className="relative mt-2 text-xs leading-snug text-gray-500">{subtitle}</p>
+    </motion.div>
   );
 }
 
@@ -384,20 +453,23 @@ export default function Dashboard() {
 function Action({ label, icon, onClick }: any) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className="bg-white/[0.06] border border-white/10 rounded-2xl p-3 text-center active:scale-95 hover:scale-105 hover:border-purple-300/40 hover:bg-purple-500/15 hover:shadow-[0_0_28px_rgba(124,58,237,0.28)] transition-all duration-300 backdrop-blur-xl"
+      className="rounded-2xl border border-white/[0.08] bg-[#111827]/90 p-3 text-center shadow-md backdrop-blur-xl transition hover:scale-105 hover:border-[#6366F1]/35 hover:shadow-[0_8px_30px_rgba(99,102,241,0.2)] active:scale-95"
     >
-      <div className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-indigo-500 text-lg font-black shadow-[0_0_25px_rgba(124,58,237,0.45)]">{icon}</div>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.12em]">{label}</p>
+      <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#6366F1] to-indigo-700 text-lg font-black text-white shadow-[0_4px_24px_rgba(99,102,241,0.45)]">
+        {icon}
+      </div>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-300">{label}</p>
     </button>
   );
 }
 
 function MiniMetric({ title, value, raw = false }: any) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
-      <p className="text-[10px] text-gray-400">{title}</p>
-      <p className="text-sm font-bold text-purple-200">
+    <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-3 ring-1 ring-white/[0.04]">
+      <p className="text-[10px] text-gray-500">{title}</p>
+      <p className="mt-1 text-sm font-bold text-indigo-100">
         {raw ? value : `$${Number(value || 0).toFixed(2)}`}
       </p>
     </div>
@@ -422,39 +494,6 @@ function EngineCard({ title, value, hint }: any) {
       <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">{title}</p>
       <p className="mt-1 text-lg font-black text-white">{value}</p>
       <p className="mt-1 text-[11px] text-gray-500">{hint}</p>
-    </div>
-  );
-}
-
-/* 📱 BOTTOM NAV FINAL */
-function BottomNav() {
-  const router = useRouter();
-  const path = usePathname();
-
-  const nav = [
-    { name: "Home", path: "/dashboard" },
-    { name: "Team", path: "/referral" },
-    { name: "History", path: "/history" },
-    { name: "Profile", path: "/profile" },
-  ];
-
-  return (
-    <div className="fixed bottom-3 left-1/2 -translate-x-1/2 w-[95%] max-w-[420px] bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl flex justify-around py-3 z-50">
-
-      {nav.map((item) => (
-        <button
-          key={item.name}
-          onClick={() => router.push(item.path)}
-          className={`text-sm ${
-            path === item.path
-              ? "text-purple-400"
-              : "text-gray-400"
-          }`}
-        >
-          {item.name}
-        </button>
-      ))}
-
     </div>
   );
 }

@@ -18,7 +18,7 @@ export default function GradientButton({
       whileTap={{ scale: 0.96 }}
       onClick={onClick}
       disabled={isDisabled}
-      className={`w-full rounded-xl bg-gradient-to-r from-[#7c3aed] via-[#a855f7] to-[#2563eb] px-4 py-3 text-sm font-bold text-white shadow-[0_0_32px_rgba(124,58,237,0.48)] transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_46px_rgba(168,85,247,0.68)] disabled:cursor-not-allowed disabled:opacity-55 ${className}`}
+      className={`w-full rounded-2xl bg-gradient-to-r from-[#6366F1] via-indigo-500 to-indigo-600 px-4 py-3 text-sm font-bold text-white shadow-md transition hover:scale-105 hover:shadow-[0_8px_32px_rgba(99,102,241,0.4)] disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:scale-100 ${className}`}
     >
       <span className="flex items-center justify-center gap-2">
         {loading && (
