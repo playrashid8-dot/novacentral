@@ -75,8 +75,8 @@ router.get("/", auth, async (req, res) => {
 
     res.json({
       success: true,
-      msg: "Dashboard fetched",
-      data: { dashboard },
+      msg: "Dashboard data",
+      data: dashboard,
       dashboard,
     });
 

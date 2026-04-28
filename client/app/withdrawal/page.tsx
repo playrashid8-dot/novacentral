@@ -37,7 +37,14 @@ export default function Withdrawal() {
   const spendableHybridBalance =
     Number(hybrid?.depositBalance || 0) + Number(hybrid?.rewardBalance || 0);
 
-  const withdrawMin = Number(hybrid?.withdrawMinAmount ?? 30);
+  const withdrawMin =
+    hybrid?.withdrawMinAmount != null && Number.isFinite(Number(hybrid.withdrawMinAmount))
+      ? Number(hybrid.withdrawMinAmount)
+      : null;
+  const lockHours =
+    hybrid?.withdrawLockHours != null && Number.isFinite(Number(hybrid.withdrawLockHours))
+      ? Number(hybrid.withdrawLockHours)
+      : null;
 
   const loadHybrid = async () => {
     try {
@@ -79,6 +86,10 @@ export default function Withdrawal() {
     if (loading) return;
 
     const amt = Number(amount);
+
+    if (withdrawMin == null) {
+      return showToast("Loading withdrawal rules…");
+    }
 
     if (!Number.isFinite(amt) || amt < withdrawMin) {
       return showToast(`Minimum withdrawal is $${withdrawMin}`);
@@ -185,7 +196,7 @@ export default function Withdrawal() {
         </div>
         <CountdownTimer
           targetTime={cooldownTarget ? new Date(cooldownTarget).toISOString() : null}
-          label="96h Timer"
+          label={lockHours != null ? `${lockHours}h Timer` : "Lock timer"}
           completeText={timerSource ? "Window Complete" : "No Cooldown"}
           className="p-4"
         />
@@ -202,7 +213,11 @@ export default function Withdrawal() {
 
           <input
             type="number"
-            placeholder={`Enter Amount ($${withdrawMin} minimum)`}
+            placeholder={
+              withdrawMin != null
+                ? `Enter Amount ($${withdrawMin} minimum)`
+                : "Enter Amount (loading minimum…)"
+            }
             value={amount}
             disabled={loading}
             onChange={(e) => setAmount(e.target.value)}
@@ -250,7 +265,7 @@ export default function Withdrawal() {
 
           <GradientButton
             onClick={withdraw}
-            disabled={loading}
+            disabled={loading || withdrawMin == null}
             loading={loading}
             className="mt-5"
           >
@@ -288,9 +303,19 @@ export default function Withdrawal() {
         <p className="text-yellow-300 font-semibold mb-2">Important</p>
 
         <ul className="space-y-1 text-gray-400 text-xs">
-          <li>Minimum withdraw: ${withdrawMin} (after fee you receive the net amount shown)</li>
+          <li>
+            Minimum withdraw:{" "}
+            {withdrawMin != null
+              ? `$${withdrawMin} (after fee you receive the net amount shown)`
+              : "…"}
+          </li>
           <li>Processing time: 24-96 hours after lock; admin pays on-chain</li>
-          <li>Cooldown: 96 hours after each withdraw request</li>
+          <li>
+            Cooldown:{" "}
+            {lockHours != null
+              ? `${lockHours} hours after each withdraw request`
+              : "…"}
+          </li>
           <li>Ensure correct BEP20 wallet address</li>
         </ul>
       </div>

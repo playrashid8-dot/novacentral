@@ -23,12 +23,14 @@ export default function History() {
   const loadHistory = async () => {
     try {
       const [res, hybridData, withdrawalData] = await Promise.all([
-        API.get("/history").catch(() => ({ data: { history: [] } })),
+        API.get("/history").catch(() => ({ data: { data: [] } })),
         fetchHybridSummary().catch(() => null),
         fetchHybridWithdrawals().catch(() => []),
       ]);
 
-      const legacyHistory = res.data?.data?.history ?? (res.data?.history || []);
+      const legacyHistory = Array.isArray(res.data?.data)
+        ? res.data.data
+        : (res.data?.data?.history ?? res.data?.history ?? []);
       const deposits = (hybridData?.deposits || []).map((item: any) => ({
         ...item,
         type: "deposit",

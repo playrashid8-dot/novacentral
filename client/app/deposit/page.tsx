@@ -24,7 +24,10 @@ export default function Deposit() {
   };
 
   const wallet = hybrid?.walletAddress || user?.walletAddress || "";
-  const minDeposit = Number(hybrid?.minDepositAmount ?? 1);
+  const minDeposit =
+    hybrid?.minDepositAmount != null && Number.isFinite(Number(hybrid.minDepositAmount))
+      ? Number(hybrid.minDepositAmount)
+      : null;
 
   // 🔐 AUTH + WALLET LOAD
   useEffect(() => {
@@ -162,7 +165,7 @@ export default function Deposit() {
 
         <ul className="space-y-1 text-gray-400 text-xs">
           <li>Send only USDT (BEP20)</li>
-          <li>Minimum deposit: ${minDeposit} USDT</li>
+            <li>Minimum deposit: {minDeposit != null ? `$${minDeposit} USDT` : "…"}</li>
           <li>Confirmation: 1-2 minutes</li>
           <li>Wrong network = loss</li>
         </ul>

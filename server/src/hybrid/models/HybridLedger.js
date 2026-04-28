@@ -44,6 +44,10 @@ const hybridLedgerSchema = new mongoose.Schema(
 );
 
 hybridLedgerSchema.index({ userId: 1, createdAt: -1 });
+hybridLedgerSchema.index(
+  { source: 1, "meta.depositTxHash": 1 },
+  { sparse: true }
+);
 
 const HybridLedger =
   mongoose.models.HybridLedger ||

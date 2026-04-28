@@ -112,9 +112,11 @@ export default function Dashboard() {
     user?.totalEarnings ??
       Number(hybrid?.rewardBalance || 0) + Number(user?.todayProfit || 0)
   );
-  const salaryRewards: any = { 1: 30, 2: 80, 3: 250, 4: 500 };
   const salaryStage = Number(hybrid?.salaryStage || 0);
-  const salaryReward = salaryRewards[salaryStage] || 0;
+  const salaryReward = Number(
+    hybrid?.salaryRules?.find((r: { stage?: number }) => Number(r?.stage) === salaryStage)
+      ?.amount ?? 0
+  );
   const directProgress = Number(hybrid?.salaryDirectCount || hybrid?.directCount || 0);
   const teamProgress = Number(hybrid?.salaryTeamCount || hybrid?.teamCount || 0);
   const activeStakes = (hybrid?.stakes || []).filter((stake: any) => stake.status === "active");

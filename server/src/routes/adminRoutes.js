@@ -56,12 +56,12 @@ router.get("/deposits", auth, isAdmin, async (req, res) => {
 
 router.get("/deposits/pending", auth, isAdmin, async (req, res) => {
   try {
-    const deposits = await HybridDeposit.find({ status: "detected" })
+    const deposits = await HybridDeposit.find({ status: { $in: ["credited", "swept"] } })
       .populate("userId", "username email")
       .sort({ createdAt: -1 });
     res.json({
       success: true,
-      msg: "Pending-like hybrid deposits fetched successfully",
+      msg: "Credited hybrid deposits fetched successfully",
       data: { deposits },
       deposits,
     });
@@ -176,7 +176,12 @@ router.post("/rescan-deposits", auth, isAdmin, async (req, res) => {
 router.get("/users", auth, isAdmin, async (req, res) => {
   try {
     const users = await User.find().select("-password").sort({ createdAt: -1 });
-    res.json({ success: true, users });
+    res.json({
+      success: true,
+      msg: "Users fetched",
+      data: { users },
+      users,
+    });
   } catch (err) {
     sendAdminError(res, err, "ADMIN USERS ERROR");
   }
@@ -186,8 +191,10 @@ router.get("/users", auth, isAdmin, async (req, res) => {
 router.post("/block/:id", auth, isAdmin, async (req, res) => {
   try {
     const user = await User.findByIdAndUpdate(req.params.id, { isBlocked: true }, { new: true });
-    if (!user) return res.status(404).json({ msg: "User not found" });
-    res.json({ success: true, msg: "User blocked" });
+    if (!user) {
+      return res.status(404).json({ success: false, msg: "User not found", data: null });
+    }
+    res.json({ success: true, msg: "User blocked", data: null });
   } catch (err) {
     sendAdminError(res, err, "ADMIN BLOCK ERROR");
   }
@@ -197,8 +204,10 @@ router.post("/block/:id", auth, isAdmin, async (req, res) => {
 router.post("/unblock/:id", auth, isAdmin, async (req, res) => {
   try {
     const user = await User.findByIdAndUpdate(req.params.id, { isBlocked: false }, { new: true });
-    if (!user) return res.status(404).json({ msg: "User not found" });
-    res.json({ success: true, msg: "User unblocked" });
+    if (!user) {
+      return res.status(404).json({ success: false, msg: "User not found", data: null });
+    }
+    res.json({ success: true, msg: "User unblocked", data: null });
   } catch (err) {
     sendAdminError(res, err, "ADMIN UNBLOCK ERROR");
   }
@@ -219,8 +228,10 @@ router.post("/reset-wallet/:id", auth, isAdmin, async (req, res) => {
       },
       { new: true }
     );
-    if (!user) return res.status(404).json({ msg: "User not found" });
-    res.json({ success: true, msg: "Wallet reset" });
+    if (!user) {
+      return res.status(404).json({ success: false, msg: "User not found", data: null });
+    }
+    res.json({ success: true, msg: "Wallet reset", data: null });
   } catch (err) {
     sendAdminError(res, err, "ADMIN RESET WALLET ERROR");
   }
@@ -247,15 +258,19 @@ router.get("/stats", auth, isAdmin, async (req, res) => {
       totalEarnings += u.totalEarnings;
     });
 
+    const statsPayload = {
+      totalUsers,
+      totalDeposits,
+      totalWithdrawals,
+      totalBalance,
+      totalEarnings,
+    };
+
     res.json({
       success: true,
-      stats: {
-        totalUsers,
-        totalDeposits,
-        totalWithdrawals,
-        totalBalance,
-        totalEarnings,
-      },
+      msg: "Stats fetched",
+      data: { stats: statsPayload },
+      stats: statsPayload,
     });
   } catch (err) {
     sendAdminError(res, err, "ADMIN STATS ERROR");

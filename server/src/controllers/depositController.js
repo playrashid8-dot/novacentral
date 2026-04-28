@@ -44,9 +44,6 @@ export const createDeposit = async (req, res) => {
       data: null,
     });
 
-    console.log("USER:", req.user);
-    console.log("BODY:", req.body);
-
     let { amount, txHash } = req.body;
     const idempotencyKey = getIdempotencyKey(req);
 
@@ -60,9 +57,6 @@ export const createDeposit = async (req, res) => {
 
     // ✅ VALIDATION (STRONG)
     if (!Number.isFinite(amount) || amount <= 0) {
-      // #region agent log
-      fetch('http://127.0.0.1:7530/ingest/4afefbe1-47e6-4222-af48-f1c6fffa8a8e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6db99e'},body:JSON.stringify({sessionId:'6db99e',runId:'pre-fix',hypothesisId:'H2',location:'server/src/controllers/depositController.js:56',message:'deposit amount validation error response shape',data:{status:400,hasData:false,msg:'Amount must be a number greater than 0'},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       return res
         .status(400)
         .json({ success: false, msg: "Amount must be a number greater than 0" });

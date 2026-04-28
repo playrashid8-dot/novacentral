@@ -90,8 +90,8 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
       throw new Error("Invalid block range for deposit scan");
     }
 
-    if (latestBlock <= storedBlock) {
-      console.log("Deposit listener up to date:", { latestBlock, storedBlock });
+      if (latestBlock <= storedBlock) {
+        console.log("Deposit listener up to date");
       return { skipped: false, processed: 0 };
     }
 
@@ -107,7 +107,7 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
       const toBlock = Math.min(fromBlock + chunkSize - 1, latestBlock);
       let chunkHadCreditFailure = false;
 
-      console.log("Hybrid deposit scan:", { fromBlock, toBlock, rpcHost: "(configured)" });
+      console.log("Hybrid deposit scan");
 
       let logs = [];
 
@@ -121,7 +121,7 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
           })
         );
       } catch (err) {
-        console.error("Log fetch failed:", err);
+        console.error("Log fetch failed:", err?.message || String(err));
         break;
       }
 
@@ -206,21 +206,16 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
             });
           } catch (err) {
             chunkHadCreditFailure = true;
-            console.error("Deposit credit failed:", err);
+            console.error("Deposit credit failed:", err?.message || String(err));
             continue;
           }
 
-          console.log("Deposit credited:", {
-            userId: String(matchedUser._id),
-            wallet: shortAddr(toAddress),
-            amount,
-            tx: shortTx(txHash),
-          });
+          console.log("Deposit credited");
 
           processed += 1;
         }
       } else {
-        console.log("Deposit listener found no recipient addresses:", { fromBlock, toBlock });
+        console.log("Deposit listener found no recipient addresses");
       }
 
       if (chunkHadCreditFailure) {
@@ -247,13 +242,13 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
 
     return { skipped: false, processed };
   } catch (err) {
-    console.error("Listener crashed, retrying in 3s…", err);
+    console.error("Listener crashed, retrying in 3s…", err?.message || String(err));
     await new Promise((r) => setTimeout(r, 3000));
     throw err;
   }
 };
 
 export const rescanDeposits = async (fromBlock, toBlock) => {
-  console.log("🔁 Manual rescan started...", { fromBlock, toBlock });
+  console.log("Manual rescan started");
   return await scanHybridDeposits(fromBlock, toBlock);
 };

@@ -54,6 +54,14 @@ app.set("trust proxy", 1);
 ============================== */
 await connectDB();
 
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled Rejection:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught Exception:", err);
+});
+
 /* ==============================
    🔐 GLOBAL SECURITY
 ============================== */
@@ -90,6 +98,14 @@ app.get("/api/csrf-token", (req, res) => {
     success: true,
     msg: "ok",
     data: { csrfToken: req.csrfToken() },
+  });
+});
+
+app.get("/api/health", (req, res) => {
+  res.json({
+    success: true,
+    msg: "API working",
+    data: {},
   });
 });
 
@@ -156,7 +172,7 @@ app.get("/", (req, res) => {
   res.json({
     success: true,
     msg: "🚀 NovaCentral API running",
-    time: new Date(),
+    data: { time: new Date() },
   });
 });
 
@@ -167,6 +183,7 @@ app.use((req, res) => {
   res.status(404).json({
     success: false,
     msg: "Route not found ❌",
+    data: null,
   });
 });
 
@@ -186,6 +203,7 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({
     success: false,
     msg: err.message || "Internal Server Error",
+    data: null,
   });
 });
 

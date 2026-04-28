@@ -10,6 +10,7 @@ import {
   SALARY_RULES,
   WITHDRAW_MIN_AMOUNT,
 } from "../utils/constants.js";
+import { ONE_HOUR_MS, WITHDRAW_DELAY_MS } from "../utils/time.js";
 
 export const getHybridDepositDashboard = async (req, res) => {
   try {
@@ -39,6 +40,7 @@ export const getHybridDepositDashboard = async (req, res) => {
       pendingWithdraw: Number(user.pendingWithdraw || 0),
       minDepositAmount: MIN_HYBRID_DEPOSIT,
       withdrawMinAmount: WITHDRAW_MIN_AMOUNT,
+      withdrawLockHours: Math.round(WITHDRAW_DELAY_MS / ONE_HOUR_MS),
       level: Number(user.level || 0),
       roiRate: getCurrentRoiRate(user.level),
       salaryStage: Number(refreshedUser?.salaryStage ?? user.salaryStage ?? 0),

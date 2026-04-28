@@ -1,5 +1,5 @@
 import express from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import auth from "../../middleware/auth.js";
 import { sendWithdrawOtp } from "../../controllers/authController.js";
 import { claimWithdraw, getMyHybridWithdrawals, requestWithdraw } from "../controllers/withdrawController.js";
@@ -11,7 +11,7 @@ const sendWithdrawOtpLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => String(req.user?._id || req.ip || ""),
+  keyGenerator: (req) => (req.user?._id ? String(req.user._id) : ipKeyGenerator(req.ip)),
   message: {
     success: false,
     msg: "Too many OTP requests, try later",

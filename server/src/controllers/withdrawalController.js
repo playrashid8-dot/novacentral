@@ -50,9 +50,6 @@ export const createWithdrawal = async (req, res) => {
     }
 
     if (!walletAddress || walletAddress.length < 8) {
-      // #region agent log
-      fetch('http://127.0.0.1:7530/ingest/4afefbe1-47e6-4222-af48-f1c6fffa8a8e',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6db99e'},body:JSON.stringify({sessionId:'6db99e',runId:'pre-fix',hypothesisId:'H3',location:'server/src/controllers/withdrawalController.js:46',message:'withdrawal wallet validation error response shape',data:{status:400,hasData:true,dataIsNull:true,msg:'Valid wallet address required'},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       return res.status(400).json({
         success: false,
         msg: "Valid wallet address required",

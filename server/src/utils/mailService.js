@@ -18,7 +18,7 @@ export const transporter = nodemailer.createTransport({
 
 export const sendEmail = async (to, subject, text) => {
   if (!isMailConfigured()) {
-    throw new Error("Email service is not configured");
+    throw new Error("Email service not configured");
   }
 
   await transporter.sendMail({

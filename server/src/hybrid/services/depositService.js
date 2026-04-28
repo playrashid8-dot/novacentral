@@ -138,6 +138,7 @@ export const creditHybridDeposit = async ({
 
       await distributeHybridReferralRewards(userId, numericAmount, session, {
         isFirstQualifiedDeposit,
+        depositTxHash: normalizedTxHash,
       });
       await syncUserLevel(userId, session);
     });
@@ -169,10 +170,11 @@ export const enrichHybridDepositsWithConfirmations = async (deposits) => {
     const currentBlock = await withProviderRetry((p) => p.getBlockNumber());
     return deposits.map((d) => {
       const bn = d.blockNumber;
-      const confirmations =
+      let confirmations =
         bn != null && Number.isFinite(Number(bn))
           ? Math.max(0, currentBlock - Number(bn))
           : 0;
+      confirmations = confirmations || 0;
       const confirmationStatus =
         confirmations >= HYBRID_DEPOSIT_CONFIRMATIONS_REQUIRED ? "confirmed" : "confirming";
       return {
@@ -186,7 +188,7 @@ export const enrichHybridDepositsWithConfirmations = async (deposits) => {
     return deposits.map((d) => ({
       ...d,
       currentBlock: null,
-      confirmations: null,
+      confirmations: 0,
       confirmationStatus: "unknown",
     }));
   }

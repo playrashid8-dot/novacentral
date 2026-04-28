@@ -45,14 +45,14 @@ export const claimDailyRoi = async (userId) => {
       }
 
       const reward = Number((totalBase * roiRate).toFixed(8));
-      const claimCutoff = new Date(now.getTime() - ONE_DAY_MS);
+      const claimCutoffMs = Date.now() - 86400000;
 
       const updatedUser = await User.findOneAndUpdate(
         {
           _id: userId,
           $or: [
             { lastDailyClaim: null },
-            { lastDailyClaim: { $lte: claimCutoff } },
+            { lastDailyClaim: { $lte: new Date(claimCutoffMs) } },
             { lastDailyClaim: { $exists: false } },
           ],
         },

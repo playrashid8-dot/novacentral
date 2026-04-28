@@ -15,7 +15,7 @@ router.get("/", auth, async (req, res) => {
     res.json({
       success: true,
       msg: "History fetched",
-      data: { history },
+      data: history,
       history,
     });
   } catch (err) {

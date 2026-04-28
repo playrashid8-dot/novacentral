@@ -47,7 +47,7 @@ export const sendSignupOtp = async (req, res) => {
     }
 
     if (!isMailConfigured()) {
-      return sendAuthResponse(res, 503, false, "Email service unavailable");
+      return sendAuthResponse(res, 503, false, "Email service not configured");
     }
 
     const existing = await User.findOne({ email });
@@ -87,7 +87,7 @@ export const sendOtp = sendSignupOtp;
 export const sendWithdrawOtp = async (req, res) => {
   try {
     if (!isMailConfigured()) {
-      return sendAuthResponse(res, 503, false, "Email service unavailable");
+      return sendAuthResponse(res, 503, false, "Email service not configured");
     }
 
     const user = await User.findById(req.user._id).select("email isBlocked");

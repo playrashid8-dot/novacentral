@@ -1,4 +1,5 @@
 import User from "../../models/User.js";
+import HybridLedger from "../models/HybridLedger.js";
 import { REFERRAL_RATES } from "../utils/constants.js";
 import { addHybridLedgerEntries } from "./ledgerService.js";
 import { updateUserLevel } from "./levelService.js";
@@ -21,6 +22,18 @@ export const distributeHybridReferralRewards = async (
   }
 
   const isFirstQualifiedDeposit = options.isFirstQualifiedDeposit === true;
+  const depositTxHash = String(options.depositTxHash || "").trim().toLowerCase();
+
+  if (depositTxHash) {
+    const existingReward = await HybridLedger.findOne({
+      source: "referral_bonus",
+      "meta.depositTxHash": depositTxHash,
+    }).session(session);
+    if (existingReward) {
+      return [];
+    }
+  }
+
   const appliedRewards = [];
   const salaryTouchedIds = new Set();
   const levelTouchedIds = new Set();
@@ -102,6 +115,7 @@ export const distributeHybridReferralRewards = async (
         meta: {
           depth: item.depth,
           fromUserId: String(userId),
+          ...(depositTxHash ? { depositTxHash } : {}),
         },
       })),
       session
