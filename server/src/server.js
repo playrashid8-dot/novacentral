@@ -97,12 +97,12 @@ app.set("trust proxy", 1);
 ============================== */
 await connectDB();
 
-process.on("unhandledRejection", (err) => {
-  console.error("UNHANDLED:", err);
+process.on("uncaughtException", (err) => {
+  console.log("❌ CRASH:", err?.message || String(err));
 });
 
-process.on("uncaughtException", (err) => {
-  console.error("CRASH:", err);
+process.on("unhandledRejection", (err) => {
+  console.log("❌ PROMISE ERROR:", err);
 });
 
 /* ==============================
@@ -137,11 +137,7 @@ app.get("/api/csrf-token", (req, res) => {
 });
 
 app.get("/api/health", (req, res) => {
-  res.json({
-    success: true,
-    msg: "API working",
-    data: {},
-  });
+  res.json({ status: "ok" });
 });
 
 // ✅ HELMET (SECURITY HEADERS)

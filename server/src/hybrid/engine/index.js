@@ -24,8 +24,9 @@ const logHybridBootstrapStatus = async () => {
     if (!hybridConfig.gasKey) {
       console.error("❌ ERROR:", "HYBRID_GAS_FUNDER_PRIVATE_KEY not configured");
     } else if (rpcOk) {
-      const gf = new Wallet(hybridConfig.gasKey, getProvider());
-      const fb = await gf.getBalance();
+      const provider = getProvider();
+      const gf = new Wallet(hybridConfig.gasKey, provider);
+      const fb = await provider.getBalance(gf.address);
       gasOk = fb >= parseEther("0.001");
       console.log("⛽ Funder:", gf.address);
       console.log("⛽ Balance:", formatEther(fb));

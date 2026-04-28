@@ -12,7 +12,7 @@ const MIN_DEPOSIT_AMOUNT = MIN_HYBRID_DEPOSIT;
 /** Initial lookback capped to reduce pruned-RPC / oversized range failures */
 const SAFE_LOOKBACK_BLOCKS = 3000;
 /** BSC RPCs often reject eth_getLogs over large spans — keep chunks bounded */
-const MAX_BLOCK_RANGE = 1000;
+const CHUNK_SIZE = 2000;
 /** Reorg / fake-log safety: always ≥ 2 (see business rules) */
 const CONFIRMATIONS = 3;
 
@@ -134,7 +134,7 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
     let processed = 0;
 
     for (; fromBlock <= latestBlock; ) {
-      const toBlock = Math.min(latestBlock, fromBlock + MAX_BLOCK_RANGE - 1);
+      const toBlock = Math.min(latestBlock, fromBlock + CHUNK_SIZE - 1);
       let chunkHadCreditFailure = false;
 
       console.log("Hybrid deposit scan");
@@ -151,7 +151,7 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
           })
         );
       } catch (err) {
-        console.error("❌ ERROR:", err?.message || String(err));
+        console.log("❌ ERROR:", err?.message || String(err));
         await new Promise((r) => setTimeout(r, 3000));
         continue;
       }

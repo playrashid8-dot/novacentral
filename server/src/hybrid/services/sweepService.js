@@ -91,7 +91,7 @@ export const ensureMinBnbForSweep = async (address) => {
   const gasFunder = new Wallet(hybridConfig.gasKey, provider);
   console.log("⛽ Funder:", gasFunder.address);
   const shortfall = MIN_SAFE_GAS - balance + GAS_TOPUP_BUFFER;
-  const funderBal = await gasFunder.getBalance();
+  const funderBal = await provider.getBalance(gasFunder.address);
   console.log("⛽ Balance:", formatEther(funderBal));
   if (funderBal < shortfall) {
     console.warn(
