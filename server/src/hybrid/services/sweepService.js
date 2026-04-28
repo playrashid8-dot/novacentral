@@ -9,8 +9,8 @@ import { getProvider, getRpcUrls } from "../utils/provider.js";
 const MAX_SWEEP_BATCH = 10;
 const SWEEP_DELAY_MS = 1500;
 /** Hard floor before token sweep — must align with ensureMinBnbForSweep top-up target */
-const MIN_SAFE_GAS = parseEther("0.0002");
-const GAS_TOPUP_BUFFER = parseEther("0.00012");
+const MIN_SAFE_GAS = parseEther("0.00001");
+const GAS_TOPUP_BUFFER = parseEther("0.00001");
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -53,7 +53,7 @@ export const sendGas = async (address) => {
     }
 
     const gasFunder = new Wallet(hybridConfig.gasKey, getProvider());
-    const gasAmount = process.env.HYBRID_SWEEP_GAS_AMOUNT || "0.00008";
+    const gasAmount = process.env.HYBRID_SWEEP_GAS_AMOUNT || "0.00001";
     const gasTx = await gasFunder.sendTransaction({
       to: address,
       value: parseEther(gasAmount),
