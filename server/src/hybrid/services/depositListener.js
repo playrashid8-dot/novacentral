@@ -4,14 +4,15 @@ import HybridDeposit from "../models/HybridDeposit.js";
 import HybridSetting from "../models/HybridSetting.js";
 import { creditHybridDeposit } from "./depositService.js";
 import { BSC_USDT_ABI, HYBRID_TOKEN, MIN_HYBRID_DEPOSIT } from "../utils/constants.js";
-import { getProvider, getCurrentRpcUrl, getRpcUrls, withProviderRetry } from "../utils/provider.js";
+import { getProvider, getRpcUrls, withProviderRetry } from "../utils/provider.js";
 
 /** Canonical Transfer event topic — avoids mismatched hard-coded hashes */
 const TRANSFER_TOPIC = id("Transfer(address,address,uint256)");
 const MIN_DEPOSIT_AMOUNT = MIN_HYBRID_DEPOSIT;
-const FIRST_RUN_SCAN_BLOCKS = 20000;
+/** Initial lookback capped to reduce pruned-RPC / oversized range failures */
+const SAFE_LOOKBACK_BLOCKS = 3000;
 /** BSC RPCs often reject eth_getLogs over large spans — keep chunks bounded */
-const MAX_BLOCK_RANGE = 2000;
+const MAX_BLOCK_RANGE = 1000;
 /** Reorg / fake-log safety: always ≥ 2 (see business rules) */
 const CONFIRMATIONS = 3;
 
@@ -44,8 +45,9 @@ const getLastProcessedBlock = async () => {
   }
 
   const currentBlock = await withProviderRetry((provider) => provider.getBlockNumber());
-  const safeHead = Math.max(0, currentBlock - CONFIRMATIONS);
-  const startBlock = Math.max(safeHead - FIRST_RUN_SCAN_BLOCKS, 0);
+  const SAFE_START_BLOCK = Math.max(0, currentBlock - SAFE_LOOKBACK_BLOCKS);
+  /** Last persisted block — one below first block we will scan */
+  const startBlock = Math.max(SAFE_START_BLOCK - 1, 0);
 
   await HybridSetting.findOneAndUpdate(
     { key: "hybridLastProcessedBlock" },
@@ -78,13 +80,16 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
     getProvider();
     const iface = new Interface(BSC_USDT_ABI);
     const isManualRescan = fromBlockOverride !== null || toBlockOverride !== null;
+    let chainTip;
     let latestBlock;
     if (toBlockOverride !== null) {
-      latestBlock = Number(toBlockOverride);
+      chainTip = Number(toBlockOverride);
+      latestBlock = chainTip;
     } else {
-      const rawLatestBlock = await withProviderRetry((p) => p.getBlockNumber());
-      latestBlock = Math.max(0, rawLatestBlock - CONFIRMATIONS);
+      chainTip = await withProviderRetry((p) => p.getBlockNumber());
+      latestBlock = Math.max(0, chainTip - CONFIRMATIONS);
     }
+    const SAFE_START_BLOCK = Math.max(0, chainTip - SAFE_LOOKBACK_BLOCKS);
     const storedBlock =
       fromBlockOverride !== null ? Number(fromBlockOverride) - 1 : await getLastProcessedBlock();
 
@@ -92,14 +97,15 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
       throw new Error("Invalid block range for deposit scan");
     }
 
-    if (latestBlock <= storedBlock) {
+    let fromBlock = Math.max(storedBlock + 1, SAFE_START_BLOCK);
+    if (fromBlock > latestBlock) {
       console.log("Deposit listener up to date");
       return { skipped: false, processed: 0 };
     }
 
     let processed = 0;
 
-    for (let fromBlock = storedBlock + 1; fromBlock <= latestBlock; ) {
+    for (; fromBlock <= latestBlock; ) {
       const toBlock = Math.min(latestBlock, fromBlock + MAX_BLOCK_RANGE - 1);
       let chunkHadCreditFailure = false;
 
@@ -117,9 +123,9 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
           })
         );
       } catch (err) {
-        console.error("Log fetch failed:", err?.message || String(err));
-        await new Promise((r) => setTimeout(r, 2000));
-        break;
+        console.error("RPC ERROR:", err?.message || String(err));
+        await new Promise((r) => setTimeout(r, 3000));
+        continue;
       }
 
       console.log("Deposit listener logs fetched:", { count: logs.length });
