@@ -32,7 +32,7 @@ function readXsrfCookie() {
 // 🚀 INSTANCE — must send cookies for CSRF + httpOnly auth
 const API = axios.create({
   baseURL: BASE_URL,
-  timeout: 15000,
+  timeout: 30000,
   withCredentials: true,
   headers: {
     "Content-Type": "application/json",
@@ -70,7 +70,10 @@ export const initCSRF = async (force = false) => {
   if (!force && csrfFetched) return csrfTokenCache;
 
   const url = `${BASE_URL.replace(/\/$/, "")}${CSRF_RELATIVE_PATH}`;
-  const { data } = await axios.get(url, { withCredentials: true });
+  const { data } = await axios.get(url, {
+    withCredentials: true,
+    timeout: 30000,
+  });
   csrfFetched = true;
   csrfTokenCache = readXsrfCookie() || data?.data?.csrfToken || null;
   return csrfTokenCache;

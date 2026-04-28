@@ -1,6 +1,9 @@
 import nodemailer from "nodemailer";
 import hybridConfig from "../config/hybridConfig.js";
 
+const SMTP_CONNECTION_MS = 20000;
+const SEND_MAIL_RACE_MS = 25000;
+
 const assertEmailConfig = () => {
   const { user, pass } = hybridConfig.emailConfig;
 
@@ -35,6 +38,9 @@ const createTransporter = () => {
       user,
       pass,
     },
+    connectionTimeout: SMTP_CONNECTION_MS,
+    greetingTimeout: SMTP_CONNECTION_MS,
+    socketTimeout: SMTP_CONNECTION_MS,
   };
 
   if (!tlsRejectUnauthorized) {
@@ -46,24 +52,62 @@ const createTransporter = () => {
   return nodemailer.createTransport(transportOptions);
 };
 
+let hybridVerifiedTransporter = null;
+let hybridInitPromise = null;
+
+const sendMailWithTimeout = async (transporter, mailOptions) =>
+  Promise.race([
+    transporter.sendMail(mailOptions),
+    new Promise((_, reject) =>
+      setTimeout(
+        () => reject(new Error("Email send timeout")),
+        SEND_MAIL_RACE_MS
+      )
+    ),
+  ]);
+
+async function getVerifiedHybridTransporter() {
+  if (hybridVerifiedTransporter) return hybridVerifiedTransporter;
+
+  if (!hybridInitPromise) {
+    hybridInitPromise = (async () => {
+      const t = createTransporter();
+      await t.verify();
+      console.log("✅ SMTP connected");
+      hybridVerifiedTransporter = t;
+    })();
+  }
+
+  try {
+    await hybridInitPromise;
+  } catch (e) {
+    hybridInitPromise = null;
+    throw e;
+  }
+
+  return hybridVerifiedTransporter;
+}
+
 export const sendOTP = async (email, otp) => {
   try {
     if (!email || !otp) {
       throw new Error("Email and OTP are required");
     }
 
-    const transporter = createTransporter();
+    const transporter = await getVerifiedHybridTransporter();
     const safeOtp = escapeHtml(otp);
 
     const displayFrom =
       hybridConfig.emailConfig.from || hybridConfig.emailConfig.user;
 
-    await transporter.sendMail({
+    console.log("📧 Sending email...");
+    await sendMailWithTimeout(transporter, {
       from: `"HybridEarn" <${displayFrom}>`,
       to: email,
       subject: "Your HybridEarn OTP",
       html: `<p>Your HybridEarn OTP is: <strong>${safeOtp}</strong></p>`,
     });
+    console.log("✅ Email sent");
 
     return { success: true };
   } catch (error) {

@@ -2,6 +2,11 @@ import nodemailer from "nodemailer";
 
 const read = (key, fallback = "") => String(process.env[key] ?? fallback).trim();
 
+/** Nodemailer pool / socket timeouts (ms); avoids ~15s default limits on slow SMTP. */
+const SMTP_CONNECTION_MS = 20000;
+/** Hard cap so sendMail cannot hang indefinitely (ms). Must exceed socket timeouts slightly. */
+const SEND_MAIL_RACE_MS = 25000;
+
 const getSmtpSettings = () => {
   const host = read("SMTP_HOST") || read("EMAIL_HOST");
   const portRaw = read("SMTP_PORT") || read("EMAIL_PORT");
@@ -21,6 +26,19 @@ export const isMailConfigured = () => {
 };
 
 let cachedTransporter = null;
+/** True after successful verify (via verifyMailConnection or first sendEmail). */
+let smtpVerifiedOnce = false;
+
+const sendMailWithTimeout = async (transporter, mailOptions) =>
+  Promise.race([
+    transporter.sendMail(mailOptions),
+    new Promise((_, reject) =>
+      setTimeout(
+        () => reject(new Error("Email send timeout")),
+        SEND_MAIL_RACE_MS
+      )
+    ),
+  ]);
 
 export const createMailTransporter = () => {
   const { host, port, user, pass, tlsRejectUnauthorized } = getSmtpSettings();
@@ -42,6 +60,9 @@ export const createMailTransporter = () => {
       user,
       pass,
     },
+    connectionTimeout: SMTP_CONNECTION_MS,
+    greetingTimeout: SMTP_CONNECTION_MS,
+    socketTimeout: SMTP_CONNECTION_MS,
   };
 
   if (!tlsRejectUnauthorized) {
@@ -63,12 +84,14 @@ export const getMailTransporter = () => {
 /** For tests or after env reload */
 export const resetMailTransporterCache = () => {
   cachedTransporter = null;
+  smtpVerifiedOnce = false;
 };
 
 export const verifyMailConnection = async () => {
   const transporter = getMailTransporter();
   await transporter.verify();
   console.log("✅ SMTP connected");
+  smtpVerifiedOnce = true;
 };
 
 export const sendEmail = async (to, subject, text) => {
@@ -79,13 +102,23 @@ export const sendEmail = async (to, subject, text) => {
   const { from } = getSmtpSettings();
 
   try {
+    console.log("📧 Sending email...");
     const transporter = getMailTransporter();
-    await transporter.sendMail({
+
+    if (!smtpVerifiedOnce) {
+      await transporter.verify();
+      console.log("✅ SMTP connected");
+      smtpVerifiedOnce = true;
+    }
+
+    await sendMailWithTimeout(transporter, {
       from,
       to,
       subject,
       text,
     });
+
+    console.log("✅ Email sent");
   } catch (e) {
     console.error("❌ EMAIL ERROR:", e.message);
     throw e;
