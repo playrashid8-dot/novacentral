@@ -1,20 +1,28 @@
 import { JsonRpcProvider } from "ethers";
 
-/** Binance Seeds only — avoids Ankr/PublicNode rate limits & pruned-history failures */
-const DEFAULT_PRIMARY_BSC = "https://bsc-dataseed1.binance.org";
+/** Ordered list: primary env → fallback env → Binance seeds (same provider order every process start) */
+const BSC_PUBLIC_SEEDS = [
+  "https://bsc-dataseed1.binance.org",
+  "https://bsc-dataseed2.binance.org",
+];
 
 const RPC_URLS = [
-  String(process.env.HYBRID_BSC_RPC_URL || "").trim() || DEFAULT_PRIMARY_BSC,
-  process.env.HYBRID_BSC_RPC_FALLBACK,
-  process.env.HYBRID_BSC_RPC_FALLBACK_1,
-  process.env.HYBRID_BSC_RPC_FALLBACK_2,
+  String(process.env.HYBRID_BSC_RPC_URL || "").trim(),
+  String(process.env.HYBRID_BSC_RPC_FALLBACK || "").trim(),
+  ...BSC_PUBLIC_SEEDS,
 ]
   .map((url) => String(url || "").trim())
   .filter(Boolean);
 
+/** Dedupe while preserving priority (first occurrence wins) */
 const uniqueRpcs = [...new Set(RPC_URLS)];
 
 let currentIndex = 0;
+
+/** Switch to next RPC only after this many consecutive failures on the current RPC */
+const SWITCH_AFTER_CONSECUTIVE_FAILURES = 3;
+
+let consecutiveRpcFailures = 0;
 
 export const getRpcUrls = () => [...uniqueRpcs];
 
@@ -36,7 +44,8 @@ const switchRpc = () => {
   console.log("🔁 Switching RPC →", uniqueRpcs[currentIndex]);
 };
 
-const defaultRetries = () => Math.max(3, uniqueRpcs.length);
+/** Enough attempts to allow multiple strikes per RPC before rotation + failover chain */
+const defaultRetries = () => Math.max(24, uniqueRpcs.length * SWITCH_AFTER_CONSECUTIVE_FAILURES * 3);
 
 export const withProviderRetry = async (fn, retries = null) => {
   if (uniqueRpcs.length === 0) {
@@ -49,12 +58,18 @@ export const withProviderRetry = async (fn, retries = null) => {
   for (let i = 0; i < maxAttempts; i += 1) {
     try {
       const provider = getProvider();
-      return await fn(provider);
+      const result = await fn(provider);
+      consecutiveRpcFailures = 0;
+      return result;
     } catch (err) {
       lastError = err;
       console.error("RPC failed:", err?.message);
 
-      switchRpc();
+      consecutiveRpcFailures += 1;
+      if (consecutiveRpcFailures >= SWITCH_AFTER_CONSECUTIVE_FAILURES) {
+        switchRpc();
+        consecutiveRpcFailures = 0;
+      }
       await new Promise((r) => setTimeout(r, 500));
     }
   }
