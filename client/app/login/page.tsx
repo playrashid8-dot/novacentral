@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import Image from "next/image";
 import API, { getApiErrorMessage, initCSRF } from "../../lib/api";
 import { resetLogoutState } from "../../lib/auth";
+import PrimaryButton from "../../components/PrimaryButton";
 
 export default function Login() {
   const router = useRouter();
@@ -114,16 +115,14 @@ export default function Login() {
           />
 
           {/* BUTTON */}
-          <button
+          <PrimaryButton
+            type="button"
             onClick={handleLogin}
-            disabled={loading}
-            className="mt-4 w-full bg-gradient-to-r from-purple-500 to-indigo-500 p-3 rounded-xl font-semibold shadow-lg hover:scale-105 active:scale-95 transition flex items-center justify-center gap-2"
+            loading={loading}
+            className="mt-4 font-semibold hover:shadow-xl"
           >
-            {loading && (
-              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            )}
-            {loading ? "Logging in..." : "Login 🔐"}
-          </button>
+            Login 🔐
+          </PrimaryButton>
 
           {/* SIGNUP */}
           <p className="text-xs text-gray-400 text-center mt-5">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useEffect, useState } from "react";
 import AdminLayout, {
   adminFetch,
   formatCurrency,
@@ -8,11 +8,17 @@ import AdminLayout, {
 } from "../../../components/admin/AdminLayout";
 import Loader from "../../../components/admin/Loader";
 import Table from "../../../components/admin/Table";
+import EmptyState from "../../../components/EmptyState";
+import { showToast } from "../../../lib/toast";
+
+const ROW_CAP = 100;
 
 export default function AdminLedgerPage() {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const safeEntries = useMemo(() => entries.slice(0, ROW_CAP), [entries]);
 
   useEffect(() => {
     let active = true;
@@ -30,7 +36,11 @@ export default function AdminLedgerPage() {
           [];
         if (active) setEntries(nextEntries);
       } catch (err) {
-        if (active) setError(err.message || "Failed to load ledger");
+        if (active) {
+          const msg = err.message || "Failed to load ledger";
+          setError(msg);
+          showToast(msg);
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -52,12 +62,14 @@ export default function AdminLedgerPage() {
 
       {loading ? (
         <Loader label="Loading ledger..." />
+      ) : !error && !entries.length ? (
+        <EmptyState text="No records found" />
       ) : (
         <Table
           columns={["Type", "Amount", "Reference", "Date"]}
           emptyText="No ledger entries found"
         >
-          {entries.map((entry) => (
+          {safeEntries.map((entry) => (
             <tr key={entry._id} className="hover:bg-white/[0.03]">
               <td className="whitespace-nowrap px-4 py-4">
                 <span

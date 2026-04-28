@@ -6,6 +6,8 @@ import { motion } from "framer-motion";
 import Image from "next/image";
 import API, { getApiErrorMessage, initCSRF } from "../../lib/api";
 
+import PrimaryButton from "../../components/PrimaryButton";
+
 /* ==============================
    🔥 WRAPPER (FIX BUILD ERROR)
 ============================== */
@@ -181,14 +183,14 @@ function SignupInner() {
           <Input label="Password" value={password} setValue={setPassword} type="password" />
           <Input label="Referral Code (optional)" value={referral} setValue={setReferral} />
 
-          <button
+          <PrimaryButton
+            type="button"
             onClick={handleSignup}
-            disabled={loading}
-            className="mt-4 w-full bg-gradient-to-r from-purple-500 via-indigo-500 to-cyan-500 p-3 rounded-xl font-semibold shadow-lg hover:scale-105 active:scale-95 transition flex items-center justify-center gap-2"
+            loading={loading}
+            className="mt-4 font-semibold hover:shadow-xl"
           >
-            {loading && <Spinner />}
-            {loading ? "Creating..." : "Signup 🚀"}
-          </button>
+            Signup 🚀
+          </PrimaryButton>
 
           <p className="text-xs text-gray-400 text-center mt-5">
             Already have account?{" "}

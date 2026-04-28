@@ -1,4 +1,5 @@
 import API, { resetRedirectState } from "./api";
+import { showToast } from "./toast";
 import { fetchCurrentUser } from "./session";
 
 // 🚫 prevent multiple logout redirects
@@ -64,17 +65,3 @@ export const protectRoute = (router) => {
     }
   });
 };
-
-// 🔥 SIMPLE TOAST
-function showToast(message) {
-  const div = document.createElement("div");
-
-  div.innerText = message;
-
-  div.className =
-    "fixed top-5 left-1/2 -translate-x-1/2 bg-purple-600 text-white px-4 py-2 rounded-lg text-sm shadow-lg z-50";
-
-  document.body.appendChild(div);
-
-  setTimeout(() => div.remove(), 2500);
-}

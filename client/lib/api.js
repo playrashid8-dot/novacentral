@@ -1,5 +1,7 @@
 import axios from "axios";
 
+import { showToast } from "./toast";
+
 /**
  * Axios base URL must end with `/api` so `/auth/*` and `/csrf-token` resolve correctly.
  */
@@ -124,30 +126,28 @@ API.interceptors.request.use(async (config) => {
 });
 
 /* ==============================
-   🚨 RESPONSE INTERCEPTOR
+   🚨 RESPONSE INTERCEPTOR (global toast + CSRF retry, no dupes with ./toast dedupe)
 ============================== */
 API.interceptors.response.use(
   (res) => res,
 
   async (error) => {
-    // ❌ NETWORK vs real API message
     if (!error.response) {
       console.error("❌ Network Error:", error.message);
-
       if (typeof window !== "undefined") {
-        showToast("Network error");
+        showToast(error.message || "Network error", { fallback: "Network error" });
       }
-
       return Promise.reject(error);
     }
 
     const { status, data } = error.response;
     const cfg = error.config || {};
-    const msg = String(data?.msg || "").toLowerCase();
+    const msgLc = String(data?.msg || "").toLowerCase();
 
+    /** CSRF — retry unsafe request once; no toast until final failure below */
     if (
       status === 403 &&
-      msg.includes("csrf") &&
+      msgLc.includes("csrf") &&
       !cfg._csrfRetry &&
       ["post", "put", "patch", "delete"].includes(String(cfg.method || "").toLowerCase())
     ) {
@@ -160,11 +160,16 @@ API.interceptors.response.use(
         attachCsrfHeaders(cfg, token);
         return API(cfg);
       } catch {
-        /* fall through */
+        /* fall through — show toast via unified handler */
       }
     }
 
-    // 🔐 UNAUTHORIZED (TOKEN EXPIRED / INVALID)
+    if (status === 403 && data?.msg?.toLowerCase?.().includes?.("csrf")) {
+      csrfTokenCache = null;
+      csrfFetched = false;
+    }
+
+    /** UNAUTHORIZED — redirect; logout toast from auth, not here */
     if (status === 401) {
       if (typeof window !== "undefined" && !isRedirecting) {
         isRedirecting = true;
@@ -173,29 +178,24 @@ API.interceptors.response.use(
           logout("Session expired 🔒");
         });
       }
+      return Promise.reject(error);
     }
 
-    if (status === 403 && data?.msg?.toLowerCase?.().includes("csrf")) {
-      csrfTokenCache = null;
-      csrfFetched = false;
-    }
-
-    // ⚠️ BAD REQUEST
     if (status === 400) {
       console.warn("⚠️ Bad Request:", data?.msg || data?.message);
-
-      if (typeof window !== "undefined") {
-        showToast(data?.msg || data?.message || "Invalid request ⚠️");
-      }
     }
-
-    // 🔥 SERVER ERROR
     if (status >= 500) {
       console.error("🔥 Server Error:", data);
+    }
 
-      if (typeof window !== "undefined") {
-        showToast(data?.msg || data?.message || "Server error");
-      }
+    const apiMsg =
+      data?.msg ||
+      data?.message ||
+      error.message ||
+      "Something went wrong";
+
+    if (typeof window !== "undefined") {
+      showToast(apiMsg);
     }
 
     return Promise.reject(error);
@@ -218,21 +218,3 @@ export const getApiErrorMessage = (error, fallback = "Something went wrong ❌")
 };
 
 export default API;
-
-/* ==============================
-   🔥 SIMPLE TOAST SYSTEM
-============================== */
-function showToast(message) {
-  const div = document.createElement("div");
-
-  div.innerText = message;
-
-  div.className =
-    "fixed top-5 left-1/2 -translate-x-1/2 bg-purple-600 text-white px-4 py-2 rounded-lg text-sm shadow-lg z-50 animate-fade-in";
-
-  document.body.appendChild(div);
-
-  setTimeout(() => {
-    div.remove();
-  }, 2500);
-}

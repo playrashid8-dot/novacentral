@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { fetchCurrentUser } from "../../lib/session";
+import { showToast } from "../../lib/toast";
 import Loader from "./Loader";
 
 export const API_BASE =
@@ -73,10 +75,11 @@ export async function adminFetch(path, options = {}) {
 }
 
 const navItems = [
-  { label: "Dashboard", href: "/admin" },
+  { label: "Dashboard", href: "/admin/dashboard" },
   { label: "Deposits", href: "/admin/deposits" },
   { label: "Withdrawals", href: "/admin/withdrawals" },
   { label: "Users", href: "/admin/users" },
+  { label: "Activity log", href: "/admin/logs" },
   { label: "Ledger", href: "/admin/ledger" },
 ];
 
@@ -112,11 +115,20 @@ export default function AdminLayout({ title, subtitle, children }) {
 
     const verifyAdmin = async () => {
       try {
+        const user = await fetchCurrentUser();
+        if (!user?.isAdmin) {
+          if (active) {
+            setAccessDenied("Access denied");
+          }
+          return;
+        }
         await adminFetch("/admin/stats");
         if (active) setAccessDenied("");
       } catch (error) {
         if (active) {
-          setAccessDenied(error.message || "Access Denied");
+          const msg = error?.message || "Access Denied";
+          setAccessDenied(msg);
+          showToast(msg);
         }
       } finally {
         if (active) setChecking(false);
@@ -175,7 +187,9 @@ export default function AdminLayout({ title, subtitle, children }) {
 
       <nav className="mb-6 flex gap-2 overflow-x-auto pb-1">
         {navItems.map((item) => {
-          const active = pathname === item.href;
+          const active =
+            pathname === item.href ||
+            (item.href === "/admin/dashboard" && pathname === "/admin");
 
           return (
             <Link

@@ -7,9 +7,9 @@ import { motion } from "framer-motion";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import AppToast from "../../components/AppToast";
 import { fetchCurrentUser } from "../../lib/session";
-import GradientButton from "../../components/GradientButton";
 import CountdownTimer from "../../components/CountdownTimer";
 import GlassCard from "../../components/GlassCard";
+import PrimaryButton from "../../components/PrimaryButton";
 import { withdrawalStatusClass } from "../../lib/helpers";
 import { fetchHybridSummary, fetchHybridWithdrawals, requestHybridWithdraw, sendWithdrawalOtp } from "../../lib/hybrid";
 
@@ -140,8 +140,12 @@ export default function Withdrawal() {
     if (otpSending) return;
     try {
       setOtpSending(true);
-      await sendWithdrawalOtp();
-      showToast("Check your email for the code");
+      const envelope = await sendWithdrawalOtp();
+      showToast(
+        envelope.msg && String(envelope.msg).trim()
+          ? String(envelope.msg).trim()
+          : "Check your email for the code",
+      );
     } catch (e: any) {
       showToast(getApiErrorMessage(e, "Could not send code"));
     } finally {
@@ -153,7 +157,7 @@ export default function Withdrawal() {
 
   return (
     <ProtectedRoute>
-    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 pb-10 text-white relative bg-[#040406] overflow-x-hidden">
+    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 pb-10 text-white relative bg-[#040406] overflow-x-hidden w-full">
       <AppToast message={toast} />
 
       <div className="absolute w-[500px] h-[500px] bg-purple-600 opacity-20 blur-[150px] top-[-150px] left-[-150px]" />
@@ -168,8 +172,9 @@ export default function Withdrawal() {
         </div>
 
         <button
+          type="button"
           onClick={() => router.push("/dashboard")}
-          className="text-sm text-purple-300 bg-white/[0.06] border border-white/10 rounded-full px-4 py-2 hover:bg-purple-500/15 transition-all duration-300"
+          className="max-w-full shrink-0 text-sm text-purple-300 bg-white/[0.06] border border-white/10 rounded-xl px-4 py-3 hover:bg-purple-500/15 transition-all duration-300 shadow-md hover:shadow-lg"
         >
           Back
         </button>
@@ -243,7 +248,7 @@ export default function Withdrawal() {
             className="w-full mt-3 bg-white/[0.06] border border-white/10 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/25 outline-none p-3 rounded-xl text-sm placeholder:text-gray-600"
           />
 
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3 flex min-w-0 gap-2 flex-wrap sm:flex-nowrap">
             <input
               type="text"
               inputMode="numeric"
@@ -252,26 +257,27 @@ export default function Withdrawal() {
               value={withdrawOtp}
               disabled={loading}
               onChange={(e) => setWithdrawOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              className="flex-1 bg-white/[0.06] border border-white/10 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/25 outline-none p-3 rounded-xl text-sm placeholder:text-gray-600"
+              className="min-w-0 flex-1 bg-white/[0.06] border border-white/10 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/25 outline-none p-3 rounded-xl text-sm placeholder:text-gray-600"
             />
             <button
               type="button"
               onClick={sendOtpToEmail}
               disabled={loading || otpSending}
-              className="shrink-0 px-4 rounded-xl bg-white/[0.08] border border-purple-500/30 text-xs font-semibold text-purple-200 hover:bg-purple-500/15 disabled:opacity-50"
+              className="shrink-0 px-4 py-3 rounded-xl bg-white/[0.08] border border-purple-500/30 text-xs font-semibold text-purple-200 hover:bg-purple-500/15 disabled:opacity-50 shadow-md transition hover:shadow-lg"
             >
               {otpSending ? "…" : "Email code"}
             </button>
           </div>
 
-          <GradientButton
+          <PrimaryButton
+            type="button"
             onClick={withdraw}
             disabled={loading || withdrawMin == null}
             loading={loading}
-            className="mt-5 w-full rounded-xl p-3"
+            className="mt-5 shadow-lg hover:shadow-xl"
           >
-            {loading ? "Processing..." : "Withdraw"}
-          </GradientButton>
+            Withdraw
+          </PrimaryButton>
         </GlassCard>
       </motion.div>
 

@@ -4,12 +4,12 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import API, { getApiErrorMessage, normalize } from "../../lib/api";
 import ProtectedRoute from "../../components/ProtectedRoute";
+import PageWrapper from "../../components/PageWrapper";
 import AppToast from "../../components/AppToast";
 import { fetchCurrentUser } from "../../lib/session";
 import { claimHybridSalary, fetchHybridSummary } from "../../lib/hybrid";
 import GradientButton from "../../components/GradientButton";
 import ProgressBar from "../../components/ProgressBar";
-import Loader from "../../components/Loader";
 
 export default function Referral() {
   const [copied, setCopied] = useState(false);
@@ -80,7 +80,15 @@ export default function Referral() {
     try {
       setSalaryLoading(true);
       const result = await claimHybridSalary();
-      showToast(`Salary claimed: $${Number(result?.amount ?? 0).toFixed(2)}`);
+      const salMsg =
+        typeof (result as { msg?: string })?.msg === "string" &&
+        (result as { msg?: string }).msg?.trim()
+          ? String((result as { msg?: string }).msg).trim()
+          : "";
+      showToast(
+        salMsg ||
+          `Salary claimed: $${Number((result as { amount?: number })?.amount ?? 0).toFixed(2)}`,
+      );
       const hybridData = await fetchHybridSummary().catch(() => null);
       setHybrid(hybridData);
     } catch (err: any) {
@@ -90,17 +98,10 @@ export default function Referral() {
     }
   };
 
-  if (pageLoading) {
-    return (
-      <ProtectedRoute>
-        <Loader />
-      </ProtectedRoute>
-    );
-  }
-
   return (
     <ProtectedRoute>
-    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 pb-10 text-white relative bg-[#040406] overflow-x-hidden">
+    <PageWrapper loading={pageLoading} skipEmpty>
+    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 pb-10 text-white relative bg-[#040406] overflow-x-hidden w-full">
       <AppToast message={toast} />
 
       {/* 🌌 BACKGROUND */}
@@ -247,6 +248,7 @@ export default function Referral() {
       </div>
 
     </div>
+    </PageWrapper>
     </ProtectedRoute>
   );
 }

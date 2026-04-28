@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import QRCode from "react-qr-code";
 import ProtectedRoute from "../../components/ProtectedRoute";
-import AppToast from "../../components/AppToast";
 import Button from "../../components/Button";
 import { fetchCurrentUser } from "../../lib/session";
 import { fetchHybridSummary } from "../../lib/hybrid";
 import GlassCard from "../../components/GlassCard";
+import SkeletonCard from "../../components/SkeletonCard";
 import StatusBadge from "../../components/StatusBadge";
 import { depositRowStatusClass, maskAddress } from "../../lib/helpers";
+import { STATUS } from "../../lib/constants";
 
 /** Matches server HYBRID_DEPOSIT_CONFIRMATIONS_REQUIRED (UI display only). */
 const DEPOSIT_CONFIRMATIONS_REQUIRED = 3;
@@ -21,14 +22,8 @@ export default function Deposit() {
 
   const [copied, setCopied] = useState(false);
   const [user, setUser]: any = useState(null);
-  const [toast, setToast] = useState("");
   const [hybrid, setHybrid]: any = useState(null);
   const [walletLoading, setWalletLoading] = useState(true);
-
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(""), 2500);
-  };
 
   const wallet = hybrid?.walletAddress || user?.walletAddress || "";
   const minDeposit =
@@ -81,8 +76,6 @@ export default function Deposit() {
   return (
     <ProtectedRoute>
     <div className="relative w-full max-w-full overflow-x-hidden pb-6 text-white">
-      <AppToast message={toast} />
-
       {/* HEADER */}
       <div className="relative z-10 mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
@@ -130,8 +123,14 @@ export default function Deposit() {
               <QRCode value={wallet} size={168} level="M" fgColor="#111827" bgColor="#ffffff" />
             </div>
           ) : (
-            <div className="mx-auto mb-5 flex h-[196px] max-w-[220px] items-center justify-center rounded-2xl border border-dashed border-white/15 bg-black/40 text-xs text-gray-500">
-              {walletLoading ? "Generating QR…" : "No wallet yet"}
+            <div className="mx-auto mb-5">
+              {walletLoading ? (
+                <SkeletonCard className="mx-auto h-[196px] max-w-[220px] mb-0 rounded-2xl bg-gray-800/60" />
+              ) : (
+                <div className="mx-auto flex h-[196px] max-w-[220px] items-center justify-center rounded-2xl border border-dashed border-white/15 bg-black/40 text-xs text-gray-500">
+                  No wallet yet
+                </div>
+              )}
             </div>
           )}
 
@@ -150,7 +149,7 @@ export default function Deposit() {
                 type="button"
                 onClick={copyWallet}
                 disabled={!wallet}
-                className="w-full shrink-0 rounded-2xl bg-[#6366F1]/20 px-4 py-2.5 text-xs font-semibold text-indigo-100 ring-1 ring-[#6366F1]/35 transition hover:scale-[1.02] hover:bg-[#6366F1]/30 disabled:opacity-40 sm:w-auto"
+                className="w-full shrink-0 rounded-2xl bg-[#6366F1]/20 px-4 py-3 text-xs font-semibold text-indigo-100 ring-1 ring-[#6366F1]/35 transition hover:scale-[1.02] hover:bg-[#6366F1]/30 hover:shadow-lg disabled:opacity-40 sm:w-auto"
               >
                 {copied ? "Copied" : "Copy full address"}
               </button>
@@ -199,7 +198,8 @@ export default function Deposit() {
                 {hybrid.deposits.slice(0, 5).map((deposit: any) => {
                   const conf = Number(deposit?.confirmations ?? 0);
                   const failed =
-                    deposit?.confirmationStatus === "failed" ||
+                    deposit?.confirmationStatus === STATUS.FAILED ||
+                    String(deposit?.status || "").toLowerCase() === STATUS.FAILED ||
                     String(deposit?.status || "").toLowerCase().includes("fail");
                   const done = !failed && conf >= DEPOSIT_CONFIRMATIONS_REQUIRED;
                   const pending = !failed && !done;

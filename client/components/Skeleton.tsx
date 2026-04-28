@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import SkeletonCard from "./SkeletonCard";
 
 export function SkeletonLine({ className = "" }: { className?: string }) {
   return (
@@ -23,10 +24,12 @@ export default function PageSkeleton() {
       </div>
       <SkeletonLine className="h-36 w-full rounded-3xl" />
       <div className="grid grid-cols-2 gap-3">
-        <SkeletonLine className="h-24 rounded-2xl" />
-        <SkeletonLine className="h-24 rounded-2xl" />
-        <SkeletonLine className="h-24 rounded-2xl" />
-        <SkeletonLine className="h-24 rounded-2xl" />
+        <SkeletonCard />
+        <SkeletonCard />
+      </div>
+      <div className="space-y-2">
+        <SkeletonCard className="h-14" />
+        <SkeletonCard className="h-14" />
       </div>
       <SkeletonLine className="h-48 w-full rounded-3xl" />
     </div>

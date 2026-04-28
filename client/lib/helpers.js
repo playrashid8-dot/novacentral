@@ -1,3 +1,5 @@
+import { STATUS } from "./constants";
+
 // 💰 FORMAT USD
 export const formatUSD = (num) => {
   const n = Number(num || 0);
@@ -123,10 +125,10 @@ export const getStatusColor = (status) => {
     case "approved":
       return "text-green-400";
 
-    case "pending":
+    case STATUS.PENDING:
       return "text-yellow-400";
 
-    case "failed":
+    case STATUS.FAILED:
     case "rejected":
       return "text-red-400";
 
@@ -139,15 +141,15 @@ export const getStatusColor = (status) => {
 export const withdrawalStatusClass = (status) => {
   const s = String(status || "").toLowerCase();
   switch (s) {
-    case "pending":
+    case STATUS.PENDING:
     case "claimable":
       return "text-yellow-300";
     case "approved":
     case "paid":
     case "claimed":
-    case "confirmed":
+    case STATUS.CONFIRMED:
       return "text-emerald-300";
-    case "failed":
+    case STATUS.FAILED:
     case "rejected":
       return "text-red-400";
     default:
@@ -158,9 +160,9 @@ export const withdrawalStatusClass = (status) => {
 /** Deposit chain + credit status → Tailwind classes */
 export const depositRowStatusClass = (deposit) => {
   const chain = String(deposit?.confirmationStatus || "").toLowerCase();
-  if (chain === "confirmed") return "text-emerald-300";
+  if (chain === STATUS.CONFIRMED) return "text-emerald-300";
   if (chain === "confirming") return "text-yellow-300";
   const st = String(deposit?.status || "").toLowerCase();
-  if (st === "failed") return "text-red-400";
+  if (st === STATUS.FAILED) return "text-red-400";
   return "text-gray-400";
 };

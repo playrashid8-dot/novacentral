@@ -10,8 +10,7 @@ import { fetchCurrentUser } from "../../lib/session";
 import { fetchHybridSummary } from "../../lib/hybrid";
 import GlassCard from "../../components/GlassCard";
 import StatCard from "../../components/StatCard";
-import Loader from "../../components/Loader";
-import EmptyState from "../../components/EmptyState";
+import PageWrapper from "../../components/PageWrapper";
 import { maskAddress } from "../../lib/helpers";
 
 export default function Profile() {
@@ -29,30 +28,17 @@ export default function Profile() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) {
-    return (
-      <ProtectedRoute>
-        <Loader />
-      </ProtectedRoute>
-    );
-  }
+  const walletDisplayRaw =
+    hybrid?.walletAddress || user?.walletAddress || "";
 
-  if (!user?._id) {
-    return (
-      <ProtectedRoute>
-        <div className="min-h-screen max-w-[420px] mx-auto px-4 py-10 flex flex-col items-center justify-center bg-[#040406]">
-          <EmptyState text="No data available" />
-        </div>
-      </ProtectedRoute>
-    );
-  }
-
-  const walletDisplayRaw = hybrid?.walletAddress || user?.walletAddress || "";
-  const walletMasked = walletDisplayRaw ? maskAddress(walletDisplayRaw) : "Generating wallet";
+  const walletMasked = walletDisplayRaw
+    ? maskAddress(walletDisplayRaw)
+    : "Generating wallet";
 
   return (
     <ProtectedRoute>
-    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 pb-28 text-white relative bg-[#040406] overflow-x-hidden">
+    <PageWrapper loading={loading} data={user?._id}>
+    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 pb-28 text-white relative bg-[#040406] overflow-x-hidden w-full">
 
       {/* 🌌 BACKGROUND */}
       <div className="absolute w-[500px] h-[500px] bg-purple-600 opacity-20 blur-[150px] top-[-150px] left-[-150px]" />
@@ -68,8 +54,9 @@ export default function Profile() {
         </div>
 
         <button
+          type="button"
           onClick={() => router.push("/dashboard")}
-          className="text-sm text-purple-400"
+          className="w-full max-w-[100px] shrink-0 rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2.5 text-sm text-purple-300 shadow-md transition hover:bg-purple-500/15 hover:shadow-lg sm:w-auto sm:max-w-none"
         >
           Back
         </button>
@@ -152,22 +139,25 @@ export default function Profile() {
       <div className="mt-5 space-y-3">
 
         <button
+          type="button"
           onClick={() => router.push("/deposit")}
-          className="w-full rounded-xl bg-white/5 p-3 border border-white/10 text-sm hover:bg-purple-500/20 transition"
+          className="w-full rounded-xl bg-white/5 p-3 border border-white/10 text-sm hover:bg-purple-500/20 transition shadow-md hover:shadow-lg"
         >
           Deposit
         </button>
 
         <button
+          type="button"
           onClick={() => router.push("/withdrawal")}
-          className="w-full bg-white/5 p-3 rounded-xl border border-white/10 text-sm hover:bg-purple-500/20"
+          className="w-full rounded-xl bg-white/5 p-3 border border-white/10 text-sm hover:bg-purple-500/20 transition shadow-md hover:shadow-lg"
         >
           Withdraw
         </button>
 
         <button
+          type="button"
           onClick={() => router.push("/referral")}
-          className="w-full bg-white/5 p-3 rounded-xl border border-white/10 text-sm hover:bg-purple-500/20"
+          className="w-full rounded-xl bg-white/5 p-3 border border-white/10 text-sm hover:bg-purple-500/20 transition shadow-md hover:shadow-lg"
         >
           Referral Team
         </button>
@@ -176,13 +166,15 @@ export default function Profile() {
 
       {/* LOGOUT */}
       <button
+        type="button"
         onClick={logout}
-        className="mt-6 w-full bg-red-500/20 text-red-400 p-3 rounded-xl font-semibold hover:bg-red-500/30 transition"
+        className="mt-6 w-full rounded-xl bg-red-500/20 text-red-400 p-3 font-semibold hover:bg-red-500/30 transition shadow-md hover:shadow-lg"
       >
         Logout
       </button>
 
     </div>
+    </PageWrapper>
     </ProtectedRoute>
   );
 }

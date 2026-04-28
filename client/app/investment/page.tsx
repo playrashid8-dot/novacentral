@@ -5,11 +5,13 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import AppToast from "../../components/AppToast";
+import PrimaryButton from "../../components/PrimaryButton";
 import GradientButton from "../../components/GradientButton";
 import GlassCard from "../../components/GlassCard";
 import ProgressBar from "../../components/ProgressBar";
 import CountdownTimer from "../../components/CountdownTimer";
 import { claimHybridStake, createHybridStake, fetchHybridSummary, fetchHybridStakes } from "../../lib/hybrid";
+import { getApiErrorMessage } from "../../lib/api";
 import Loader from "../../components/Loader";
 
 export default function Investment() {
@@ -70,7 +72,11 @@ export default function Investment() {
     try {
       setLoadingPlan(selectedPlan.key);
       const result = await createHybridStake({ amount: amt, planDays: selectedPlan.days });
-      showToast("Stake created successfully");
+      const stakeMsg =
+        typeof (result as { msg?: string })?.msg === "string" && (result as { msg?: string }).msg?.trim()
+          ? String((result as { msg?: string }).msg).trim()
+          : "";
+      showToast(stakeMsg || "Stake created successfully");
 
       setSelectedPlan(null);
       setAmount("");
@@ -81,8 +87,8 @@ export default function Investment() {
       if (hybridData) setHybrid(hybridData);
       setStakes(stakeData || []);
 
-    } catch (err: any) {
-      showToast(err?.response?.data?.msg || "Something went wrong");
+    } catch (err: unknown) {
+      showToast(getApiErrorMessage(err, "Something went wrong"));
     } finally {
       setLoadingPlan(null);
     }
@@ -93,15 +99,22 @@ export default function Investment() {
     try {
       setClaimingStake(stakeId);
       const result = await claimHybridStake(stakeId);
-      showToast(`Stake claimed: $${Number(result?.payout || 0).toFixed(2)}`);
+      const claimMsg =
+        typeof (result as { msg?: string })?.msg === "string" &&
+        (result as { msg?: string }).msg?.trim()
+          ? String((result as { msg?: string }).msg).trim()
+          : "";
+      showToast(
+        claimMsg || `Stake claimed: $${Number((result as { payout?: number })?.payout || 0).toFixed(2)}`,
+      );
       const [hybridData, stakeData] = await Promise.all([
         fetchHybridSummary().catch(() => null),
         fetchHybridStakes().catch(() => []),
       ]);
       if (hybridData) setHybrid(hybridData);
       setStakes(stakeData || []);
-    } catch (err: any) {
-      showToast(err?.response?.data?.msg || "Stake is not ready to claim");
+    } catch (err: unknown) {
+      showToast(getApiErrorMessage(err, "Stake is not ready to claim"));
     } finally {
       setClaimingStake(null);
     }
@@ -134,7 +147,7 @@ export default function Investment() {
 
   return (
     <ProtectedRoute>
-    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 pb-8 text-white relative bg-[#040406] overflow-x-hidden">
+    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 pb-8 text-white relative bg-[#040406] overflow-x-hidden w-full">
       <AppToast message={toast} />
 
       {/* 🌌 BACKGROUND */}
@@ -148,8 +161,9 @@ export default function Investment() {
         </h1>
 
         <button
+          type="button"
           onClick={() => router.push("/dashboard")}
-          className="text-sm text-purple-400"
+          className="shrink-0 rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-purple-400 shadow-md transition hover:shadow-lg hover:bg-white/10 max-w-full"
         >
           Back
         </button>
@@ -243,13 +257,13 @@ export default function Investment() {
                   </span>
                 </div>
                 <ProgressBar value={progress} max={total} className="mt-3" />
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <CountdownTimer targetTime={stake.endAt} label="Matures In" completeText="Ready" className="p-3" />
+                <div className="mt-3 grid grid-cols-2 gap-2 min-h-0">
+                  <CountdownTimer targetTime={stake.endAt} label="Matures In" completeText="Ready" className="p-3 min-w-0" />
                   <GradientButton
                     onClick={() => claimStake(stake._id)}
                     disabled={!ready || claimingStake === stake._id}
                     loading={claimingStake === stake._id}
-                    className="h-full py-3 text-xs"
+                    className="h-full min-h-[48px] rounded-xl py-3 text-xs shadow-lg hover:shadow-xl transition-shadow"
                   >
                     Claim
                   </GradientButton>
@@ -308,14 +322,14 @@ export default function Investment() {
                   Cancel
                 </button>
 
-                <GradientButton
-                  onClick={confirmInvest}
+                <PrimaryButton
+                  onClick={() => confirmInvest()}
                   disabled={loadingPlan === selectedPlan.key}
                   loading={loadingPlan === selectedPlan.key}
-                  className="w-full p-2 text-sm"
+                  className="flex-1 p-3 text-sm"
                 >
                   Confirm
-                </GradientButton>
+                </PrimaryButton>
               </div>
 
             </div>

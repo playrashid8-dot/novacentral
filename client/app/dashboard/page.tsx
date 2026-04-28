@@ -13,7 +13,7 @@ import ProtectedRoute from "../../components/ProtectedRoute";
 import GradientButton from "../../components/GradientButton";
 import StatCard from "../../components/StatCard";
 import ProgressBar from "../../components/ProgressBar";
-import PageSkeleton from "../../components/Skeleton";
+import PageWrapper from "../../components/PageWrapper";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -134,7 +134,13 @@ export default function Dashboard() {
     try {
       setRoiLoading(true);
       const result = await claimHybridRoi();
-      showToast(`ROI claimed: $${Number(result?.amount || 0).toFixed(2)}`);
+      const roiMsg =
+        typeof (result as { msg?: string })?.msg === "string" && (result as { msg?: string }).msg?.trim()
+          ? String((result as { msg?: string }).msg).trim()
+          : "";
+      showToast(
+        roiMsg || `ROI claimed: $${Number((result as { amount?: number })?.amount || 0).toFixed(2)}`,
+      );
       await loadUser(true);
     } catch (err: any) {
       showToast(getApiErrorMessage(err, "Failed to claim ROI ❌"));
@@ -149,7 +155,16 @@ export default function Dashboard() {
     try {
       setSalaryLoading(true);
       const result = await claimHybridSalary();
-      showToast(`Salary claimed: $${Number(result?.amount || salaryReward || 0).toFixed(2)}`);
+      const salMsg =
+        typeof (result as { msg?: string })?.msg === "string" && (result as { msg?: string }).msg?.trim()
+          ? String((result as { msg?: string }).msg).trim()
+          : "";
+      showToast(
+        salMsg ||
+          `Salary claimed: $${Number(
+            (result as { amount?: number })?.amount || salaryReward || 0,
+          ).toFixed(2)}`,
+      );
       await loadUser(true);
     } catch (err: any) {
       showToast(getApiErrorMessage(err, "Failed to claim salary ❌"));
@@ -158,29 +173,14 @@ export default function Dashboard() {
     }
   };
 
-  /* ⏳ LOADER */
-  if (loading) {
-    return (
-      <ProtectedRoute>
-        <div className="min-h-[70vh] w-full py-6">
-          <PageSkeleton />
-        </div>
-      </ProtectedRoute>
-    );
-  }
-
-  if (!user || !user?._id) {
-    return (
-      <ProtectedRoute>
-        <div className="flex min-h-[50vh] flex-col items-center justify-center px-4 py-16 text-center text-gray-400">
-          <p className="text-sm">No data available</p>
-        </div>
-      </ProtectedRoute>
-    );
-  }
-
   return (
     <ProtectedRoute>
+    <PageWrapper
+      loading={loading}
+      data={user?._id}
+      useSkeletonLoading
+      emptyText="No data available"
+    >
     <div className="relative w-full max-w-full overflow-x-hidden pb-4 text-white">
       <AppToast message={toast} />
 
@@ -412,6 +412,7 @@ export default function Dashboard() {
       </div>
 
     </div>
+    </PageWrapper>
     </ProtectedRoute>
   );
 }
