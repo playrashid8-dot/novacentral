@@ -12,7 +12,7 @@ const MIN_DEPOSIT_AMOUNT = MIN_HYBRID_DEPOSIT;
 /** Initial lookback capped to reduce pruned-RPC / oversized range failures */
 const SAFE_LOOKBACK_BLOCKS = 3000;
 /** BSC RPCs often reject eth_getLogs over large spans — keep chunks bounded */
-const CHUNK_SIZE = 2000;
+const CHUNK_SIZE = 500;
 /** Reorg / fake-log safety: always ≥ 2 (see business rules) */
 const CONFIRMATIONS = 3;
 
@@ -131,6 +131,10 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
       return { skipped: false, processed: 0 };
     }
 
+    if (latestBlock - fromBlock > 5000) {
+      console.log("⚠️ Large block range, splitting...");
+    }
+
     let processed = 0;
 
     for (; fromBlock <= latestBlock; ) {
@@ -157,6 +161,7 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
       }
 
       console.log("📊 Logs count:", logs.length);
+      await new Promise((r) => setTimeout(r, 200));
       if (logs.length === 0) {
         console.log("Deposit listener: no Transfer logs in this chunk (may still advance checkpoint)");
       }

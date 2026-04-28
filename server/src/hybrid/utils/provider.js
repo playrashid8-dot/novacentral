@@ -17,8 +17,8 @@ const uniqueRpcs = [...new Set(RPC_URLS)];
 
 let currentIndex = 0;
 
-/** Switch to next RPC after this many consecutive failures on the current endpoint */
-const SWITCH_AFTER_CONSECUTIVE_FAILURES = 1;
+/** Switch only after several failures — avoids rotating RPC on every chunk/transient -32005 */
+const SWITCH_AFTER_CONSECUTIVE_FAILURES = 3;
 
 let consecutiveRpcFailures = 0;
 

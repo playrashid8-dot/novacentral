@@ -14,22 +14,8 @@ function normalizeApiBase(envUrl) {
   return `${noSlash}/api`;
 }
 
-// 🔗 BASE URL (always includes `/api`)
 const BASE_URL = normalizeApiBase(process.env.NEXT_PUBLIC_API_URL);
 
-const CSRF_RELATIVE_PATH = "/csrf-token";
-
-/** @returns {string|null} */
-function readXsrfCookie() {
-  if (typeof document === "undefined") return null;
-  const row = document.cookie
-    .split("; ")
-    .find((r) => r.startsWith("XSRF-TOKEN="));
-  if (!row) return null;
-  return decodeURIComponent(row.split("=").slice(1).join("="));
-}
-
-// 🚀 INSTANCE — must send cookies for CSRF + httpOnly auth
 const API = axios.create({
   baseURL: BASE_URL,
   timeout: 30000,
@@ -39,10 +25,22 @@ const API = axios.create({
   },
 });
 
-let csrfFetched = false;
-let csrfTokenCache = null;
+let csrfToken = null;
 
-// 🚫 prevent multiple redirects
+async function getCSRF(force = false) {
+  if (force) csrfToken = null;
+  if (csrfToken) return csrfToken;
+
+  const res = await API.get("/csrf-token");
+  csrfToken = res.data?.data?.csrfToken ?? res.data?.csrfToken ?? null;
+
+  if (csrfToken) {
+    console.log("🔐 CSRF Token:", csrfToken);
+  }
+
+  return csrfToken;
+}
+
 let isRedirecting = false;
 
 export const resetRedirectState = () => {
@@ -63,33 +61,34 @@ export const normalize = (res) => {
 };
 
 /**
- * Prime csurf secret cookie + mirrored XSRF-TOKEN before unsafe requests.
- * @param {boolean} [force=false] Fetch again (e.g. after 403 / rotation)
+ * Prime CSRF before unsafe requests (login/signup call this explicitly).
+ * @param {boolean} [force=false]
  */
-export const initCSRF = async (force = false) => {
-  if (!force && csrfFetched) return csrfTokenCache;
+export const initCSRF = async (force = false) => getCSRF(force);
 
-  const url = `${BASE_URL.replace(/\/$/, "")}${CSRF_RELATIVE_PATH}`;
-  const { data } = await axios.get(url, {
-    withCredentials: true,
-    timeout: 30000,
-  });
-  csrfFetched = true;
-  csrfTokenCache = readXsrfCookie() || data?.data?.csrfToken || null;
-  return csrfTokenCache;
-};
-
-function attachCsrfHeaders(config, token) {
-  if (!token) return;
-  config.headers = config.headers || {};
-  config.headers["X-CSRF-Token"] = token;
-  config.headers["csrf-token"] = token;
-  config.headers["CSRF-Token"] = token;
+function isPlainObjectData(data) {
+  return (
+    data != null &&
+    typeof data === "object" &&
+    !Array.isArray(data) &&
+    !(typeof FormData !== "undefined" && data instanceof FormData)
+  );
 }
 
-/* ==============================
-   🔐 REQUEST INTERCEPTOR
-============================== */
+function attachCsrfToConfig(config, token) {
+  if (!token) return;
+  if (isPlainObjectData(config.data)) {
+    config.data = { ...config.data, _csrf: token };
+  } else if (config.data == null || config.data === "") {
+    config.data = { _csrf: token };
+  } else {
+    config.headers = config.headers || {};
+    config.headers["X-CSRF-Token"] = token;
+    config.headers["csrf-token"] = token;
+    config.headers["CSRF-Token"] = token;
+  }
+}
+
 API.interceptors.request.use(async (config) => {
   config.withCredentials = true;
 
@@ -107,30 +106,13 @@ API.interceptors.request.use(async (config) => {
   const skipCsrf = url.includes("csrf-token");
 
   if (isUnsafe && !skipCsrf) {
-    let token = readXsrfCookie()?.trim() || csrfTokenCache;
-
-    if (!token) {
-      try {
-        await initCSRF(false);
-        token = readXsrfCookie() || csrfTokenCache;
-      } catch {
-        /* CSRF will fail later with a clear response */
-      }
-    }
-
-    if (!token) {
-      token = readXsrfCookie();
-    }
-
-    attachCsrfHeaders(config, token);
+    const token = await getCSRF();
+    attachCsrfToConfig(config, token);
   }
 
   return config;
 });
 
-/* ==============================
-   🚨 RESPONSE INTERCEPTOR (global toast + CSRF retry, no dupes with ./toast dedupe)
-============================== */
 API.interceptors.response.use(
   (res) => res,
 
@@ -149,34 +131,35 @@ API.interceptors.response.use(
 
     const { status, data } = error.response;
     const cfg = error.config || {};
+    const method = String(cfg.method || "").toLowerCase();
     const msgLc = String(data?.msg || "").toLowerCase();
 
-    /** CSRF — retry unsafe request once; no toast until final failure below */
     if (
       status === 403 &&
       msgLc.includes("csrf") &&
       !cfg._csrfRetry &&
-      ["post", "put", "patch", "delete"].includes(String(cfg.method || "").toLowerCase())
+      ["post", "put", "patch", "delete"].includes(method)
     ) {
-      csrfTokenCache = null;
-      csrfFetched = false;
-      try {
-        await initCSRF(true);
-        const token = readXsrfCookie() || csrfTokenCache;
-        cfg._csrfRetry = true;
-        attachCsrfHeaders(cfg, token);
-        return API(cfg);
-      } catch {
-        /* fall through — show toast via unified handler */
+      console.log("🔄 CSRF retry...");
+      csrfToken = null;
+      cfg._csrfRetry = true;
+      const token = await getCSRF(true);
+      if (isPlainObjectData(cfg.data)) {
+        cfg.data = { ...cfg.data, _csrf: token };
+      } else if (cfg.data == null || cfg.data === "") {
+        cfg.data = { _csrf: token };
+      } else if (cfg.data && typeof cfg.data === "object") {
+        cfg.data._csrf = token;
+      } else {
+        attachCsrfToConfig(cfg, token);
       }
+      return API.request(cfg);
     }
 
-    if (status === 403 && data?.msg?.toLowerCase?.().includes?.("csrf")) {
-      csrfTokenCache = null;
-      csrfFetched = false;
+    if (status === 403 && msgLc.includes("csrf")) {
+      csrfToken = null;
     }
 
-    /** UNAUTHORIZED — redirect; logout toast from auth, not here */
     if (status === 401) {
       if (typeof window !== "undefined" && !isRedirecting) {
         isRedirecting = true;
@@ -227,11 +210,6 @@ export const getApiErrorMessage = (error, fallback = "Something went wrong ❌")
   );
 };
 
-/**
- * Axios API interceptor already showed a toast for this error.
- * Skip page-level duplicate toast except: CSRF bootstrap (standalone axios), 401 (handled by logout).
- * @param {import("axios").AxiosError} error
- */
 export function suppressDuplicateCatchToast(error) {
   if (!error?.config) return false;
   const url = String(error.config.url || "");
