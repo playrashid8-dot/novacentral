@@ -9,7 +9,7 @@ import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 
 // 🔥 DB
 import connectDB from "./config/db.js";
-import { isMailConfigured } from "./utils/mailService.js";
+import { isMailConfigured, verifyMailConnection } from "./utils/mailService.js";
 
 // 🔥 ROUTES
 import authRoutes from "./routes/authRoutes.js";
@@ -256,6 +256,9 @@ app.listen(PORT, () => {
   console.log(`🔥 Server running on port ${PORT}`);
   if (isMailConfigured()) {
     console.log("Email service configured ✅");
+    verifyMailConnection().catch((e) => {
+      console.error("❌ EMAIL ERROR:", e.message);
+    });
   } else {
     console.warn("Email service not configured ❌");
   }

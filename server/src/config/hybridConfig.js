@@ -32,10 +32,10 @@ const optionalFields = {
   HYBRID_GAS_FUNDER_PRIVATE_KEY: readEnv("HYBRID_GAS_FUNDER_PRIVATE_KEY"),
   HYBRID_BSC_RPC_URL: readEnv("HYBRID_BSC_RPC_URL"),
   HYBRID_USDT_CONTRACT: readEnv("HYBRID_USDT_CONTRACT"),
-  EMAIL_HOST: readEnv("EMAIL_HOST"),
-  EMAIL_PORT: readEnv("EMAIL_PORT"),
-  EMAIL_USER: readEnv("EMAIL_USER"),
-  EMAIL_PASS: readEnv("EMAIL_PASS"),
+  EMAIL_HOST: readEnv("SMTP_HOST") || readEnv("EMAIL_HOST"),
+  EMAIL_PORT: readEnv("SMTP_PORT") || readEnv("EMAIL_PORT"),
+  EMAIL_USER: readEnv("SMTP_USER") || readEnv("EMAIL_USER"),
+  EMAIL_PASS: readEnv("SMTP_PASS") || readEnv("EMAIL_PASS"),
 };
 
 const missingCritical = Object.entries(criticalFields)
@@ -75,6 +75,12 @@ export const hybridConfig = {
     user: optionalFields.EMAIL_USER,
     pass: optionalFields.EMAIL_PASS,
     secure: emailPort === 465,
+    from:
+      readEnv("SMTP_FROM") ||
+      readEnv("EMAIL_FROM") ||
+      optionalFields.EMAIL_USER,
+    tlsRejectUnauthorized:
+      readEnv("SMTP_TLS_REJECT_UNAUTHORIZED", "true").toLowerCase() !== "false",
   },
 };
 

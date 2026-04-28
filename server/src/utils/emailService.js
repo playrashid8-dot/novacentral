@@ -2,9 +2,9 @@ import nodemailer from "nodemailer";
 import hybridConfig from "../config/hybridConfig.js";
 
 const assertEmailConfig = () => {
-  const { host, port, user, pass } = hybridConfig.emailConfig;
+  const { user, pass } = hybridConfig.emailConfig;
 
-  if (!host || !port || !user || !pass) {
+  if (!user || !pass) {
     throw new Error("SMTP email configuration is incomplete");
   }
 };
@@ -20,17 +20,30 @@ const escapeHtml = (value = "") =>
 const createTransporter = () => {
   assertEmailConfig();
 
-  const { host, port, user, pass, secure } = hybridConfig.emailConfig;
+  const { host, port, user, pass, tlsRejectUnauthorized } =
+    hybridConfig.emailConfig;
 
-  return nodemailer.createTransport({
-    host,
-    port,
+  const finalHost = host || "smtp.gmail.com";
+  const finalPort = port && port > 0 ? port : 587;
+  const secure = finalPort === 465;
+
+  const transportOptions = {
+    host: finalHost,
+    port: finalPort,
     secure,
     auth: {
       user,
       pass,
     },
-  });
+  };
+
+  if (!tlsRejectUnauthorized) {
+    transportOptions.tls = {
+      rejectUnauthorized: false,
+    };
+  }
+
+  return nodemailer.createTransport(transportOptions);
 };
 
 export const sendOTP = async (email, otp) => {
@@ -42,8 +55,11 @@ export const sendOTP = async (email, otp) => {
     const transporter = createTransporter();
     const safeOtp = escapeHtml(otp);
 
+    const displayFrom =
+      hybridConfig.emailConfig.from || hybridConfig.emailConfig.user;
+
     await transporter.sendMail({
-      from: `"HybridEarn" <${hybridConfig.emailConfig.user}>`,
+      from: `"HybridEarn" <${displayFrom}>`,
       to: email,
       subject: "Your HybridEarn OTP",
       html: `<p>Your HybridEarn OTP is: <strong>${safeOtp}</strong></p>`,
@@ -51,6 +67,7 @@ export const sendOTP = async (email, otp) => {
 
     return { success: true };
   } catch (error) {
+    console.error("❌ EMAIL ERROR:", error.message);
     throw new Error(`Failed to send OTP email: ${error.message}`);
   }
 };
