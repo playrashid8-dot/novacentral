@@ -110,8 +110,8 @@ export default function Referral() {
         fetchHybridSummary().catch(() => null),
         fetchSalaryProgress().catch(() => null),
       ]);
-      setHybrid(hybridData);
-      setSalaryProgress(salaryData);
+      if (hybridData) setHybrid(hybridData);
+      if (salaryData) setSalaryProgress(salaryData);
     } catch (err: any) {
       showToast(getApiErrorMessage(err, "Failed to claim salary reward"));
     } finally {

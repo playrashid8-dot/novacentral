@@ -120,7 +120,9 @@ async function dispatchRealtimeDeposit(log, provider) {
   const to = `0x${String(log.topics[2]).slice(26).toLowerCase()}`;
   const user = userMap.get(to);
   if (!user) {
-    console.log("❌ No user found for wallet:", to);
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("No user found:", to);
+    }
     processedTx.delete(log.transactionHash);
     return;
   }

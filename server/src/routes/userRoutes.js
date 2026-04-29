@@ -2,6 +2,7 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 import auth from "../middleware/auth.js";
+import { redis } from "../config/redis.js";
 import User from "../models/User.js";
 import HybridWithdrawal from "../hybrid/models/HybridWithdrawal.js";
 import { getCurrentRoiRate } from "../hybrid/services/roiService.js";
@@ -375,12 +376,27 @@ router.get("/referral-stats", auth, async (req, res) => {
 
 router.get("/dashboard-summary", auth, async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = String(req.user._id);
+    const cacheKey = `dashboard:${userId}`;
+
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        const data = JSON.parse(cached);
+        return res.json({
+          success: true,
+          msg: "Dashboard summary loaded",
+          data,
+        });
+      }
+    } catch (e) {
+      console.warn("Redis fail");
+    }
 
     const [referralStats, teamPayload, salPayload] = await Promise.all([
-      loadReferralStatsPayload(userId),
-      loadTeamMembersPayload(userId, 1, 50),
-      buildSalaryProgressPayload(userId),
+      loadReferralStatsPayload(req.user._id),
+      loadTeamMembersPayload(req.user._id, 1, 50),
+      buildSalaryProgressPayload(req.user._id),
     ]);
 
     if (!referralStats) {
@@ -410,14 +426,22 @@ router.get("/dashboard-summary", auth, async (req, res) => {
 
     const salaryProgress = mapSalaryProgressForClient(salPayload);
 
+    const data = {
+      referralStats,
+      teamMembers: teamMembersData,
+      salaryProgress,
+    };
+
+    try {
+      await redis.set(cacheKey, JSON.stringify(data), "EX", 15);
+    } catch (e) {
+      console.warn("Redis fail");
+    }
+
     return res.json({
       success: true,
       msg: "Dashboard summary loaded",
-      data: {
-        referralStats,
-        teamMembers: teamMembersData,
-        salaryProgress,
-      },
+      data,
     });
   } catch (err) {
     console.error("GET /dashboard-summary ERROR:", err.message);

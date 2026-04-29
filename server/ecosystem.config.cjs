@@ -1,6 +1,6 @@
 /**
  * PM2: API cluster (single PORT), dedicated hybrid (WS + engine), BullMQ workers.
- * From repo (bash): cd server && pm2 start ecosystem.config.cjs
+ * From repo: cd server; pm2 start ecosystem.config.cjs (PowerShell/bash: use `;` not `&&`)
  * PowerShell: cd server; pm2 start ecosystem.config.cjs
  *
  * API uses cluster mode (3 workers, one listen port). Nginx upstream targets :5000.

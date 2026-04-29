@@ -395,7 +395,7 @@ export default function AdminWithdrawalsPage() {
                     >
                       {riskTier.label}
                     </span>
-                    {withdrawal.priority === "high" ? (
+                    {(withdrawal.priority ?? "normal") === "high" ? (
                       <span className="text-[10px] font-medium text-fuchsia-200/95">Priority: high</span>
                     ) : null}
                     <span className="tabular-nums text-[10px] text-gray-500">

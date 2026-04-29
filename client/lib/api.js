@@ -122,13 +122,13 @@ API.interceptors.response.use(
     const skipWithdrawUiToast = reqUrlEarly.includes("/user/withdraw");
 
     if (!error.response) {
-      console.error("❌ Network Error:", error.message);
       if (typeof window !== "undefined" && !skipWithdrawUiToast) {
-        const networkMsg =
-          error.code === "ECONNABORTED"
-            ? "Request timed out — try again"
-            : error.message || "Network error";
-        showSafeToast(networkMsg, { fallback: "Network error" });
+        const isTimeout =
+          error.code === "ECONNABORTED" || error.code === "TIMEOUT";
+        const networkMsg = isTimeout
+          ? "Updating data…"
+          : error.message || "Network error, try again";
+        showSafeToast(networkMsg, { fallback: "Network error, try again" });
       }
       return Promise.reject(error);
     }
@@ -197,23 +197,21 @@ API.interceptors.response.use(
   },
 );
 
-export const getApiErrorMessage = (error, fallback = "Something went wrong ❌") => {
-  if (!error) return fallback;
-
-  if (!error.response) {
-    if (error.code === "ECONNABORTED") {
-      return "Request timed out — try again";
+export function getApiErrorMessage(error, fallback = "Something went wrong") {
+  if (error == null) return fallback;
+  if (!error?.response) {
+    if (error?.code === "ECONNABORTED" || error?.code === "TIMEOUT") {
+      return "Updating data…";
     }
-    return "Network error";
+    return "Network error, try again";
   }
 
   return (
-    error.response?.data?.message ||
     error.response?.data?.msg ||
-    error.message ||
+    error.response?.data?.message ||
     fallback
   );
-};
+}
 
 export function suppressDuplicateCatchToast(error) {
   if (!error?.config) return false;

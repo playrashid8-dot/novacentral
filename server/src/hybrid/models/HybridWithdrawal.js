@@ -130,6 +130,7 @@ const hybridWithdrawalSchema = new mongoose.Schema(
 
 hybridWithdrawalSchema.index({ userId: 1, createdAt: -1 });
 hybridWithdrawalSchema.index({ status: 1, createdAt: -1 });
+/** Admin queues: priority asc so "high" before "normal", then highest risk & newest first. */
 hybridWithdrawalSchema.index({ priority: 1, riskScore: -1, createdAt: -1 });
 hybridWithdrawalSchema.index(
   { userId: 1, idempotencyKey: 1 },

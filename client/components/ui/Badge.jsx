@@ -1,5 +1,5 @@
 const styles = {
-  pending: "border-amber-500/35 bg-amber-500/12 text-amber-100",
+  pending: "border-yellow-500/40 bg-yellow-500/15 text-yellow-100",
   approved: "border-blue-500/35 bg-blue-500/12 text-blue-100",
   rejected: "border-red-500/35 bg-red-500/12 text-red-100",
   completed: "border-emerald-500/35 bg-emerald-500/12 text-emerald-100",

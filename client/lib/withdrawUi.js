@@ -13,6 +13,5 @@ export function getWithdrawalStatusLabel(status) {
   if (s === "paid" || s === "claimed") return "Completed";
   if (s === "rejected") return "Rejected";
   if (s === "approved") return "Approved";
-  if (s === "claimable") return "Awaiting unlock";
   return "Pending";
 }

@@ -5,13 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { motion } from "framer-motion";
 import API, { normalize } from "../../lib/api";
-import {
-  DASHBOARD_SUMMARY_SWR_KEY,
-  USER_ME_SWR_KEY,
-  fetchDashboardSummarySWR,
-  fetchUserMeSWR,
-  hybridDashboardSWRConfig,
-} from "../../lib/swr-fetch";
+import { fetchTeamPageBundleSWR, TEAM_PAGE_BUNDLE_KEY, hybridDashboardSWRConfig } from "../../lib/swr-fetch";
 import AppToast from "../../components/AppToast";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import PageWrapper from "../../components/PageWrapper";
@@ -83,20 +77,22 @@ export default function TeamPage() {
     setTimeout(() => setToast(""), 2500);
   };
 
-  const { data: user, isLoading: loadingPage } = useSWR(USER_ME_SWR_KEY, fetchUserMeSWR, hybridDashboardSWRConfig);
+  const {
+    data: teamBundle,
+    isLoading: loadingTeamBundle,
+    isValidating: summaryValidating,
+  } = useSWR(TEAM_PAGE_BUNDLE_KEY, fetchTeamPageBundleSWR, hybridDashboardSWRConfig);
 
-  const { data: summary, isLoading: loadingSummaryBulk, isValidating: summaryValidating } = useSWR(
-    DASHBOARD_SUMMARY_SWR_KEY,
-    fetchDashboardSummarySWR,
-    hybridDashboardSWRConfig,
-  );
+  const user = teamBundle?.user;
+  const summary = teamBundle?.summary;
 
-  const loadingStats = loadingSummaryBulk && !summary;
-  const loadingMembers = loadingSummaryBulk && !summary;
+  const loadingPage = loadingTeamBundle && !user;
+  const loadingStats = loadingTeamBundle && !teamBundle;
+  const loadingMembers = loadingTeamBundle && !teamBundle;
 
   const stats = summary?.referralStats ?? null;
-  const referralStatsReady = !loadingSummaryBulk;
-  const membersReady = !loadingSummaryBulk;
+  const referralStatsReady = Boolean(teamBundle);
+  const membersReady = Boolean(teamBundle);
 
   useEffect(() => {
     if (!summary?.teamMembers) return;
@@ -142,7 +138,7 @@ export default function TeamPage() {
 
   return (
     <ProtectedRoute>
-      <PageWrapper loading={loadingPage && !user} data={user?._id} useSkeletonLoading={false} emptyText="No data available">
+      <PageWrapper loading={loadingPage && !user} data={user?._id} useSkeletonLoading emptyText="No data available">
         <TeamContent
           loadingPage={loadingPage}
           loadingStats={loadingStats}

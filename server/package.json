@@ -14,7 +14,8 @@
     "test:load-health": "node scripts/loadTestHealth.mjs",
     "pm2:prod": "pm2 start ecosystem.config.cjs",
     "verify:redis": "node scripts/verifyRedis.mjs",
-    "wallet:normalize": "node scripts/walletNormalizationFix.mjs"
+    "wallet:normalize": "node scripts/walletNormalizationFix.mjs",
+    "withdraw:backfill-risk": "node scripts/backfillWithdrawRisk.js"
   },
   "keywords": [
     "nova",

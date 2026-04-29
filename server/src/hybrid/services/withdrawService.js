@@ -147,6 +147,7 @@ export const requestHybridWithdrawal = async (
         console.warn("🚨 HIGH RISK WITHDRAW", {
           userId: String(userId),
           amount: numericAmount,
+          riskScore,
         });
       }
 
@@ -172,6 +173,22 @@ export const requestHybridWithdrawal = async (
         ],
         { session }
       );
+
+      if (riskScore >= 4) {
+        await User.updateOne(
+          {
+            _id: userId,
+            adminFraudFlag: { $ne: true },
+          },
+          {
+            $set: {
+              adminFraudFlag: true,
+              adminFraudReason: "Auto high-risk withdraw",
+            },
+          },
+          { session }
+        );
+      }
 
       const updatedUser = await User.findOneAndUpdate(
         {

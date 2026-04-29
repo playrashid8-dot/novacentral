@@ -113,7 +113,9 @@ export async function processDepositLog(log, iface, usersByWallet) {
   const matchedUser = usersByWallet.get(toAddress);
 
   if (!matchedUser) {
-    devLog("❌ No user found for wallet:", to);
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("No user found:", to);
+    }
     return { creditFailure: false, processedDelta: 0 };
   }
 
@@ -327,6 +329,11 @@ async function executeDepositScan(
       }
     }
 
+    const DEPOSIT_SCAN_MAX_LOGS = 50;
+    if (logs.length > DEPOSIT_SCAN_MAX_LOGS) {
+      logs = logs.slice(0, DEPOSIT_SCAN_MAX_LOGS);
+    }
+
     if (!quiet) {
       devLog("📊 Logs count:", logs.length);
     }
@@ -346,16 +353,7 @@ async function executeDepositScan(
 
     if (toAddresses.length > 0) {
       const users = await User.find({
-        $expr: {
-          $in: [
-            {
-              $toLower: {
-                $trim: { input: { $ifNull: ["$walletAddress", ""] } },
-              },
-            },
-            toAddresses,
-          ],
-        },
+        walletAddress: { $in: toAddresses },
       }).select("_id walletAddress");
 
       if (!quiet) {

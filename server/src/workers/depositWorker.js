@@ -80,21 +80,12 @@ async function handleDeposit(serializedLog) {
 
   console.log(`💰 Amount parsed: ${parsedAmount} USDT`);
 
-  const user = await User.findOne({
-    $expr: {
-      $eq: [
-        {
-          $toLower: {
-            $trim: { input: { $ifNull: ["$walletAddress", ""] } },
-          },
-        },
-        toAddr,
-      ],
-    },
-  }).select("_id walletAddress");
+  const user = await User.findOne({ walletAddress: toAddr }).select("_id walletAddress");
 
   if (!user) {
-    console.log("❌ No user found for wallet:", toAddr);
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("No user found:", toAddr);
+    }
     return { outcome: "skip", reason: "no_user", txHash: normalized, processedDelta: 0 };
   }
 

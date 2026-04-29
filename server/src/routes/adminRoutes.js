@@ -27,6 +27,18 @@ const sendAdminError = (res, err, context) => {
   return res.status(500).json({ success: false, msg: err.message, data: null });
 };
 
+/** Legacy withdrawals may omit risk fields — keep admin UI stable. */
+function normalizeHybridWithdrawRows(rows) {
+  return (rows || []).map((w) => {
+    const o = w && typeof w.toObject === "function" ? w.toObject() : { ...(w || {}) };
+    return {
+      ...o,
+      riskScore: o.riskScore ?? 0,
+      priority: o.priority ?? "normal",
+    };
+  });
+}
+
 /* ==============================
    🔐 ADMIN CHECK
 ============================== */
@@ -307,9 +319,10 @@ router.get("/deposits/pending", auth, isAdmin, async (req, res) => {
 ============================== */
 router.get("/withdrawals", auth, isAdmin, async (req, res) => {
   try {
-    const withdrawals = await HybridWithdrawal.find()
+    const rows = await HybridWithdrawal.find()
       .populate("userId", "username email")
       .sort({ priority: 1, riskScore: -1, createdAt: -1 });
+    const withdrawals = normalizeHybridWithdrawRows(rows);
     res.json({
       success: true,
       msg: "Withdrawals fetched successfully",
@@ -323,11 +336,12 @@ router.get("/withdrawals", auth, isAdmin, async (req, res) => {
 
 router.get("/withdrawals/pending", auth, isAdmin, async (req, res) => {
   try {
-    const withdrawals = await HybridWithdrawal.find({
+    const rows = await HybridWithdrawal.find({
       status: { $in: ["review", "pending", "claimable", "approved"] },
     })
       .populate("userId", "username email")
       .sort({ priority: 1, riskScore: -1, createdAt: -1 });
+    const withdrawals = normalizeHybridWithdrawRows(rows);
     res.json({
       success: true,
       msg: "Pending withdrawals fetched successfully",

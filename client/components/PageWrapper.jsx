@@ -19,7 +19,7 @@ export default function PageWrapper({
   data,
   skipEmpty = false,
   emptyText = "No data available",
-  useSkeletonLoading = false,
+  useSkeletonLoading = true,
   children,
 }) {
   if (loading) {

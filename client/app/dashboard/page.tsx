@@ -7,11 +7,9 @@ import dynamic from "next/dynamic";
 import { getApiErrorMessage, suppressDuplicateCatchToast } from "../../lib/api";
 import { claimHybridRoi } from "../../lib/hybrid";
 import {
-  fetchHybridSummarySWR,
-  fetchUserMeSWR,
+  fetchDashboardMainBundleSWR,
+  DASHBOARD_MAIN_BUNDLE_KEY,
   hybridDashboardSWRConfig,
-  HYBRID_SUMMARY_SWR_KEY,
-  USER_ME_SWR_KEY,
 } from "../../lib/swr-fetch";
 import { useAnimatedNumber } from "../../lib/useAnimatedNumber";
 import AppToast from "../../components/AppToast";
@@ -61,17 +59,16 @@ export default function Dashboard() {
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
 
   const {
-    data: user,
-    mutate: mutateUser,
-    isLoading: loadingPage,
-  } = useSWR(USER_ME_SWR_KEY, fetchUserMeSWR, hybridDashboardSWRConfig);
-
-  const {
-    data: hybrid,
-    mutate: mutateHybrid,
-    isLoading: loadingStats,
+    data: bundle,
+    mutate: mutateDashboardBundle,
+    isLoading: loadingBundle,
     isValidating: statsValidating,
-  } = useSWR(HYBRID_SUMMARY_SWR_KEY, fetchHybridSummarySWR, hybridDashboardSWRConfig);
+  } = useSWR(DASHBOARD_MAIN_BUNDLE_KEY, fetchDashboardMainBundleSWR, hybridDashboardSWRConfig);
+
+  const user = bundle?.user;
+  const hybrid = bundle?.hybrid;
+  const loadingPage = loadingBundle && !user;
+  const loadingStats = loadingBundle && !bundle;
 
   useEffect(() => {
     if (typeof document !== "undefined" && document.hidden) return;
@@ -109,7 +106,7 @@ export default function Dashboard() {
         result?.amount != null ? `ROI claimed: $${Number(result.amount).toFixed(2)}` : "ROI claimed successfully",
         "success",
       );
-      await Promise.all([mutateUser(), mutateHybrid()]);
+      await mutateDashboardBundle();
     } catch (err: any) {
       if (!suppressDuplicateCatchToast(err)) {
         showToast(getApiErrorMessage(err, "Could not claim ROI"), "error");
@@ -124,7 +121,7 @@ export default function Dashboard() {
       <PageWrapper
         loading={loadingPage && !user}
         data={user?._id}
-        useSkeletonLoading={false}
+        useSkeletonLoading
         emptyText="No data available"
       >
         <div className="relative w-full max-w-full overflow-x-hidden px-1 pb-3 text-white sm:px-0">
