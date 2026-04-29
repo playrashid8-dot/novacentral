@@ -10,7 +10,7 @@ import { fetchHybridSummary, fetchHybridWithdrawals, requestHybridWithdraw } fro
 import GlassCard from "../../components/GlassCard";
 import PrimaryButton from "../../components/PrimaryButton";
 import { withdrawalStatusClass, maskAddress, isValidEvmAddress42 } from "../../lib/helpers";
-import { fetchHybridSummary, fetchHybridWithdrawals, requestHybridWithdraw } from "../../lib/hybrid";
+import CountdownTimer from "../../components/CountdownTimer";
 
 const activePendingStatuses = ["pending", "claimable", "approved"];
 
@@ -23,7 +23,7 @@ export default function Withdrawal() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [toast, setToast] = useState("");
-  const [hybrid, setHybrid]: any = useState(null);
+  const [hybrid, setHybrid] = useState<any>(null);
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
 
   const showToast = (msg: string) => {

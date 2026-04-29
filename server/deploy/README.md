@@ -28,6 +28,10 @@ To use **nginx round-robin across three ports** instead, run three forked API pr
 
 ## Part 3 — API cluster + hybrid + workers + same `.env`
 
+**PowerShell (Windows):** use `;` to chain commands — `&&` is not valid in older PowerShell. Example: `cd server; npx pm2 start ecosystem.config.cjs`.
+
+**Redis:** set `REDIS_URL` in `server/.env` (see `.env.example`). Run Redis locally (`docker run -d -p 6379:6379 redis`) or use a cloud URL (e.g. Railway). Verify: `cd server` then `npm run verify:redis` (expects `PONG`). The one-liner `require('ioredis')()` fails on ioredis v5 — use `new Redis()` or the `verify:redis` script.
+
 ```bash
 # Redis must be running locally or reachable via REDIS_URL before workers/hybrid enqueue jobs.
 # Same MongoDB URI and JWT_SECRET everywhere.

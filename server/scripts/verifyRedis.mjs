@@ -12,18 +12,33 @@ const redis = new Redis(url, {
   maxRetriesPerRequest: 1,
   connectTimeout: 5_000,
   retryStrategy: () => null,
-  lazyConnect: false,
+  lazyConnect: true,
 });
 
-redis.on("error", (err) => {
-  console.error(err.message || err);
-  redis.disconnect();
-  process.exit(1);
+redis.on("error", () => {
+  /* handled via connect() / ping rejection; avoids Unhandled error event */
 });
 
 try {
-  const pong = await redis.ping();
-  console.log(pong);
+  await redis.connect();
+  console.log(await redis.ping());
+} catch (e) {
+  const msg =
+    e?.message ||
+    e?.lastNodeError?.message ||
+    (Array.isArray(e?.errors) && e.errors[0]?.message) ||
+    String(e);
+  const code = e?.code || e?.cause?.code;
+  if (code === "ECONNREFUSED" || /closed|refused|ECONNREFUSED/i.test(msg)) {
+    console.error(
+      `Redis unreachable (${code || msg}). Start Redis or set REDIS_URL. Tried: ${url}`,
+    );
+  } else {
+    console.error(msg);
+  }
+  process.exitCode = 1;
 } finally {
   redis.disconnect();
 }
+
+process.exit(process.exitCode ?? 0);

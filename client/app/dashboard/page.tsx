@@ -109,6 +109,8 @@ export default function Dashboard() {
       setRoiLoading(false);
     }
   };
+
+  return (
     <ProtectedRoute>
       <PageWrapper
         loading={loading}
