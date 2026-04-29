@@ -130,7 +130,7 @@ export default function Profile() {
           </GlassCard>
 
           <GlassCard glow="purple" className="mt-5">
-            <h3 className="mb-2 text-sm font-semibold text-gray-200">Referral link</h3>
+            <h3 className="mb-2 text-sm font-semibold text-gray-200">My referral link</h3>
             <p className="mb-3 text-[11px] text-gray-500">Share this URL to invite your network.</p>
             <p className="break-all rounded-xl border border-white/10 bg-black/40 p-3 font-mono text-[11px] text-purple-100">
               {referralLink || "—"}
