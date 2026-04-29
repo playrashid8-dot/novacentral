@@ -2,11 +2,17 @@
  * Quick Redis connectivity check (reads REDIS_URL from .env). Exits 0 on PONG.
  */
 import dotenv from "dotenv";
-import { Redis } from "ioredis";
+import Redis from "ioredis";
 
 dotenv.config();
 
-const url = process.env.REDIS_URL || "redis://127.0.0.1:6379";
+const url = process.env.REDIS_URL?.trim();
+if (!url) {
+  console.error(
+    "REDIS_URL not set. Set REDIS_URL in server/.env (example: redis://:password@host:6379)",
+  );
+  process.exit(1);
+}
 
 const redis = new Redis(url, {
   maxRetriesPerRequest: 1,
@@ -31,7 +37,7 @@ try {
   const code = e?.code || e?.cause?.code;
   if (code === "ECONNREFUSED" || /closed|refused|ECONNREFUSED/i.test(msg)) {
     console.error(
-      `Redis unreachable (${code || msg}). Start Redis or set REDIS_URL. Tried: ${url}`,
+      `Redis unreachable (${code || msg}). Check REDIS_URL and network. Tried URL is set (host redacted in logs).`,
     );
   } else {
     console.error(msg);

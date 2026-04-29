@@ -379,18 +379,23 @@ router.get("/dashboard-summary", auth, async (req, res) => {
     const userId = String(req.user._id);
     const cacheKey = `dashboard:${userId}`;
 
-    try {
-      const cached = await redis.get(cacheKey);
-      if (cached) {
+    let cached = null;
+    if (redis) {
+      try {
+        cached = await redis.get(cacheKey);
+      } catch {}
+    }
+    if (cached) {
+      try {
         const data = JSON.parse(cached);
         return res.json({
           success: true,
           msg: "Dashboard summary loaded",
           data,
         });
+      } catch {
+        /* stale cache — fall through */
       }
-    } catch (e) {
-      console.warn("Redis fail");
     }
 
     const [referralStats, teamPayload, salPayload] = await Promise.all([
@@ -432,10 +437,10 @@ router.get("/dashboard-summary", auth, async (req, res) => {
       salaryProgress,
     };
 
-    try {
-      await redis.set(cacheKey, JSON.stringify(data), "EX", 15);
-    } catch (e) {
-      console.warn("Redis fail");
+    if (redis) {
+      try {
+        await redis.set(cacheKey, JSON.stringify(data), "EX", 15);
+      } catch {}
     }
 
     return res.json({

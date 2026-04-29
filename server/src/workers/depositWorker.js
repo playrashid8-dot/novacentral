@@ -23,7 +23,9 @@ async function handleDeposit(serializedLog) {
     return { outcome: "skip", reason: "missing_tx", processedDelta: 0 };
   }
 
-  console.log(`⚙️ Processing job: ${normalized}`);
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`⚙️ Processing job: ${normalized}`);
+  }
 
   if (await HybridDeposit.exists({ txHash: normalized })) {
     return { outcome: "duplicate", txHash: normalized, processedDelta: 0 };
@@ -78,7 +80,9 @@ async function handleDeposit(serializedLog) {
     return { outcome: "skip", reason: "amount", txHash: normalized, processedDelta: 0 };
   }
 
-  console.log(`💰 Amount parsed: ${parsedAmount} USDT`);
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`💰 Amount parsed: ${parsedAmount} USDT`);
+  }
 
   const user = await User.findOne({ walletAddress: toAddr }).select("_id walletAddress");
 
@@ -115,8 +119,15 @@ async function handleDeposit(serializedLog) {
 
 await connectDB();
 
+if (!redis) {
+  console.warn("⚠️ REDIS_URL not set — deposit worker cannot start");
+  process.exit(1);
+}
+
 setInterval(() => {
-  console.log("💚 Hybrid system alive");
+  if (process.env.NODE_ENV !== "production") {
+    console.log("💚 Hybrid system alive");
+  }
 }, 60000);
 
 const worker = new Worker(
@@ -136,10 +147,12 @@ worker.on("completed", (job, result) => {
   const tx = String(job?.data?.log?.transactionHash || "").trim();
   if (!tx) return;
   const processedDelta = Number(result?.processedDelta);
-  if (Number.isFinite(processedDelta) && processedDelta > 0) {
-    console.log("✅ Deposit processed:", tx);
-  } else {
-    console.log("⚠️ Skipped (duplicate or invalid):", tx);
+  if (process.env.NODE_ENV !== "production") {
+    if (Number.isFinite(processedDelta) && processedDelta > 0) {
+      console.log("✅ Deposit processed:", tx);
+    } else {
+      console.log("⚠️ Skipped (duplicate or invalid):", tx);
+    }
   }
 });
 

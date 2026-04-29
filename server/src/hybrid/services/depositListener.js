@@ -36,7 +36,7 @@ const devLog = (...args) => {
 };
 
 const maybeSampleLog = (...args) => {
-  if (process.env.NODE_ENV === "development" || Math.random() < 0.1) {
+  if (process.env.NODE_ENV !== "production") {
     console.log(...args);
   }
 };
@@ -159,7 +159,9 @@ export async function processDepositLog(log, iface, usersByWallet) {
     return { creditFailure: false, processedDelta: 0 };
   }
 
-  console.log(`📥 Deposit detected: ${txHash}`);
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`📥 Deposit detected: ${txHash}`);
+  }
   devLog("📥 Checking deposits for:", userWalletLower);
   devLog("📥 Deposit detail:", {
     txHash: shortTx(txHash),
@@ -554,6 +556,8 @@ export const scanHybridDeposits = async (
 };
 
 export const rescanDeposits = async (fromBlock, toBlock) => {
-  console.log("Manual rescan started");
+  if (process.env.NODE_ENV !== "production") {
+    console.log("Manual rescan started");
+  }
   return await scanHybridDeposits(fromBlock, toBlock, { isManualRescan: true });
 };

@@ -17,11 +17,13 @@ export async function getHybridAdminSystemStatus() {
   const mongodb = mongoose.connection.readyState === 1;
 
   let redisOk = false;
-  try {
-    const pong = await redis.ping();
-    redisOk = pong === "PONG";
-  } catch (_) {
-    redisOk = false;
+  if (redis) {
+    try {
+      const pong = await redis.ping();
+      redisOk = pong === "PONG";
+    } catch (_) {
+      redisOk = false;
+    }
   }
 
   let rpc = false;
@@ -36,11 +38,13 @@ export async function getHybridAdminSystemStatus() {
   const usersLoaded = userMap.size;
 
   let queueWorking = false;
-  try {
-    await depositQueue.getJobCounts();
-    queueWorking = true;
-  } catch (_) {
-    queueWorking = false;
+  if (depositQueue) {
+    try {
+      await depositQueue.getJobCounts();
+      queueWorking = true;
+    } catch (_) {
+      queueWorking = false;
+    }
   }
 
   const workerActive = queueWorking;

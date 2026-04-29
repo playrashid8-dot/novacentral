@@ -38,7 +38,9 @@ whenWsProviderReady(async () => {
   }
   try {
     await loadUsersIntoRealtimeMap();
-    console.log("🔄 User map reloaded after WS reconnect");
+    if (process.env.NODE_ENV !== "production") {
+      console.log("🔄 User map reloaded after WS reconnect");
+    }
   } catch (err) {
     console.error("❌ ERROR:", err?.message || String(err));
   }
@@ -71,7 +73,9 @@ export { addUserToHybridDepositRealtimeMap } from "../services/userMap.js";
 
 async function dispatchRealtimeDeposit(log, provider) {
   if (!userMap || userMap.size === 0) {
-    console.log("⚠️ User map empty — reloading...");
+    if (process.env.NODE_ENV !== "production") {
+      console.log("⚠️ User map empty — reloading...");
+    }
     await loadUsersIntoRealtimeMap();
     if (userMap.size === 0) {
       return;
@@ -96,7 +100,7 @@ async function dispatchRealtimeDeposit(log, provider) {
     if (pendingTx.size > PENDING_TX_MAX) {
       pendingTx.clear();
     }
-    if (process.env.NODE_ENV === "development" || Math.random() < 0.1) {
+    if (process.env.NODE_ENV !== "production") {
       console.log("⏳ Waiting confirmations:", txHash);
     }
     setTimeout(() => {
@@ -112,7 +116,9 @@ async function dispatchRealtimeDeposit(log, provider) {
     return;
   }
   if (processedTx.size > 10000) {
-    console.log("⚠️ processedTx cleared (safety)");
+    if (process.env.NODE_ENV !== "production") {
+      console.log("⚠️ processedTx cleared (safety)");
+    }
     processedTx.clear();
   }
   processedTx.add(log.transactionHash);
@@ -153,14 +159,18 @@ async function dispatchRealtimeDeposit(log, provider) {
       processedTx.delete(log.transactionHash);
       return;
     }
-    console.log(`💰 Amount parsed: ${amountNum} USDT`);
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`💰 Amount parsed: ${amountNum} USDT`);
+    }
   } catch (parseErr) {
     console.error("❌ Deposit parsing error:", parseErr?.message || String(parseErr));
     processedTx.delete(log.transactionHash);
     return;
   }
 
-  console.log(`📥 Deposit detected: ${log.transactionHash}`);
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`📥 Deposit detected: ${log.transactionHash}`);
+  }
 
   try {
     const sLog = toSerializableTransferLog(log);
@@ -226,7 +236,9 @@ async function initRealtimeSubscription() {
 
   hybridWebSocketRealtimeActive = true;
   realtimeStarted = true;
-  console.log("🚀 Real-time listener started");
+  if (process.env.NODE_ENV !== "production") {
+    console.log("🚀 Real-time listener started");
+  }
 }
 
 function initRpcRealtimeSubscription() {
@@ -247,7 +259,9 @@ function initRpcRealtimeSubscription() {
   });
 
   realtimeStarted = true;
-  console.log("🚀 Real-time listener started (RPC Transfer subscription)");
+  if (process.env.NODE_ENV !== "production") {
+    console.log("🚀 Real-time listener started (RPC Transfer subscription)");
+  }
 }
 
 export async function startRealtimeListener() {
@@ -266,7 +280,9 @@ export async function startRealtimeListener() {
   }
 
   if (!String(process.env.HYBRID_USDT_CONTRACT || "").trim()) {
-    console.log("⚠️ Realtime listener skipped: HYBRID_USDT_CONTRACT missing");
+    if (process.env.NODE_ENV !== "production") {
+      console.log("⚠️ Realtime listener skipped: HYBRID_USDT_CONTRACT missing");
+    }
     return;
   }
 
@@ -291,7 +307,9 @@ export async function startRealtimeListener() {
         }
       }
     } else {
-      console.log("⚠️ Using RPC fallback (WebSocket not configured)");
+      if (process.env.NODE_ENV !== "production") {
+        console.log("⚠️ Using RPC fallback (WebSocket not configured)");
+      }
       initRpcRealtimeSubscription();
     }
   } catch (err) {

@@ -7,9 +7,11 @@ export const DEPOSIT_QUEUE_LIMITER = {
   duration: 1000,
 };
 
-export const depositQueue = new Queue("depositQueue", {
-  connection: redis,
-});
+export const depositQueue = redis
+  ? new Queue("depositQueue", {
+      connection: redis,
+    })
+  : null;
 
 /** Shared BullMQ options for deposit jobs (retries / backoff / idempotent jobId = txHash). */
 export const DEPOSIT_JOB_OPTIONS = {
@@ -47,6 +49,10 @@ export function toSerializableTransferLog(log) {
  * @param {{ log: object, blockNumber?: number }} payload
  */
 export async function enqueueDepositJob({ log, blockNumber }) {
+  if (!redis || !depositQueue) {
+    return null;
+  }
+
   const merged = {
     ...log,
     blockNumber: blockNumber !== undefined ? blockNumber : log?.blockNumber,
@@ -69,14 +75,14 @@ export async function enqueueDepositJob({ log, blockNumber }) {
       { log: merged, blockNumber: merged.blockNumber },
       addOpts,
     );
-    if (process.env.NODE_ENV === "development" || Math.random() < 0.1) {
+    if (process.env.NODE_ENV !== "production") {
       console.log("📦 Job queued:", txHash);
     }
     return job;
   } catch (err) {
     const msg = err?.message || String(err);
     if (/already exists|duplicate|JobId/i.test(msg)) {
-      if (process.env.NODE_ENV === "development" || Math.random() < 0.1) {
+      if (process.env.NODE_ENV !== "production") {
         console.log("📦 Duplicate job skipped (queue):", txHash);
       }
       return null;

@@ -20,9 +20,16 @@ const salaryCountCacheKey = (userId) => {
 
 /** Optional Redis-backed cache for computed fresh counts (30s TTL). */
 const tryGetSalaryCountCache = async (userId) => {
+  let raw = null;
+  if (redis) {
+    try {
+      raw = await redis.get(salaryCountCacheKey(userId));
+    } catch {
+      return null;
+    }
+  }
+  if (!raw) return null;
   try {
-    const raw = await redis.get(salaryCountCacheKey(userId));
-    if (!raw) return null;
     const parsed = JSON.parse(raw);
     const direct = Number(parsed?.direct);
     const team = Number(parsed?.team);
@@ -34,23 +41,27 @@ const tryGetSalaryCountCache = async (userId) => {
 };
 
 const trySetSalaryCountCache = async (userId, direct, team) => {
-  try {
-    await redis.set(
-      salaryCountCacheKey(userId),
-      JSON.stringify({ direct, team }),
-      "EX",
-      30
-    );
-  } catch {
-    /* optional boost — Redis optional */
+  if (redis) {
+    try {
+      await redis.set(
+        salaryCountCacheKey(userId),
+        JSON.stringify({ direct, team }),
+        "EX",
+        30
+      );
+    } catch {
+      /* optional boost — Redis optional */
+    }
   }
 };
 
 const invalidateSalaryCountCache = async (userId) => {
-  try {
-    await redis.del(salaryCountCacheKey(userId));
-  } catch {
-    /* ignore */
+  if (redis) {
+    try {
+      await redis.del(salaryCountCacheKey(userId));
+    } catch {
+      /* ignore */
+    }
   }
 };
 
@@ -85,7 +96,9 @@ const countFreshTeam = async (rootId, lastClaimDate, session = null) => {
   waveLoop: for (let wave = 0; wave < MAX_WAVES && frontier.length > 0; wave += 1) {
     iterations += 1;
     if (iterations > MAX_ITERATIONS) {
-      console.warn("⚠️ BFS loop limit reached");
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("⚠️ BFS loop limit reached");
+      }
       break waveLoop;
     }
 
@@ -287,12 +300,14 @@ export const buildSalaryProgressPayload = async (userId) => {
 
   const claimableStageNum = eligible ? nextStageNum : 0;
 
-  console.log("💰 Salary check:", {
-    userId: String(userId),
-    direct,
-    team,
-    stage: claimableStageNum,
-  });
+  if (process.env.NODE_ENV !== "production") {
+    console.log("💰 Salary check:", {
+      userId: String(userId),
+      direct,
+      team,
+      stage: claimableStageNum,
+    });
+  }
 
   return {
     stage: complete ? maxStageNum : nextStageNum,

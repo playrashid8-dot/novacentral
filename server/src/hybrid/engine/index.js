@@ -45,11 +45,13 @@ const logHybridBootstrapStatus = async () => {
   let gasOk = false;
   let queueOk = false;
 
-  try {
-    await depositQueue.getJobCounts();
-    queueOk = true;
-  } catch (_) {
-    queueOk = false;
+  if (depositQueue) {
+    try {
+      await depositQueue.getJobCounts();
+      queueOk = true;
+    } catch (_) {
+      queueOk = false;
+    }
   }
 
   try {
