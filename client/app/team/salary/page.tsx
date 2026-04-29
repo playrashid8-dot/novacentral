@@ -26,6 +26,7 @@ export default function TeamSalaryPage() {
   const [toast, setToast] = useState("");
   const [salaryPayload, setSalaryPayload] = useState<any>(null);
   const [claiming, setClaiming] = useState<number | null>(null);
+  const [historyShown, setHistoryShown] = useState(12);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -52,8 +53,13 @@ export default function TeamSalaryPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    setHistoryShown(12);
+  }, [salaryPayload]);
+
   const direct = Number(salaryPayload?.direct ?? 0);
   const team = Number(salaryPayload?.team ?? 0);
+  const lastClaimedAtRaw = salaryPayload?.lastClaimedAt;
   const claimableStage = Number(salaryPayload?.claimableStage ?? 0);
   const stages: RuleRow[] = useMemo(() => {
     const r = salaryPayload?.rules;
@@ -89,7 +95,7 @@ export default function TeamSalaryPage() {
       showToast(`Stage ${res.stage} claimed (+$${Number(res.amount ?? 0).toFixed(2)})`);
       await load();
     } catch (err: any) {
-      showToast(err?.message || err?.msg || "Claim failed");
+      showToast(getApiErrorMessage(err, "Claim failed"));
     } finally {
       setClaiming(null);
     }
@@ -117,11 +123,22 @@ export default function TeamSalaryPage() {
               <p className="mt-2 text-[11px] text-gray-500">
                 Milestones use fresh recruits since your last claim. Same rules as HybridEarn rewards.
               </p>
+              <p className="mt-1 text-xs text-yellow-400">
+                Active team (≥ 50 USDT) after last claim
+              </p>
+              <p className="mt-1 text-xs text-gray-400">
+                Last claim:{" "}
+                {lastClaimedAtRaw
+                  ? new Date(lastClaimedAtRaw).toLocaleString()
+                  : "Never"}
+              </p>
             </div>
           </motion.header>
 
           <div className="mb-8 rounded-2xl border border-white/[0.08] bg-white/[0.04] p-5 ring-1 ring-white/[0.05]">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400">Your counts (fresh)</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400">
+              Your counts (active downline — fresh window)
+            </p>
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div className="rounded-xl bg-black/30 px-4 py-3 ring-1 ring-white/[0.06]">
                 <p className="text-[10px] uppercase text-gray-500">Direct</p>
@@ -191,7 +208,7 @@ export default function TeamSalaryPage() {
             <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-10 space-y-3">
               <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400">History</p>
               <div className="rounded-2xl border border-white/[0.06] bg-black/20 p-4 ring-1 ring-white/[0.04]">
-                {history.slice(0, 25).map((item, idx) => (
+                {history.slice(0, historyShown).map((item, idx) => (
                   <div
                     key={`${item.stage}-${String(item.claimedAt ?? idx)}`}
                     className="flex justify-between border-b border-white/[0.04] py-3 text-sm last:border-b-0"
@@ -203,8 +220,22 @@ export default function TeamSalaryPage() {
                   </div>
                 ))}
               </div>
+              {history.length > historyShown && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setHistoryShown((s) =>
+                      Math.min(s + 12, history.length)
+                    )
+                  }
+                  className="mt-3 w-full py-2 text-sm text-gray-400 transition hover:text-gray-300"
+                >
+                  Load more
+                </button>
+              )}
               <p className="text-[10px] text-gray-500">
-                Most recent payouts first. Showing up to the last {Math.min(history.length, 25)} entries.
+                Most recent payouts first. Showing{" "}
+                {Math.min(historyShown, history.length)} of {history.length} stored entries.
               </p>
             </motion.section>
           ) : (

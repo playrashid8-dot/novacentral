@@ -6,6 +6,9 @@ import { addHybridLedgerEntries } from "./ledgerService.js";
 /** Max ObjectIds per recursive tier query ($in batches) — keeps queries bounded. */
 const FRONTIER_IN_CHUNK = 5000;
 
+/** Salary milestones count only “active” investors: deposit balance at or above this (USDT). */
+const ACTIVE_DEPOSIT_MIN = 50;
+
 /**
  * Recursive fresh-downline count matching former $graphLookup + restrictSearchWithMatch
  * semantics, without loading the entire subtree into Mongoose BSON memory (<graphLookup>.
@@ -27,8 +30,10 @@ const countFreshTeam = async (rootId, lastClaimDate, session = null) => {
 
   /** Hard cap avoids pathological depths locking the event loop. */
   const MAX_WAVES = 4096;
+  /** Stop BFS when fresh-downline count exceeds cap (stability / memory). */
+  const MAX_FRESH_COUNT = 10000;
 
-  for (let wave = 0; wave < MAX_WAVES && frontier.length > 0; wave += 1) {
+  waveLoop: for (let wave = 0; wave < MAX_WAVES && frontier.length > 0; wave += 1) {
     const next = [];
 
     for (let i = 0; i < frontier.length; i += FRONTIER_IN_CHUNK) {
@@ -36,6 +41,7 @@ const countFreshTeam = async (rootId, lastClaimDate, session = null) => {
       const finder = User.find({
         referredBy: { $in: chunk },
         ...freshness,
+        depositBalance: { $gte: ACTIVE_DEPOSIT_MIN },
       })
         .select("_id")
         .lean();
@@ -44,6 +50,9 @@ const countFreshTeam = async (rootId, lastClaimDate, session = null) => {
       const rows = await finder.exec();
 
       total += rows.length;
+      if (total > MAX_FRESH_COUNT) {
+        break waveLoop;
+      }
       for (const r of rows) {
         next.push(r._id);
       }
@@ -52,6 +61,9 @@ const countFreshTeam = async (rootId, lastClaimDate, session = null) => {
     frontier = next;
   }
 
+  if (!Number.isFinite(total)) {
+    throw new Error("Invalid team count");
+  }
   return total;
 };
 
@@ -118,14 +130,21 @@ export const getFreshCounts = async (user, session = null) => {
 
   let directQ = User.countDocuments({
     referredBy: user._id,
+    depositBalance: { $gte: ACTIVE_DEPOSIT_MIN },
     ...filter,
   });
   if (session != null) {
     directQ = directQ.session(session);
   }
   const direct = await directQ;
+  if (!Number.isFinite(direct)) {
+    throw new Error("Invalid direct count");
+  }
 
   const team = await countFreshTeam(user._id, lastClaim ?? undefined, session);
+  if (!Number.isFinite(team)) {
+    throw new Error("Invalid team count");
+  }
 
   return { direct, team };
 };
@@ -182,7 +201,7 @@ export const buildSalaryProgressPayload = async (userId) => {
   const historyRaw = Array.isArray(migrated.salaryHistory) ? migrated.salaryHistory : [];
 
   const salaryHistory = [...historyRaw]
-    .slice(-100)
+    .slice(-20)
     .map((h) => ({
       stage: Number(h.stage),
       amount: Number(h.amount ?? 0),
@@ -235,7 +254,7 @@ export const claimSalary = async (userId) => {
         throw new Error("Invalid salary stage");
       }
 
-      const anchorCond = anchorLastClaimedAtCondition(user.salaryProgress?.lastClaimedAt);
+      const lastClaimedAtSnapshot = user.salaryProgress?.lastClaimedAt;
 
       const { direct, team } = await getFreshCounts(user, session);
 
@@ -249,7 +268,7 @@ export const claimSalary = async (userId) => {
       /** Single atomic instant for persisted claim boundary (fixes split-ms exploit). */
       const now = new Date();
 
-      const stageCond =
+      const stageMatch =
         prevStage === 0
           ? {
               $or: [
@@ -260,9 +279,10 @@ export const claimSalary = async (userId) => {
             }
           : { "salaryProgress.lastClaimedStage": prevStage };
 
+      /** Atomic compare-and-set on lastClaimedStage + lastClaimedAt snapshot — blocks duplicate / racing claims. */
       const claimFilter = {
         _id: userId,
-        $and: [stageCond, anchorCond],
+        $and: [stageMatch, anchorLastClaimedAtCondition(lastClaimedAtSnapshot)],
       };
 
       const updatedUser = await User.findOneAndUpdate(
@@ -282,20 +302,28 @@ export const claimSalary = async (userId) => {
           },
           $push: {
             salaryHistory: {
-              stage: nextStage,
-              amount: rule.amount,
-              claimedAt: now,
+              $each: [
+                {
+                  stage: nextStage,
+                  amount: rule.amount,
+                  claimedAt: now,
+                },
+              ],
+              $slice: -20,
             },
           },
         },
         {
           new: true,
           session,
+          runValidators: true,
         }
       );
 
       if (!updatedUser) {
-        throw new Error("Salary already claimed");
+        const err = new Error("Already claimed or state changed");
+        err.statusCode = 409;
+        throw err;
       }
 
       await addHybridLedgerEntries(

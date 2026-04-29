@@ -14,6 +14,30 @@ import { showSafeToast } from "../../../lib/toast";
 const PAGE_SIZE = 10;
 const ROW_CAP = 100;
 
+/** Primary labels aligned with backend status values — extended for legacy synonyms. */
+const statusMap: Record<string, string> = {
+  pending: "Pending",
+  approved: "Approved",
+  completed: "Completed",
+};
+
+/** Normalizes raw statuses for consistent admin labeling (backend uses paid/claimed, etc.). */
+const WITHDRAWAL_STATUS_LABEL: Record<string, string> = {
+  ...statusMap,
+  claimable: "Claimable",
+  paid: "Completed",
+  claimed: "Completed",
+  rejected: "Rejected",
+};
+
+function withdrawalStatusLabel(status: unknown): string {
+  const key = String(status ?? "").toLowerCase();
+  const mapped = WITHDRAWAL_STATUS_LABEL[key];
+  if (mapped) return mapped;
+  const s = String(status ?? "").trim();
+  return s ? s : "Unknown";
+}
+
 export default function AdminWithdrawalsPage() {
   const [listMode, setListMode] = useState<"queue" | "all">("queue");
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
@@ -327,8 +351,8 @@ export default function AdminWithdrawalsPage() {
                   ) : null}
                 </td>
                 <td className="whitespace-nowrap px-4 py-4">
-                  <span className={`inline-flex rounded-full px-3 py-1 text-xs capitalize ${badgeCls}`}>
-                    {st}
+                  <span className={`inline-flex rounded-full px-3 py-1 text-xs ${badgeCls}`}>
+                    {withdrawalStatusLabel(withdrawal.status)}
                   </span>
                 </td>
                 <td className="min-w-[260px] px-4 py-4">

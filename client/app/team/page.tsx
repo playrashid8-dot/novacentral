@@ -177,6 +177,7 @@ export default function TeamPage() {
     <ProtectedRoute>
       <PageWrapper loading={loading} data={user?._id} useSkeletonLoading emptyText="No data available">
         <TeamContent
+          loading={loading}
           directCount={directCount}
           teamCount={teamCount}
           referralIncome={referralIncome}
@@ -197,6 +198,7 @@ export default function TeamPage() {
 }
 
 function TeamContent({
+  loading,
   directCount,
   teamCount,
   referralIncome,
@@ -211,6 +213,7 @@ function TeamContent({
   loadingMoreMembers,
   onLoadMoreMembers,
 }: {
+  loading: boolean;
   directCount: number;
   teamCount: number;
   referralIncome: number;
@@ -294,14 +297,18 @@ function TeamContent({
         </p>
       </motion.section>
 
+      {!loading && (
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-4">
-        <Link
-          href="/team/salary"
-          className="block w-full rounded-xl bg-purple-600 py-3 text-center text-sm font-bold text-white shadow-lg shadow-purple-900/30 transition hover:bg-purple-500"
-        >
-          Team Salary
+        <Link href="/team/salary" className="block w-full">
+          <button
+            type="button"
+            className="w-full rounded-xl bg-purple-500 py-3 text-sm font-bold text-white shadow-lg shadow-purple-900/25 transition hover:bg-purple-400"
+          >
+            Team Salary
+          </button>
         </Link>
       </motion.div>
+      )}
 
       <motion.section
         initial={{ opacity: 0, y: 14 }}

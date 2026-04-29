@@ -222,7 +222,7 @@ router.get("/team-members", auth, async (req, res) => {
     }
 
     const page = Math.max(1, Number.parseInt(String(req.query.page || "1"), 10) || 1);
-    const limit = Math.min(50, Math.max(1, Number.parseInt(String(req.query.limit || "50"), 10) || 50));
+    const limit = Math.max(1, Math.min(Number(req.query.limit) || 50, 50));
     const skip = (page - 1) * limit;
 
     const selectFields = "username createdAt depositBalance rewardBalance referredBy";
@@ -245,14 +245,18 @@ router.get("/team-members", auth, async (req, res) => {
     const listFilter =
       tierOr.length === 1 ? tierOr[0] : { $or: tierOr };
 
-    const total = await User.countDocuments(listFilter);
+    const total =
+      tierOr.length === 0 ? 0 : await User.countDocuments(listFilter);
 
-    const tierRows = await User.find(listFilter)
-            .select(selectFields)
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(limit)
-            .lean();
+    let tierRows = [];
+    if (tierOr.length > 0) {
+      tierRows = await User.find(listFilter)
+        .select(selectFields)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+    }
 
     const setA = new Set(levelAIds.map((id) => String(id)));
 

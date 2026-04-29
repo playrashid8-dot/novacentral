@@ -202,6 +202,12 @@ const userSchema = new mongoose.Schema(
         },
       ],
       default: [],
+      validate: {
+        validator(arr) {
+          return !Array.isArray(arr) || arr.length <= 20;
+        },
+        message: "Max 20 salary history records",
+      },
     },
 
     levelBonusStage: {
