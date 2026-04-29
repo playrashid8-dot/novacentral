@@ -215,6 +215,9 @@ router.post("/recover-deposits", auth, isAdmin, async (req, res) => {
       blocks: 1000,
       logEmptyOnZero: true,
     });
+    console.log(
+      `📦 Recovery job queued — deposit jobs enqueued: ${result?.processed ?? 0}`
+    );
     return res.json({
       success: true,
       msg: "Recovery scan executed",

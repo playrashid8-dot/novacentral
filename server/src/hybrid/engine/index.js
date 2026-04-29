@@ -231,11 +231,17 @@ export const startDepositListener = () => {
     try {
       console.log("🚨 Recovery triggered — possible missed deposit");
       let dynamicScan = BASE_SCAN;
-      const result = await scanHybridDeposits(null, null, { blocks: BASE_SCAN });
+      const result = await scanHybridDeposits(null, null, {
+        blocks: BASE_SCAN,
+        logEmptyOnZero: true,
+      });
       if (!result?.skipped && result?.processed === 0) {
         dynamicScan = 2000;
         console.log("⚠️ Expanding scan window:", dynamicScan);
-        await scanHybridDeposits(null, null, { blocks: dynamicScan });
+        await scanHybridDeposits(null, null, {
+          blocks: dynamicScan,
+          logEmptyOnZero: true,
+        });
       }
     } catch (error) {
       console.error(
@@ -248,7 +254,7 @@ export const startDepositListener = () => {
   deepScanTimer = setInterval(async () => {
     try {
       console.log("🔎 Deep recovery scan running...");
-      await scanHybridDeposits(null, null, { blocks: 5000 });
+      await scanHybridDeposits(null, null, { blocks: 5000, logEmptyOnZero: true });
     } catch (e) {
       console.error("❌ Deep scan failed:", e?.message || String(e));
     }
