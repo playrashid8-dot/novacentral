@@ -1,4 +1,5 @@
 import express from "express";
+import mongoose from "mongoose";
 import auth from "../middleware/auth.js";
 import User from "../models/User.js";
 import HybridDeposit from "../hybrid/models/HybridDeposit.js";
@@ -10,6 +11,7 @@ import {
 } from "../hybrid/services/withdrawService.js";
 import { scanHybridDeposits } from "../hybrid/services/depositListener.js";
 import { getProvider } from "../hybrid/utils/provider.js";
+import { getHybridAdminSystemStatus } from "../hybrid/utils/adminSystemStatus.js";
 
 const router = express.Router();
 const sendAdminError = (res, err, context) => {
@@ -37,6 +39,22 @@ const isAdmin = async (req, res, next) => {
 };
 
 /* ==============================
+   💚 SYSTEM STATUS
+============================== */
+router.get("/system-status", auth, isAdmin, async (req, res) => {
+  try {
+    const status = await getHybridAdminSystemStatus();
+    return res.json({
+      success: true,
+      msg: "System status",
+      data: { status },
+    });
+  } catch (err) {
+    return sendAdminError(res, err, "ADMIN SYSTEM STATUS ERROR");
+  }
+});
+
+/* ==============================
    📥 HYBRID DEPOSITS
 ============================== */
 router.get("/deposits", auth, isAdmin, async (req, res) => {
@@ -44,11 +62,19 @@ router.get("/deposits", auth, isAdmin, async (req, res) => {
     const deposits = await HybridDeposit.find()
       .populate("userId", "username email")
       .sort({ createdAt: -1 });
+    const latestDeposits = deposits.map((d) => ({
+      txHash: d.txHash,
+      wallet: d.walletAddress,
+      amount: d.amount,
+      status: d.status,
+      createdAt: d.createdAt,
+    }));
     res.json({
       success: true,
       msg: "Deposits fetched successfully",
-      data: { deposits },
+      data: { deposits, latestDeposits },
       deposits,
+      latestDeposits,
     });
   } catch (err) {
     sendAdminError(res, err, "ADMIN DEPOSITS ERROR");
@@ -150,26 +176,52 @@ router.post("/hybrid/withdraw/reject", auth, isAdmin, async (req, res) => {
   }
 });
 
+/** REST-style withdraw actions (same services as body-based hybrid routes) */
+router.post("/withdraw/approve/:id", auth, isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || String(id).trim() === "") {
+      return res.status(400).json({ success: false, msg: "Invalid ID", data: {} });
+    }
+    const data = await adminApproveHybridWithdrawal(id, req.user._id);
+    return res.json({ success: true, msg: "Withdrawal approved", data: { withdrawal: data } });
+  } catch (err) {
+    return res.status(400).json({ success: false, msg: err.message, data: null });
+  }
+});
+
+router.post("/withdraw/reject/:id", auth, isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || String(id).trim() === "") {
+      return res.status(400).json({ success: false, msg: "Invalid ID", data: {} });
+    }
+    const data = await adminRejectHybridWithdrawal(id);
+    return res.json({ success: true, msg: "Withdrawal rejected and refunded", data: { withdrawal: data } });
+  } catch (err) {
+    return res.status(400).json({ success: false, msg: err.message, data: null });
+  }
+});
+
 /* ==============================
    🔁 DEPOSIT RESCAN & RECOVERY
 ============================== */
 
-/** Last-N-blocks backup sweep (same shape as auto recovery, for admin trigger) */
+/** Last-N-blocks backup sweep (admin trigger; duplicate-safe via listener) */
 router.post("/recover-deposits", auth, isAdmin, async (req, res) => {
   try {
-    console.log("🛟 Admin recover last deposits (backup window)…");
-    let result = await scanHybridDeposits(null, null, { blocks: 2000 });
-    if (result && result.skipped === false && result.processed === 0) {
-      console.log("⚠️ No deposits found — expanding scan range");
-      result = await scanHybridDeposits(null, null, { blocks: 5000 });
-    }
+    console.log("🛟 Admin triggered recovery scan (last 1000 blocks)");
+    const result = await scanHybridDeposits(null, null, {
+      blocks: 1000,
+      logEmptyOnZero: true,
+    });
     return res.json({
       success: true,
-      msg: "Recover scan completed",
+      msg: "Recovery scan executed",
       data: result,
     });
   } catch (err) {
-    console.error("❌ Recover last deposits failed:", err?.message || String(err));
+    console.error("❌ Recovery failed:", err?.message || String(err));
     return res.status(500).json({ success: false, msg: err.message, data: null });
   }
 });
@@ -197,8 +249,7 @@ router.post("/rescan-deposits", auth, isAdmin, async (req, res) => {
         data: null,
       });
     }
-    console.log("🛟 Admin deep rescan:", fromN, toN);
-    console.log("🔎 Deep scan range:", fromN, toN);
+    console.log("🔎 Admin deep rescan range:", fromN, "→", toN);
     const result = await scanHybridDeposits(fromN, toN, { isManualRescan: true });
     return res.json({
       success: true,
@@ -223,7 +274,10 @@ router.post("/recover-by-tx", auth, isAdmin, async (req, res) => {
         data: null,
       });
     }
-    console.log("📦 Recovery job queued:", normalized);
+    console.log(
+      "🔎 Recover-by-tx: resolving block from receipt:",
+      `${normalized.slice(0, 10)}…${normalized.slice(-6)}`
+    );
     const provider = getProvider();
     const receipt = await provider.getTransactionReceipt(normalized);
     if (!receipt) {
@@ -264,14 +318,62 @@ router.post("/recover-by-tx", auth, isAdmin, async (req, res) => {
 router.get("/users", auth, isAdmin, async (req, res) => {
   try {
     const users = await User.find().select("-password").sort({ createdAt: -1 });
+    const userSummaries = users.map((u) => ({
+      _id: u._id,
+      username: u.username,
+      wallet: u.walletAddress,
+      depositBalance: u.depositBalance,
+      totalEarned: u.totalEarnings,
+      vipLevel: u.vipLevel,
+    }));
     res.json({
       success: true,
       msg: "Users fetched",
-      data: { users },
+      data: { users, userSummaries },
       users,
+      userSummaries,
     });
   } catch (err) {
     sendAdminError(res, err, "ADMIN USERS ERROR");
+  }
+});
+
+router.post("/set-vip", auth, isAdmin, async (req, res) => {
+  try {
+    const { userId, vipLevel } = req.body || {};
+    const id = String(userId || "").trim();
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        msg: "Valid userId required",
+        data: null,
+      });
+    }
+    const level = Number(vipLevel);
+    if (!Number.isFinite(level) || level < 0) {
+      return res.status(400).json({
+        success: false,
+        msg: "vipLevel must be a non-negative number",
+        data: null,
+      });
+    }
+    const nextLevel = Math.floor(level);
+    const user = await User.findByIdAndUpdate(
+      id,
+      { $set: { vipLevel: nextLevel } },
+      { new: true }
+    ).select("-password");
+    if (!user) {
+      return res.status(404).json({ success: false, msg: "User not found", data: null });
+    }
+    console.log("👑 VIP updated:", userId);
+    return res.json({
+      success: true,
+      msg: "VIP level updated",
+      data: { user },
+    });
+  } catch (err) {
+    return sendAdminError(res, err, "ADMIN SET VIP ERROR");
   }
 });
 

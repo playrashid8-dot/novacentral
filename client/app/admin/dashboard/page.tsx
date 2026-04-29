@@ -192,8 +192,8 @@ export default function AdminDashboardPage() {
 
   return (
     <AdminLayout
-      title="Control panel"
-      subtitle="KPIs, queues, and analytics — hybrid deposits & withdrawals at a glance."
+      title="Analytics"
+      subtitle="KPIs, queues, and charts — hybrid deposits & withdrawals at a glance."
     >
       {loading ? (
         <Loader label="Loading control panel…" />

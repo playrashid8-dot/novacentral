@@ -115,7 +115,17 @@ export async function processDepositLog(log, iface, usersByWallet) {
     return { creditFailure: false, processedDelta: 0 };
   }
 
-  const parsed = iface.parseLog(log);
+  let parsed;
+  try {
+    parsed = iface.parseLog(log);
+  } catch (parseErr) {
+    console.error(
+      "❌ Invalid Transfer log skipped:",
+      shortTx(txHash),
+      parseErr?.message || String(parseErr)
+    );
+    return { creditFailure: false, processedDelta: 0 };
+  }
   const amount = Number(formatUnits(parsed.args.value, HYBRID_TOKEN.decimals));
 
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -166,6 +176,7 @@ async function executeDepositScan(
   const quiet = scanOptions.quiet === true;
   const skipProbe = scanOptions.skipProbe === true;
   const isManualRescan = scanOptions.isManualRescan === true;
+  const logEmptyOnZero = scanOptions.logEmptyOnZero === true;
   if (scanOptions.backupScanTriggered === true) {
     console.log("🛟 Backup scan running...");
   }
@@ -227,6 +238,12 @@ async function executeDepositScan(
   let fromBlock = manualExplicitRange
     ? Math.max(Number(fromBlockOverride), 0)
     : Math.max(storedBlock + 1, SAFE_START_BLOCK);
+
+  const REORG_BUFFER = 5;
+  if (fromBlock !== null) {
+    fromBlock = Math.max(0, fromBlock - REORG_BUFFER);
+  }
+
   if (fromBlock > latestBlock) {
     if (!quiet) {
       console.log("Deposit listener up to date");
@@ -260,12 +277,20 @@ async function executeDepositScan(
         })
       );
 
+    const processedBeforeChunk = processed;
+
     try {
       logs = await fetchChunkLogs();
     } catch (err) {
-      console.log("❌ ERROR:", err?.message || String(err));
-      await new Promise((r) => setTimeout(r, 3000));
-      continue;
+      console.log("❌ RPC failed — retrying...");
+      await new Promise((r) => setTimeout(r, 2000));
+      try {
+        logs = await fetchChunkLogs();
+      } catch (err2) {
+        console.log("❌ ERROR:", err2?.message || String(err2));
+        await new Promise((r) => setTimeout(r, 3000));
+        continue;
+      }
     }
 
     if (logs.length === 0) {
@@ -350,7 +375,6 @@ async function executeDepositScan(
             blockNumber: sLog.blockNumber,
           });
           if (job) {
-            console.log("📦 Recovery job queued:", txHash);
             processed += 1;
           }
         } catch (err) {
@@ -360,6 +384,10 @@ async function executeDepositScan(
       }
     } else if (!quiet) {
       console.log("Deposit listener found no recipient addresses");
+    }
+
+    if (logs.length > 0 && processed === processedBeforeChunk) {
+      console.log("🚨 Logs found but no deposits processed");
     }
 
     logs = null;
@@ -399,6 +427,10 @@ async function executeDepositScan(
     fromBlock = toBlock + 1;
   }
 
+  if (processed === 0 && (!quiet || logEmptyOnZero)) {
+    console.log("🚨 No deposits found — possible miss or already processed");
+  }
+
   return { skipped: false, processed };
 }
 
@@ -407,6 +439,22 @@ export const scanHybridDeposits = async (
   toBlockOverride = null,
   options = null
 ) => {
+  let from = fromBlockOverride;
+  let to = toBlockOverride;
+  let optIn = options;
+  /** Reject accidental scanHybridDeposits({ blocks: N }) — normalize to (null, null, opts). */
+  if (
+    from != null &&
+    typeof from === "object" &&
+    !Array.isArray(from) &&
+    toBlockOverride == null &&
+    (options === null || options === undefined)
+  ) {
+    optIn = /** @type {Record<string, unknown>} */ (from);
+    from = null;
+    to = null;
+  }
+
   warnIfHybridEarnEnvInvalid();
 
   if (!isHybridEarnEnabled()) {
@@ -429,10 +477,10 @@ export const scanHybridDeposits = async (
     return { skipped: true };
   }
 
-  const opts = options && typeof options === "object" ? options : {};
+  const opts = optIn && typeof optIn === "object" ? optIn : {};
   const backupSpanRaw = opts.backupBlocks ?? opts.blocks;
-  let resolvedFrom = fromBlockOverride;
-  let resolvedTo = toBlockOverride;
+  let resolvedFrom = from;
+  let resolvedTo = to;
   const { backupBlocks: _bb, blocks: _b, ...restScanOpts } = opts;
   let scanOpts = { ...restScanOpts };
 

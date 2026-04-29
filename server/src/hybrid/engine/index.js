@@ -23,10 +23,13 @@ import hybridConfig from "../../config/hybridConfig.js";
 import { Wallet, parseEther, formatEther } from "ethers";
 
 let hybridTimer = null;
+let deepScanTimer = null;
 let sweepTimer = null;
 let claimableTimer = null;
 let healthTimer = null;
 let sweepRunning = false;
+
+const BASE_SCAN = 300;
 
 const logHybridBootstrapStatus = async () => {
   warnIfHybridEarnEnvInvalid();
@@ -94,6 +97,8 @@ const logHybridBootstrapStatus = async () => {
 
   const wsActive = isHybridWebSocketRealtimeActive();
   const workerProcessingOk = queueOk;
+  const workerRunningOk = workerProcessingOk;
+  const deepScanOk = deepScanTimer != null;
 
   const systemStable =
     rpcOk &&
@@ -109,6 +114,7 @@ const logHybridBootstrapStatus = async () => {
   );
   console.log(`Realtime Listener: ${realtimeOk ? "✅" : "❌"}`);
   console.log(`Backup Scan: ${backupScanOk ? "✅" : "❌"}`);
+  console.log(`Deep Scan: ${deepScanOk ? "✅" : "❌"}`);
   console.log(`Recovery Active: ${recoveryOk ? "✅" : "❌"}`);
   console.log(`Fallback Used: ${getRpcFallbackUsed() ? "Yes" : "No"}`);
   console.log(`Auto Reconnect: ${autoReconnectOk ? "✅" : "❌"}`);
@@ -123,13 +129,15 @@ const logHybridBootstrapStatus = async () => {
   console.log("");
   console.log("🔥 FINAL STATUS:");
   console.log(`RPC Connected: ${rpcOk ? "✅" : "❌"}`);
-  console.log(`Realtime Listener: ${listenerLabel}`);
+  console.log(`Listener Active: ${listenerLabel}`);
   console.log(`Backup Scan: ${backupScanOk ? "✅" : "❌"}`);
+  console.log(`Deep Scan: ${deepScanOk ? "✅" : "❌"}`);
   console.log(`Recovery Active: ${recoveryOk ? "✅" : "❌"}`);
   console.log(`WebSocket Active: ${wsActive ? "✅" : wsConfigured ? "❌" : "❌ (not configured)"}`);
   console.log(`Users Loaded: ${userMap.size}`);
   console.log(`Deposit Detection: ${depositDetectOk ? "✅" : "❌"}`);
   console.log(`Queue Working: ${queueOk ? "✅" : "❌"}`);
+  console.log(`Worker Running: ${workerRunningOk ? "✅" : "❌"}`);
   console.log(`Worker Processing: ${workerProcessingOk ? "✅" : "❌"}`);
   console.log(`Duplicate Safe: ${duplicateProtectionOk ? "✅" : "❌"}`);
   console.log(`System Ready: ${systemStable ? "✅" : "❌"}`);
@@ -221,11 +229,13 @@ export const startDepositListener = () => {
 
   hybridTimer = setInterval(async () => {
     try {
-      console.log("🛟 Auto recovery scan running...");
-      const result = await scanHybridDeposits(null, null, { blocks: 2000 });
-      if (result && result.skipped === false && result.processed === 0) {
-        console.log("⚠️ No deposits found — expanding scan range");
-        await scanHybridDeposits(null, null, { blocks: 5000 });
+      console.log("🚨 Recovery triggered — possible missed deposit");
+      let dynamicScan = BASE_SCAN;
+      const result = await scanHybridDeposits(null, null, { blocks: BASE_SCAN });
+      if (!result?.skipped && result?.processed === 0) {
+        dynamicScan = 2000;
+        console.log("⚠️ Expanding scan window:", dynamicScan);
+        await scanHybridDeposits(null, null, { blocks: dynamicScan });
       }
     } catch (error) {
       console.error(
@@ -234,6 +244,15 @@ export const startDepositListener = () => {
       );
     }
   }, 60000);
+
+  deepScanTimer = setInterval(async () => {
+    try {
+      console.log("🔎 Deep recovery scan running...");
+      await scanHybridDeposits(null, null, { blocks: 5000 });
+    } catch (e) {
+      console.error("❌ Deep scan failed:", e?.message || String(e));
+    }
+  }, 600000);
 
   runSweepEngine();
   sweepTimer = setInterval(runSweepEngine, sweepEngineMs);
@@ -255,12 +274,12 @@ export const startDepositListener = () => {
 
   if (!healthTimer) {
     healthTimer = setInterval(() => {
-      console.log("💚 Hybrid system alive");
+      console.log("💚 Hybrid alive | users:", userMap.size);
     }, 60000);
   }
 
   console.log(
-    `HYBRID engine started (auto recovery scan 60000ms / 2000 blocks tail + optional 5000 expand, sweep ${sweepEngineMs}ms, claimable ${claimableMs}ms)`
+    `HYBRID engine started (auto recovery 60000ms: ${BASE_SCAN}→2000 adaptive + deep scan 600000ms/5000 blocks, sweep ${sweepEngineMs}ms, claimable ${claimableMs}ms)`
   );
 
   void logHybridBootstrapStatus();

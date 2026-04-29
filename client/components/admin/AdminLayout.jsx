@@ -75,7 +75,8 @@ export async function adminFetch(path, options = {}) {
 }
 
 const navItems = [
-  { label: "Dashboard", href: "/admin/dashboard" },
+  { label: "Overview", href: "/admin" },
+  { label: "Analytics", href: "/admin/dashboard" },
   { label: "Deposits", href: "/admin/deposits" },
   { label: "Withdrawals", href: "/admin/withdrawals" },
   { label: "Users", href: "/admin/users" },
@@ -189,7 +190,7 @@ export default function AdminLayout({ title, subtitle, children }) {
         {navItems.map((item) => {
           const active =
             pathname === item.href ||
-            (item.href === "/admin/dashboard" && pathname === "/admin");
+            (item.href === "/admin" && (pathname === "/admin" || pathname === "/admin/"));
 
           return (
             <Link
