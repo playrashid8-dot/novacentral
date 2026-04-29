@@ -3,6 +3,7 @@ import User from "../../models/User.js";
 import HybridDeposit from "../models/HybridDeposit.js";
 import HybridSetting from "../models/HybridSetting.js";
 import { creditHybridDeposit } from "./depositService.js";
+import { enqueueDepositJob } from "../../queue/depositQueue.js";
 import { BSC_USDT_ABI, HYBRID_TOKEN, MIN_HYBRID_DEPOSIT } from "../utils/constants.js";
 import { getProvider, getRpcUrls, withProviderRetry } from "../utils/provider.js";
 
@@ -14,7 +15,7 @@ const SAFE_LOOKBACK_BLOCKS = 3000;
 /** BSC RPCs often reject eth_getLogs over large spans — keep chunks bounded */
 const CHUNK_SIZE = 200;
 /** Reorg / fake-log safety: always ≥ 2 (see business rules) */
-const CONFIRMATIONS = 3;
+export const CONFIRMATIONS = 3;
 
 /** Canonical BSC mainnet USDT — mismatch suggests misconfigured HYBRID_USDT_CONTRACT */
 const BSC_MAINNET_USDT = "0x55d398326f99059ff775485246999027b3197955";
@@ -75,7 +76,7 @@ const saveLastProcessedBlock = async (blockNumber) => {
  * Single-log processing (sequential await per log — no in-memory batch accumulation).
  * @returns {{ creditFailure: boolean, processedDelta: number }}
  */
-async function processDepositLog(log, iface, usersByWallet) {
+export async function processDepositLog(log, iface, usersByWallet) {
   const txHash = String(log.transactionHash || "").toLowerCase();
   const toAddress = decodeTopicAddress(log.topics?.[2]).toLowerCase();
   const fromAddress = decodeTopicAddress(log.topics?.[1]).toLowerCase();
@@ -148,7 +149,13 @@ async function processDepositLog(log, iface, usersByWallet) {
   return { creditFailure: false, processedDelta: 1 };
 }
 
-async function executeDepositScan(fromBlockOverride, toBlockOverride) {
+async function executeDepositScan(
+  fromBlockOverride,
+  toBlockOverride,
+  scanOptions = {}
+) {
+  const quiet = scanOptions.quiet === true;
+  const skipProbe = scanOptions.skipProbe === true;
   getProvider();
   const usdtContractNorm = String(process.env.HYBRID_USDT_CONTRACT || "")
     .trim()
@@ -156,8 +163,6 @@ async function executeDepositScan(fromBlockOverride, toBlockOverride) {
   if (!usdtContractNorm || usdtContractNorm !== BSC_MAINNET_USDT) {
     console.warn("⚠️ HYBRID_USDT_CONTRACT should be BSC USDT:", BSC_MAINNET_USDT, "got:", usdtContractNorm || "(empty)");
   }
-  const iface = new Interface(BSC_USDT_ABI);
-  const isManualRescan = fromBlockOverride !== null || toBlockOverride !== null;
   let chainTip;
   let latestBlock;
   if (toBlockOverride !== null) {
@@ -168,22 +173,26 @@ async function executeDepositScan(fromBlockOverride, toBlockOverride) {
     latestBlock = Math.max(0, chainTip - CONFIRMATIONS);
   }
 
-  try {
-    const USDT_CONTRACT = String(process.env.HYBRID_USDT_CONTRACT || "").trim();
-    if (USDT_CONTRACT) {
-      const diagFrom = Math.max(0, chainTip - 50);
-      const probeLogs = await withProviderRetry((provider) =>
-        provider.getLogs({
-          address: USDT_CONTRACT,
-          fromBlock: diagFrom,
-          toBlock: chainTip,
-          topics: [TRANSFER_TOPIC],
-        })
-      );
-      console.log("📊 Logs count:", probeLogs.length);
+  if (!skipProbe) {
+    try {
+      const USDT_CONTRACT = String(process.env.HYBRID_USDT_CONTRACT || "").trim();
+      if (USDT_CONTRACT) {
+        const diagFrom = Math.max(0, chainTip - 50);
+        const probeLogs = await withProviderRetry((provider) =>
+          provider.getLogs({
+            address: USDT_CONTRACT,
+            fromBlock: diagFrom,
+            toBlock: chainTip,
+            topics: [TRANSFER_TOPIC],
+          })
+        );
+        if (!quiet) {
+          console.log("📊 Logs count:", probeLogs.length);
+        }
+      }
+    } catch (probeErr) {
+      console.error("❌ ERROR:", probeErr?.message || String(probeErr));
     }
-  } catch (probeErr) {
-    console.error("❌ ERROR:", probeErr?.message || String(probeErr));
   }
 
   const SAFE_START_BLOCK = Math.max(0, chainTip - SAFE_LOOKBACK_BLOCKS);
@@ -196,11 +205,13 @@ async function executeDepositScan(fromBlockOverride, toBlockOverride) {
 
   let fromBlock = Math.max(storedBlock + 1, SAFE_START_BLOCK);
   if (fromBlock > latestBlock) {
-    console.log("Deposit listener up to date");
+    if (!quiet) {
+      console.log("Deposit listener up to date");
+    }
     return { skipped: false, processed: 0 };
   }
 
-  if (latestBlock - fromBlock > 5000) {
+  if (!quiet && latestBlock - fromBlock > 5000) {
     console.log("⚠️ Large block range, splitting...");
   }
 
@@ -210,7 +221,9 @@ async function executeDepositScan(fromBlockOverride, toBlockOverride) {
     const toBlock = Math.min(latestBlock, fromBlock + CHUNK_SIZE - 1);
     let chunkHadCreditFailure = false;
 
-    console.log("Hybrid deposit scan");
+    if (!quiet) {
+      console.log("Hybrid deposit scan");
+    }
 
     let logs = [];
 
@@ -229,8 +242,10 @@ async function executeDepositScan(fromBlockOverride, toBlockOverride) {
       continue;
     }
 
-    console.log("📊 Logs count:", logs.length);
-    if (logs.length === 0) {
+    if (!quiet) {
+      console.log("📊 Logs count:", logs.length);
+    }
+    if (!quiet && logs.length === 0) {
       console.log("Deposit listener: no Transfer logs in this chunk (may still advance checkpoint)");
     }
 
@@ -249,26 +264,44 @@ async function executeDepositScan(fromBlockOverride, toBlockOverride) {
         },
       }).select("_id walletAddress");
 
-      console.log("👤 Users loaded:", users.length);
+      if (!quiet) {
+        console.log("👤 Users loaded:", users.length);
+      }
 
       const usersByWallet = new Map(
         users.map((user) => [(user.walletAddress || "").toLowerCase(), user])
       );
 
-      console.log("Deposit listener wallet match summary:", {
-        depositWallets: toAddresses.length,
-        matchedUsers: users.length,
-      });
+      if (!quiet) {
+        console.log("Deposit listener wallet match summary:", {
+          depositWallets: toAddresses.length,
+          matchedUsers: users.length,
+        });
+      }
 
       for (const log of logs) {
-        const r = await processDepositLog(log, iface, usersByWallet);
-        if (r.creditFailure) {
-          chunkHadCreditFailure = true;
+        const toAddress = decodeTopicAddress(log.topics?.[2]).toLowerCase();
+        const matchedUser = usersByWallet.get(toAddress);
+
+        if (!matchedUser) {
           continue;
         }
-        processed += r.processedDelta;
+
+        try {
+          await enqueueDepositJob({
+            txHash: log.transactionHash,
+            from: log.topics[1],
+            to: log.topics[2],
+            amount: log.data,
+            blockNumber: log.blockNumber,
+          });
+          processed += 1;
+        } catch (err) {
+          console.error("❌ ERROR:", err?.message || String(err));
+          chunkHadCreditFailure = true;
+        }
       }
-    } else {
+    } else if (!quiet) {
       console.log("Deposit listener found no recipient addresses");
     }
 
@@ -276,7 +309,9 @@ async function executeDepositScan(fromBlockOverride, toBlockOverride) {
     if (global.gc) {
       global.gc();
     }
-    console.log("🧠 Memory:", process.memoryUsage().heapUsed / 1024 / 1024, "MB");
+    if (!quiet) {
+      console.log("🧠 Memory:", process.memoryUsage().heapUsed / 1024 / 1024, "MB");
+    }
     await new Promise((r) => setTimeout(r, 150));
 
     if (chunkHadCreditFailure) {
@@ -289,12 +324,16 @@ async function executeDepositScan(fromBlockOverride, toBlockOverride) {
 
     if (!isManualRescan) {
       if (toBlock > latestBlock) {
-        console.log("Skipping invalid block range (checkpoint)");
+        if (!quiet) {
+          console.log("Skipping invalid block range (checkpoint)");
+        }
         break;
       }
       try {
         await saveLastProcessedBlock(toBlock);
-        console.log("Checkpoint saved:", toBlock);
+        if (!quiet) {
+          console.log("Checkpoint saved:", toBlock);
+        }
       } catch (err) {
         console.error("❌ ERROR:", err?.message || String(err));
       }
@@ -306,7 +345,11 @@ async function executeDepositScan(fromBlockOverride, toBlockOverride) {
   return { skipped: false, processed };
 }
 
-export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverride = null) => {
+export const scanHybridDeposits = async (
+  fromBlockOverride = null,
+  toBlockOverride = null,
+  options = null
+) => {
   if (
     !isEnabled(process.env.HYBRID_EARN_ENABLED) ||
     getRpcUrls().length === 0 ||
@@ -314,6 +357,26 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
   ) {
     console.log("Deposit listener skipped: missing config or disabled");
     return { skipped: true };
+  }
+
+  const opts = options && typeof options === "object" ? options : {};
+  const backupSpanRaw = opts.backupBlocks ?? opts.blocks;
+  let resolvedFrom = fromBlockOverride;
+  let resolvedTo = toBlockOverride;
+  let scanOpts = {};
+
+  if (
+    resolvedFrom == null &&
+    resolvedTo == null &&
+    backupSpanRaw != null &&
+    Number.isFinite(Number(backupSpanRaw))
+  ) {
+    const chainTip = await withProviderRetry((p) => p.getBlockNumber());
+    const latestBlock = Math.max(0, chainTip - CONFIRMATIONS);
+    const span = Math.max(1, Number(backupSpanRaw) || 50);
+    resolvedFrom = Math.max(0, latestBlock - (span - 1));
+    resolvedTo = latestBlock;
+    scanOpts = { quiet: true, skipProbe: true };
   }
 
   if (isScanning) {
@@ -324,7 +387,7 @@ export const scanHybridDeposits = async (fromBlockOverride = null, toBlockOverri
   isScanning = true;
 
   try {
-    return await executeDepositScan(fromBlockOverride, toBlockOverride);
+    return await executeDepositScan(resolvedFrom, resolvedTo, scanOpts);
   } catch (err) {
     console.log("❌ ERROR:", err?.message || String(err));
     await new Promise((r) => setTimeout(r, 3000));

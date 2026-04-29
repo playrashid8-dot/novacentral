@@ -2,17 +2,21 @@ import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { createUserWallet } from "../hybrid/services/walletService.js";
+import { addUserToHybridDepositRealtimeMap } from "../hybrid/services/userMap.js";
 import { updateUserLevel } from "../hybrid/services/levelService.js";
 
 const TOKEN_COOKIE_NAME = "token";
 
 const getCookieOptions = () => {
-  const isProd = process.env.NODE_ENV === "production";
+  const isProd =
+    process.env.NODE_ENV === "production" ||
+    process.env.RAILWAY_ENVIRONMENT === "production";
 
   return {
     httpOnly: true,
     secure: isProd,
     sameSite: isProd ? "none" : "lax",
+    path: "/",
   };
 };
 
@@ -133,6 +137,11 @@ export const register = async (req, res) => {
       privateKey: wallet.privateKey,
     });
 
+    addUserToHybridDepositRealtimeMap({
+      _id: user._id,
+      walletAddress: String(user.walletAddress).toLowerCase(),
+    });
+
     if (refUser) {
       await bumpTeamCounts(refUser._id);
     }
@@ -242,7 +251,9 @@ export const login = async (req, res) => {
 };
 
 export const logout = async (req, res) => {
-  const isProd = process.env.NODE_ENV === "production";
+  const isProd =
+    process.env.NODE_ENV === "production" ||
+    process.env.RAILWAY_ENVIRONMENT === "production";
   const clearOptions = {
     httpOnly: true,
     secure: isProd,

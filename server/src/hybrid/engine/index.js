@@ -1,20 +1,27 @@
 import { scanHybridDeposits } from "../services/depositListener.js";
 import { runHybridSweepBatch, canSweepHybridFunds } from "../services/sweepService.js";
 import { autoMarkClaimable } from "../services/withdrawService.js";
-import { checkRpcHealth, getCurrentRpcUrl, getProvider } from "../utils/provider.js";
+import {
+  checkRpcHealth,
+  getCurrentRpcUrl,
+  getProvider,
+  getRpcUrls,
+} from "../utils/provider.js";
+import { isHybridRealtimeListenerStarted } from "../listeners/realtimeListener.js";
 import hybridConfig from "../../config/hybridConfig.js";
 import { Wallet, parseEther, formatEther } from "ethers";
 
 let hybridTimer = null;
 let sweepTimer = null;
 let claimableTimer = null;
-let isRunning = false;
+let healthTimer = null;
 let sweepRunning = false;
 
 const isEnabled = (value) => String(value).toLowerCase() === "true";
 
 const logHybridBootstrapStatus = async () => {
-  const listenerOk = hybridTimer != null;
+  const backupScanOk = hybridTimer != null;
+  const realtimeOk = isHybridRealtimeListenerStarted();
   const rpcOk = await checkRpcHealth();
   const usdt = String(process.env.HYBRID_USDT_CONTRACT || "").trim().toLowerCase();
   const contractOk = usdt === "0x55d398326f99059ff775485246999027b3197955";
@@ -45,8 +52,31 @@ const logHybridBootstrapStatus = async () => {
   const depositDetectOk =
     rpcOk && contractOk && isEnabled(process.env.HYBRID_EARN_ENABLED);
   const creditOk = isEnabled(process.env.HYBRID_EARN_ENABLED);
+  const systemStable = rpcOk && contractOk;
+  const wsConfigured = Boolean(String(process.env.HYBRID_BSC_WS_URL || "").trim());
+  /** WS module implements close/error → destroy + delay + resubscribe */
+  const autoReconnectOk =
+    creditOk &&
+    rpcOk &&
+    contractOk &&
+    wsConfigured &&
+    realtimeOk;
+  const recoveryOk =
+    creditOk &&
+    rpcOk &&
+    contractOk &&
+    getRpcUrls().length > 0 &&
+    Boolean(String(process.env.HYBRID_USDT_CONTRACT || "").trim());
+  const duplicateProtectionOk =
+    creditOk &&
+    rpcOk &&
+    Boolean(String(process.env.HYBRID_USDT_CONTRACT || "").trim());
 
-  console.log(`Listener Running: ${listenerOk ? "✅" : "❌"}`);
+  console.log(`Realtime Listener: ${realtimeOk ? "✅" : "❌"}`);
+  console.log(`Auto Reconnect: ${autoReconnectOk ? "✅" : "❌"}`);
+  console.log(`Recovery Working: ${recoveryOk ? "✅" : "❌"}`);
+  console.log(`Backup Polling: ${backupScanOk ? "✅" : "❌"}`);
+  console.log(`Duplicate Protection: ${duplicateProtectionOk ? "✅" : "❌"}`);
   console.log(
     `RPC Working: ${rpcOk ? "✅" : "❌"}${rpcOk && getCurrentRpcUrl() ? ` (${getCurrentRpcUrl()})` : ""}`
   );
@@ -54,30 +84,17 @@ const logHybridBootstrapStatus = async () => {
   console.log(`Credit System: ${creditOk ? "✅" : "❌"}`);
   console.log(`Gas Transfer: ${gasOk ? "✅" : "❌"}`);
   console.log(`Sweep: ${sweepReady ? "✅" : "❌"}`);
-};
+  console.log(`System Stable: ${systemStable ? "✅" : "❌"}`);
 
-const runListener = async () => {
-  console.log("🔁 Listener tick...");
+  const systemReady =
+    realtimeOk &&
+    autoReconnectOk &&
+    recoveryOk &&
+    backupScanOk &&
+    duplicateProtectionOk &&
+    systemStable;
 
-  if (isRunning) {
-    console.log("🔁 Polling active: previous deposit scan still running");
-    return;
-  }
-
-  isRunning = true;
-
-  try {
-    console.log("🔁 Polling active...");
-    const result = await scanHybridDeposits();
-
-    if (!result?.skipped) {
-      console.log(`HYBRID listener processed ${result.processed || 0} deposits`);
-    }
-  } catch (error) {
-    console.error("❌ ERROR:", error?.message || String(error));
-  } finally {
-    isRunning = false;
-  }
+  console.log(`🔥 FINAL STATUS:\nSYSTEM READY: ${systemReady ? "✅" : "❌"}`);
 };
 
 const runSweepEngine = async () => {
@@ -103,6 +120,25 @@ const runSweepEngine = async () => {
   }
 };
 
+/**
+ * Full incremental scan from HybridSetting checkpoint → chain tip (shared with polling backup).
+ * Called once after DB connects so restarts cannot miss credited blocks.
+ */
+export async function runHybridStartupRecovery() {
+  if (!isEnabled(process.env.HYBRID_EARN_ENABLED)) {
+    return;
+  }
+  if (getRpcUrls().length === 0 || !String(process.env.HYBRID_USDT_CONTRACT || "").trim()) {
+    return;
+  }
+  try {
+    console.log("🔄 Missed deposit recovery (checkpoint → chain tip)...");
+    await scanHybridDeposits(null, null, { quiet: true, skipProbe: true });
+  } catch (err) {
+    console.error("❌ ERROR:", err?.message || String(err));
+  }
+}
+
 export const startDepositListener = () => {
   if (!isEnabled(process.env.HYBRID_EARN_ENABLED)) {
     console.log("HYBRID engine disabled");
@@ -113,17 +149,19 @@ export const startDepositListener = () => {
     return;
   }
 
-  const depositScanMs = Number(
-    process.env.HYBRID_DEPOSIT_SCAN_INTERVAL_MS ||
-      process.env.HYBRID_SWEEP_INTERVAL_MS ||
-      30000
-  );
   const sweepEngineMs = Number(process.env.HYBRID_SWEEP_ENGINE_INTERVAL_MS || 60000);
 
-  console.log("🚀 Deposit listener started");
+  console.log("⚠️ Polling disabled — using real-time listener");
 
-  runListener();
-  hybridTimer = setInterval(runListener, depositScanMs);
+  hybridTimer = setInterval(async () => {
+    console.log("🛟 Backup scan running...");
+
+    try {
+      await scanHybridDeposits(null, null, { blocks: 50 });
+    } catch (error) {
+      console.error("❌ ERROR:", error?.message || String(error));
+    }
+  }, 120000);
 
   runSweepEngine();
   sweepTimer = setInterval(runSweepEngine, sweepEngineMs);
@@ -143,8 +181,14 @@ export const startDepositListener = () => {
   void runAutoClaimable();
   claimableTimer = setInterval(runAutoClaimable, claimableMs);
 
+  if (!healthTimer) {
+    healthTimer = setInterval(() => {
+      console.log("💚 System alive:", process.pid);
+    }, 60000);
+  }
+
   console.log(
-    `HYBRID engine started (deposit scan ${depositScanMs}ms, sweep ${sweepEngineMs}ms, claimable ${claimableMs}ms)`
+    `HYBRID engine started (deposit backup scan 120000ms, sweep ${sweepEngineMs}ms, claimable ${claimableMs}ms)`
   );
 
   void logHybridBootstrapStatus();

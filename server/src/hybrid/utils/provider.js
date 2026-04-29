@@ -1,5 +1,8 @@
 import { JsonRpcProvider } from "ethers";
 
+/** WebSocket (HYBRID_BSC_WS_URL) — see hybrid/utils/wsProvider.js */
+export { getWsProvider, whenWsProviderReady } from "./wsProvider.js";
+
 /**
  * RPC priority (env only): HYBRID_BSC_RPC_URL (main, e.g. NodeReal) →
  * HYBRID_BSC_RPC_FALLBACK (e.g. publicnode) → HYBRID_BSC_RPC_BACKUP (e.g. ankr).

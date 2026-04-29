@@ -20,7 +20,8 @@ import adminRoutes from "./routes/adminRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import historyRoutes from "./routes/historyRoutes.js";
 import { roiRoutes, salaryRoutes, stakingRoutes, withdrawRoutes, hybridDepositRoutes } from "./hybrid/routes/index.js";
-import { startHybridEngine } from "./hybrid/engine/index.js";
+import { startHybridEngine, runHybridStartupRecovery } from "./hybrid/engine/index.js";
+import { startRealtimeListener } from "./hybrid/listeners/realtimeListener.js";
 
 // 🔧 CONFIG
 dotenv.config();
@@ -31,7 +32,9 @@ if (!process.env.JWT_SECRET) {
 
 const app = express();
 
-const isProd = process.env.NODE_ENV === "production";
+const isProd =
+  process.env.NODE_ENV === "production" ||
+  process.env.RAILWAY_ENVIRONMENT === "production";
 
 const csrfProtection = csrf({
   cookie: {
@@ -41,23 +44,29 @@ const csrfProtection = csrf({
   },
 });
 
+/** Browsers send Origin without a trailing slash — never require "/" on configured hosts. */
+function normalizeCorsOrigin(origin) {
+  if (!origin) return "";
+  return String(origin).replace(/\/$/, "");
+}
+
+const corsAllowedOrigins = new Set([
+  "https://hybridearn.com",
+  "https://www.hybridearn.com",
+  "http://localhost:3000",
+  "https://novacentral.vercel.app",
+]);
+
+for (const part of (process.env.ALLOWED_ORIGINS || "").split(",")) {
+  const o = normalizeCorsOrigin(part.trim());
+  if (o) corsAllowedOrigins.add(o);
+}
+
 function isCorsOriginAllowed(origin) {
   if (!origin) return true;
-
-  const allowedOrigins = [
-    "http://localhost:3000",
-    "https://novacentral.vercel.app",
-    ...(process.env.ALLOWED_ORIGINS || "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean),
-  ];
-
-  if (allowedOrigins.includes(origin)) return true;
-
-  // allow all Vercel preview deployments (https://*.vercel.app)
-  if (origin.endsWith(".vercel.app")) return true;
-
+  const n = normalizeCorsOrigin(origin);
+  if (corsAllowedOrigins.has(n)) return true;
+  if (n.endsWith(".vercel.app")) return true;
   return false;
 }
 
@@ -97,6 +106,14 @@ app.set("trust proxy", 1);
 ============================== */
 await connectDB();
 
+/**
+ * infra: NOVA_SERVICE=api → stateless HTTP only (scaled behind LB).
+ * NOVA_SERVICE=hybrid → run src/hybridService.js (not this file) for WS + engine.
+ * default / all → full monolith including hybrid listeners (backward compatible).
+ */
+const novaService = (process.env.NOVA_SERVICE ?? "all").trim().toLowerCase();
+const hybridStackEnabled = novaService !== "api" && novaService !== "hybrid";
+
 process.on("uncaughtException", (err) => {
   console.log("❌ CRASH:", err?.message || String(err));
 });
@@ -126,7 +143,7 @@ app.get("/api/csrf-token", (req, res) => {
     httpOnly: false,
     secure: isProd,
     sameSite: isProd ? "none" : "lax",
-    path: "/", // ensure global access
+    path: "/",
   });
 
   res.json({
@@ -245,8 +262,16 @@ app.use((err, req, res, next) => {
 ============================== */
 const PORT = process.env.PORT || 5000;
 
-startHybridEngine();
+if (hybridStackEnabled) {
+  await startRealtimeListener();
+  await runHybridStartupRecovery();
+  startHybridEngine();
+}
 
 app.listen(PORT, () => {
+  console.log("💚 System alive:", process.pid);
   console.log(`🔥 Server running on port ${PORT}`);
+  if (!hybridStackEnabled) {
+    console.log(`📦 NOVA_SERVICE=${novaService} — hybrid stack disabled here (listener runs in src/hybridService.js)`);
+  }
 });
