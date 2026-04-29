@@ -1,6 +1,7 @@
 import axios from "axios";
 
 import { showSafeToast } from "./toast";
+import { devWarn } from "./devWarn";
 
 /**
  * Axios base URL must end with `/api` so `/auth/*` and `/csrf-token` resolve correctly.
@@ -33,10 +34,6 @@ async function getCSRF(force = false) {
 
   const res = await API.get("/csrf-token");
   csrfToken = res.data?.data?.csrfToken ?? res.data?.csrfToken ?? null;
-
-  if (csrfToken) {
-    console.log("🔐 CSRF Token:", csrfToken);
-  }
 
   return csrfToken;
 }
@@ -144,7 +141,7 @@ API.interceptors.response.use(
       !cfg._csrfRetry &&
       ["post", "put", "patch", "delete"].includes(method)
     ) {
-      console.log("🔄 CSRF retry...");
+      devWarn("CSRF retry");
       csrfToken = null;
       cfg._csrfRetry = true;
       const token = await getCSRF(true);
@@ -176,10 +173,10 @@ API.interceptors.response.use(
     }
 
     if (status === 400) {
-      console.warn("⚠️ Bad Request:", data?.msg || data?.message);
+      devWarn("Bad Request:", data?.msg || data?.message);
     }
     if (status >= 500) {
-      console.error("🔥 Server Error:", data);
+      devWarn("Server error:", data?.msg || data?.message);
     }
 
     const apiMsg =

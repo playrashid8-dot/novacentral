@@ -138,7 +138,7 @@ export default function TeamPage() {
 
   return (
     <ProtectedRoute>
-      <PageWrapper loading={loadingPage && !user} data={user?._id} useSkeletonLoading emptyText="No data available">
+      <PageWrapper loading={loadingPage && !user} data={user?._id} emptyText="No data available">
         <TeamContent
           loadingPage={loadingPage}
           loadingStats={loadingStats}

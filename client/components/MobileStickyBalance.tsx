@@ -21,7 +21,7 @@ function MobileStickyBalanceInner() {
       const stake = Number(h?.activeStakeAmount ?? 0);
       setBalance(dep + rew + stake);
     } catch {
-      setBalance(null);
+      setBalance(0);
     } finally {
       setLoading(false);
     }

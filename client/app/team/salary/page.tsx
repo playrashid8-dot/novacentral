@@ -132,7 +132,7 @@ export default function TeamSalaryPage() {
 
   return (
     <ProtectedRoute>
-      <PageWrapper loading={loading} data={user?._id} useSkeletonLoading emptyText="No data available">
+      <PageWrapper loading={loading} data={user?._id} emptyText="No data available">
         <div className="relative w-full max-w-full overflow-x-hidden px-1 pb-8 text-white sm:px-0 sm:pb-10">
           <AppToast message={toast} />
 

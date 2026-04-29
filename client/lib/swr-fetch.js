@@ -1,4 +1,5 @@
 import API, { normalize } from "./api";
+import { devWarn } from "./devWarn";
 import { fetchCurrentUser } from "./session";
 import { fetchHybridSummary } from "./hybrid";
 
@@ -20,7 +21,7 @@ export async function safeFetch(fn) {
   try {
     return await fn();
   } catch (err) {
-    console.warn("API fallback:", err?.message);
+    devWarn("API fallback:", err?.message);
     return null;
   }
 }

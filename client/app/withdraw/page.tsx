@@ -93,7 +93,7 @@ export default function WithdrawPage() {
         if (hybridData) setHybrid(hybridData);
         if (Array.isArray(withdrawalData)) setWithdrawals(withdrawalData);
       } else {
-        setHybrid(hybridData);
+        if (hybridData) setHybrid(hybridData);
         setWithdrawals(withdrawalData || []);
       }
     } catch (e: any) {
@@ -177,7 +177,6 @@ export default function WithdrawPage() {
       setWithdrawPassword("");
       await loadHybrid(true);
     } catch (err: any) {
-      console.error("❌ Withdraw API error:", err);
       const msg = formatWithdrawSubmitError(err, getApiErrorMessage(err, "Request failed"));
       setSubmitError(msg);
       if (!suppressDuplicateCatchToast(err)) {

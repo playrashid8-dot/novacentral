@@ -8,7 +8,7 @@ import { fetchHybridSummary, fetchHybridWithdrawals } from "../../lib/hybrid";
 import { logout } from "../../lib/auth";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import GlassCard from "../../components/GlassCard";
-import Loader from "../../components/Loader";
+import PageSkeleton from "../../components/Skeleton";
 import EmptyState from "../../components/EmptyState";
 import StatusBadge, { tierFromHistoryItem } from "../../components/StatusBadge";
 
@@ -60,7 +60,9 @@ export default function History() {
   if (loading) {
     return (
       <ProtectedRoute>
-        <Loader />
+        <div className="w-full px-3 pb-24 pt-2 sm:px-6" aria-busy aria-label="Loading history">
+          <PageSkeleton />
+        </div>
       </ProtectedRoute>
     );
   }

@@ -33,7 +33,9 @@ export default function VIP() {
   if (loading) {
     return (
       <ProtectedRoute>
-        <PageSkeleton />
+        <div className="w-full px-3 pb-24 pt-4 sm:px-6" aria-busy aria-label="Loading VIP">
+          <PageSkeleton />
+        </div>
       </ProtectedRoute>
     );
   }
@@ -65,7 +67,7 @@ export default function VIP() {
 
   return (
     <ProtectedRoute>
-    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 text-white relative overflow-hidden bg-[#040406]">
+    <div className="relative mx-auto min-h-screen max-w-[420px] overflow-hidden px-3 pb-24 pt-6 text-white sm:px-6 bg-[#040406]">
 
       {/* 🌌 BACKGROUND */}
       <div className="absolute w-[500px] h-[500px] bg-purple-600 opacity-20 blur-[150px] top-[-150px] left-[-150px]" />
@@ -126,9 +128,10 @@ export default function VIP() {
               return (
                 <motion.div
                   key={i}
-                  whileHover={{ scale: 1.03 }}
-                  className={`p-[1px] rounded-3xl bg-gradient-to-r ${vip.color} ${
-                    current || vip.recommended ? "vip-pulse shadow-[0_0_60px_rgba(168,85,247,0.45)]" : ""
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ duration: 0.2 }}
+                  className={`rounded-3xl bg-gradient-to-r p-[1px] ${vip.color} ${
+                    current || vip.recommended ? "vip-pulse shadow-[0_0_28px_rgba(168,85,247,0.28)]" : ""
                   }`}
                 >
                   <div className="bg-[#08080d]/95 p-5 rounded-3xl backdrop-blur-2xl relative overflow-hidden">
@@ -153,10 +156,6 @@ export default function VIP() {
                       <VIPMetric label="Requirement" value={vip.requirement} />
                     </div>
 
-                    <p className="text-xs text-gray-400 mt-4">
-                      Requirement: <span className="font-bold text-white">{vip.requirement}</span>
-                    </p>
-
                     <ul className="mt-4 space-y-2">
                       {vip.benefits.map((benefit) => (
                         <li key={benefit} className="flex items-center gap-2 text-xs text-gray-300">
@@ -169,7 +168,7 @@ export default function VIP() {
                     {!unlocked && (
                       <button
                         onClick={() => router.push("/deposit")}
-                        className="mt-5 w-full bg-gradient-to-r from-[#7c3aed] via-[#a855f7] to-[#4f46e5] p-3 rounded-xl text-sm font-bold shadow-[0_0_30px_rgba(124,58,237,0.5)] hover:scale-105 hover:shadow-[0_0_42px_rgba(168,85,247,0.72)] transition-all duration-300"
+                        className="mt-5 w-full rounded-xl bg-gradient-to-r from-[#7c3aed] via-[#a855f7] to-[#4f46e5] p-3 text-sm font-bold shadow-[0_0_18px_rgba(124,58,237,0.35)] transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_26px_rgba(168,85,247,0.45)]"
                       >
                         Go to Deposit
                       </button>

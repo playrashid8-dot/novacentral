@@ -121,7 +121,6 @@ export default function Dashboard() {
       <PageWrapper
         loading={loadingPage && !user}
         data={user?._id}
-        useSkeletonLoading
         emptyText="No data available"
       >
         <div className="relative w-full max-w-full overflow-x-hidden px-1 pb-3 text-white sm:px-0">

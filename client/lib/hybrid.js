@@ -73,14 +73,6 @@ export const requestHybridWithdraw = async (payload, idempotencyKey) => {
   const response = normalize(res.data);
   const data =
     response.data && Object.keys(response.data).length ? response.data : null;
-  if (data) {
-    console.log("📥 Withdraw response:", {
-      ...data,
-      withdrawal: data.withdrawal
-        ? { ...data.withdrawal, password: undefined }
-        : undefined,
-    });
-  }
   return data;
 };
 

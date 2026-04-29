@@ -12,7 +12,7 @@ import ProgressBar from "../../components/ProgressBar";
 import CountdownTimer from "../../components/CountdownTimer";
 import { claimHybridStake, createHybridStake, fetchHybridSummary, fetchHybridStakes } from "../../lib/hybrid";
 import { getApiErrorMessage } from "../../lib/api";
-import Loader from "../../components/Loader";
+import PageSkeleton from "../../components/Skeleton";
 
 export default function Investment() {
   const router = useRouter();
@@ -123,7 +123,9 @@ export default function Investment() {
   if (pageLoading) {
     return (
       <ProtectedRoute>
-        <Loader />
+        <div className="w-full px-3 pb-24 pt-2 sm:px-6" aria-busy aria-label="Loading investment">
+          <PageSkeleton />
+        </div>
       </ProtectedRoute>
     );
   }

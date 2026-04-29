@@ -1,6 +1,5 @@
 "use client";
 
-import Loader from "./Loader";
 import EmptyState from "./EmptyState";
 import PageSkeleton from "./Skeleton";
 
@@ -10,7 +9,6 @@ import PageSkeleton from "./Skeleton";
  *   data?: unknown;
  *   skipEmpty?: boolean;
  *   emptyText?: string;
- *   useSkeletonLoading?: boolean;
  *   children: React.ReactNode;
  * }} props
  */
@@ -19,11 +17,10 @@ export default function PageWrapper({
   data,
   skipEmpty = false,
   emptyText = "No data available",
-  useSkeletonLoading = true,
   children,
 }) {
   if (loading) {
-    return useSkeletonLoading ? <PageSkeleton /> : <Loader />;
+    return <PageSkeleton />;
   }
 
   const isDataEmpty =
