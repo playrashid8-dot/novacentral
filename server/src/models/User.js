@@ -193,6 +193,17 @@ const userSchema = new mongoose.Schema(
       },
     },
 
+    salaryHistory: {
+      type: [
+        {
+          stage: { type: Number, min: 1 },
+          amount: { type: Number, min: 0 },
+          claimedAt: { type: Date },
+        },
+      ],
+      default: [],
+    },
+
     levelBonusStage: {
       type: Number,
       default: 0,
@@ -266,5 +277,6 @@ userSchema.methods.toJSON = function () {
 // 🔥 INDEXES (NO DUPLICATE)
 //
 userSchema.index({ createdAt: -1 });
+userSchema.index({ referredBy: 1, createdAt: -1 });
 
 export default mongoose.model("User", userSchema);

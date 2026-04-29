@@ -65,9 +65,25 @@ export default function AdminWithdrawalsPage() {
   }, [loadWithdrawals]);
 
   useEffect(() => {
-    const id = window.setInterval(() => void loadWithdrawals(true), 16000);
+    const id = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      void loadWithdrawals(true);
+    }, 16000);
     return () => clearInterval(id);
   }, [loadWithdrawals]);
+
+  const statusSummary = useMemo(() => {
+    let pending = 0;
+    let approved = 0;
+    let completed = 0;
+    for (const w of withdrawals) {
+      const s = String(w.status || "").toLowerCase();
+      if (s === "pending" || s === "claimable") pending += 1;
+      else if (s === "approved") approved += 1;
+      else if (s === "paid" || s === "claimed") completed += 1;
+    }
+    return { pending, approved, completed, total: withdrawals.length };
+  }, [withdrawals]);
 
   const safeWithdrawals = useMemo(() => withdrawals.slice(0, ROW_CAP), [withdrawals]);
 
@@ -75,7 +91,12 @@ export default function AdminWithdrawalsPage() {
     const q = debouncedSearch.trim().toLowerCase();
     return safeWithdrawals.filter((w) => {
       const st = String(w.status || "").toLowerCase();
-      const okStatus = statusFilter === "all" || st === statusFilter;
+      const okStatus =
+        statusFilter === "all"
+          ? true
+          : statusFilter === "completed"
+            ? st === "paid" || st === "claimed"
+            : st === statusFilter;
       const u = w.userId;
       const label = getUserLabel(u).toLowerCase();
       const email = (u?.email || "").toLowerCase();
@@ -221,10 +242,33 @@ export default function AdminWithdrawalsPage() {
             <option value="pending">Pending</option>
             <option value="claimable">Claimable</option>
             <option value="approved">Approved</option>
+            <option value="completed">Completed</option>
             <option value="paid">Paid</option>
             <option value="rejected">Rejected</option>
             <option value="claimed">Claimed</option>
           </select>
+        </div>
+      </div>
+
+      <div className="mb-4 flex flex-wrap gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-amber-400/90" aria-hidden />
+          <span className="text-gray-400">Pending / claimable</span>
+          <span className="font-semibold tabular-nums text-white">{statusSummary.pending}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-sky-400/90" aria-hidden />
+          <span className="text-gray-400">Approved</span>
+          <span className="font-semibold tabular-nums text-white">{statusSummary.approved}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-emerald-400/90" aria-hidden />
+          <span className="text-gray-400">Completed</span>
+          <span className="font-semibold tabular-nums text-white">{statusSummary.completed}</span>
+        </div>
+        <div className="ml-auto flex items-center gap-2 text-gray-500">
+          <span>Loaded</span>
+          <span className="font-semibold tabular-nums text-gray-300">{statusSummary.total}</span>
         </div>
       </div>
 
@@ -294,7 +338,7 @@ export default function AdminWithdrawalsPage() {
                         type="button"
                         onClick={() => setConfirm({ kind: "approve", row: withdrawal })}
                         disabled={Boolean(processingId) || confirmActionLoading}
-                        className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {approving ? "Approving…" : "Approve"}
                       </button>
@@ -327,7 +371,7 @@ export default function AdminWithdrawalsPage() {
                         type="button"
                         onClick={() => setConfirm({ kind: "reject", row: withdrawal })}
                         disabled={Boolean(processingId) || confirmActionLoading}
-                        className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="rounded-lg bg-red-500 px-3 py-2 text-xs font-semibold text-white hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {rejecting ? "Rejecting…" : "Reject & refund"}
                       </button>

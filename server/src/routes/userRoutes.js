@@ -1,5 +1,6 @@
 import express from "express";
 import bcrypt from "bcryptjs";
+import mongoose from "mongoose";
 import auth from "../middleware/auth.js";
 import User from "../models/User.js";
 import HybridWithdrawal from "../hybrid/models/HybridWithdrawal.js";
@@ -220,43 +221,72 @@ router.get("/team-members", auth, async (req, res) => {
       return res.status(403).json({ success: false, msg: "Account blocked", data: null });
     }
 
-    const selectFields = "username createdAt depositBalance rewardBalance";
-    const runTeamFind = (filter) =>
-      User.find(filter)
-        .select(selectFields)
-        .sort({ createdAt: -1 })
-        .limit(200)
-        .lean();
+    const page = Math.max(1, Number.parseInt(String(req.query.page || "1"), 10) || 1);
+    const limit = Math.min(50, Math.max(1, Number.parseInt(String(req.query.limit || "50"), 10) || 50));
+    const skip = (page - 1) * limit;
 
-    const levelA = await runTeamFind({ referredBy: userId });
+    const selectFields = "username createdAt depositBalance rewardBalance referredBy";
+    const oid = userId instanceof mongoose.Types.ObjectId ? userId : new mongoose.Types.ObjectId(userId);
 
-    const levelAIds = levelA.map((u) => u._id);
-    const levelB =
-      levelAIds.length > 0 ? await runTeamFind({ referredBy: { $in: levelAIds } }) : [];
+    const levelAIdsRaw = await User.find({ referredBy: oid }).select("_id").lean();
+    const levelAIds = levelAIdsRaw.map((u) => u._id);
 
-    const levelBIds = levelB.map((u) => u._id);
-    const levelC =
-      levelBIds.length > 0 ? await runTeamFind({ referredBy: { $in: levelBIds } }) : [];
+    let levelBIds = [];
+    if (levelAIds.length > 0) {
+      levelBIds = (
+        await User.find({ referredBy: { $in: levelAIds } }).select("_id").lean()
+      ).map((u) => u._id);
+    }
 
-    const format = (users, level) =>
-      users.map((u) => ({
-        id: String(u._id),
-        username: u.username,
-        level,
-        joinedAt: u.createdAt,
-        balance: Number((u.depositBalance || 0) + (u.rewardBalance || 0)),
-      }));
+    const tierOr = [{ referredBy: oid }];
+    if (levelAIds.length) tierOr.push({ referredBy: { $in: levelAIds } });
+    if (levelBIds.length) tierOr.push({ referredBy: { $in: levelBIds } });
 
-    const members = [
-      ...format(levelA, "A"),
-      ...format(levelB, "B"),
-      ...format(levelC, "C"),
-    ];
+    const listFilter =
+      tierOr.length === 1 ? tierOr[0] : { $or: tierOr };
+
+    const total = await User.countDocuments(listFilter);
+
+    const tierRows = await User.find(listFilter)
+            .select(selectFields)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .lean();
+
+    const setA = new Set(levelAIds.map((id) => String(id)));
+
+    const tierLabel = (referrerId) => {
+      if (!referrerId) return "C";
+      const r = referrerId instanceof mongoose.Types.ObjectId ? referrerId : new mongoose.Types.ObjectId(referrerId);
+      const rs = String(r);
+      const uidStr = String(oid);
+      if (rs === uidStr) return "A";
+      if (setA.has(rs)) return "B";
+      return "C";
+    };
+
+    const members = tierRows.map((u) => ({
+      id: String(u._id),
+      username: u.username,
+      level: tierLabel(u.referredBy),
+      joinedAt: u.createdAt,
+      balance: Number((u.depositBalance || 0) + (u.rewardBalance || 0)),
+    }));
+
+    const totalPages = Math.max(1, Math.ceil(total / limit));
 
     return res.json({
       success: true,
       msg: "Team members loaded",
-      data: members,
+      data: {
+        members,
+        page,
+        limit,
+        total,
+        totalPages,
+        hasMore: page < totalPages,
+      },
     });
   } catch (err) {
     console.error("Team members error:", err);

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import API, { getApiErrorMessage, normalize } from "../../lib/api";
@@ -26,6 +27,19 @@ type TeamMemberRow = {
     balance: number;
 };
 
+function normalizeTeamPayload(raw: unknown): { members: TeamMemberRow[]; hasMore: boolean } {
+    if (Array.isArray(raw)) {
+        return { members: raw as TeamMemberRow[], hasMore: false };
+    }
+    if (raw && typeof raw === "object" && raw !== null) {
+        const o = raw as { members?: TeamMemberRow[]; hasMore?: unknown };
+        const members = Array.isArray(o.members) ? o.members : [];
+        const hasMore = Boolean(o.hasMore);
+        return { members, hasMore };
+    }
+    return { members: [], hasMore: false };
+}
+
 function isAfterClaim(joinedIso: string | undefined, claimedIso: string | null | undefined): boolean {
   if (!claimedIso || !joinedIso) return false;
   const j = new Date(joinedIso).getTime();
@@ -44,6 +58,9 @@ export default function TeamPage() {
   const [members, setMembers] = useState<TeamMemberRow[]>([]);
   const [membersReady, setMembersReady] = useState(false);
   const [loadingMembers, setLoadingMembers] = useState(true);
+  const [membersPage, setMembersPage] = useState(1);
+  const [membersHasMore, setMembersHasMore] = useState(false);
+  const [loadingMoreMembers, setLoadingMoreMembers] = useState(false);
   const [lastSalaryClaimAt, setLastSalaryClaimAt] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -64,7 +81,7 @@ export default function TeamPage() {
 
       const [res, teamRes, salRes] = await Promise.all([
         API.get("/user/referral-stats").catch(() => null),
-        API.get("/user/team-members").catch(() => null),
+        API.get("/user/team-members?page=1").catch(() => null),
         API.get("/user/salary-progress").catch(() => null),
       ]);
       if (res?.data) {
@@ -79,10 +96,14 @@ export default function TeamPage() {
       }
       if (teamRes?.data && normalize(teamRes.data).success) {
         const teamEnvelope = normalize(teamRes.data);
-        const raw = teamEnvelope.data;
-        setMembers(Array.isArray(raw) ? (raw as TeamMemberRow[]) : []);
+        const normalized = normalizeTeamPayload(teamEnvelope.data);
+        setMembers(normalized.members);
+        setMembersPage(1);
+        setMembersHasMore(normalized.hasMore);
       } else {
         setMembers([]);
+        setMembersPage(1);
+        setMembersHasMore(false);
       }
       if (salRes?.data && normalize(salRes.data).success) {
         const sal = normalize(salRes.data).data as { lastClaimedAt?: string | null } | undefined;
@@ -102,6 +123,32 @@ export default function TeamPage() {
       if (!silent) setLoading(false);
     }
   }, []);
+
+  const loadMoreMembers = useCallback(async () => {
+    if (!membersHasMore || loadingMoreMembers || loadingMembers) return;
+    try {
+      setLoadingMoreMembers(true);
+      const nextPage = membersPage + 1;
+      const teamRes = await API.get(`/user/team-members?page=${nextPage}`);
+      if (!teamRes?.data || !normalize(teamRes.data).success) {
+        throw new Error("Bad response");
+      }
+      const normalized = normalizeTeamPayload(normalize(teamRes.data).data);
+      setMembers((prev) => [...prev, ...normalized.members]);
+      setMembersPage(nextPage);
+      setMembersHasMore(normalized.hasMore);
+    } catch {
+      showToast("Could not load more members");
+    } finally {
+      setLoadingMoreMembers(false);
+    }
+  }, [
+    loadingMembers,
+    loadingMoreMembers,
+    membersHasMore,
+    membersPage,
+    showToast,
+  ]);
 
   useEffect(() => {
     void load(false);
@@ -140,6 +187,9 @@ export default function TeamPage() {
           lastUpdatedAt={lastUpdatedAt}
           lastSalaryClaimAt={lastSalaryClaimAt}
           toast={toast}
+          membersHasMore={membersHasMore}
+          loadingMoreMembers={loadingMoreMembers}
+          onLoadMoreMembers={() => void loadMoreMembers()}
         />
       </PageWrapper>
     </ProtectedRoute>
@@ -157,6 +207,9 @@ function TeamContent({
   lastUpdatedAt,
   lastSalaryClaimAt,
   toast,
+  membersHasMore,
+  loadingMoreMembers,
+  onLoadMoreMembers,
 }: {
   directCount: number;
   teamCount: number;
@@ -168,8 +221,17 @@ function TeamContent({
   lastUpdatedAt: number | null;
   lastSalaryClaimAt: string | null;
   toast: string;
+  membersHasMore: boolean;
+  loadingMoreMembers: boolean;
+  onLoadMoreMembers: () => void;
 }) {
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearch(search.trim()), 350);
+    return () => window.clearTimeout(t);
+  }, [search]);
 
   const levelCounts = useMemo(() => {
     const counts = { A: 0, B: 0, C: 0 };
@@ -180,14 +242,14 @@ function TeamContent({
   }, [members]);
 
   const filteredMembers = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = debouncedSearch.toLowerCase();
     if (!q) return members;
     return members.filter((u) =>
       String(u.username ?? "")
         .toLowerCase()
         .includes(q)
     );
-  }, [members, search]);
+  }, [members, debouncedSearch]);
 
   const totalBalance = useMemo(
     () => members.reduce((sum, u) => sum + Number(u.balance ?? 0), 0),
@@ -232,6 +294,15 @@ function TeamContent({
         </p>
       </motion.section>
 
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-4">
+        <Link
+          href="/team/salary"
+          className="block w-full rounded-xl bg-purple-600 py-3 text-center text-sm font-bold text-white shadow-lg shadow-purple-900/30 transition hover:bg-purple-500"
+        >
+          Team Salary
+        </Link>
+      </motion.div>
+
       <motion.section
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
@@ -261,6 +332,9 @@ function TeamContent({
           search={search}
           setSearch={setSearch}
           lastSalaryClaimAt={lastSalaryClaimAt}
+          membersHasMore={membersHasMore}
+          loadingMoreMembers={loadingMoreMembers}
+          onLoadMoreMembers={onLoadMoreMembers}
         />
       </motion.section>
     </div>
@@ -301,6 +375,9 @@ function MembersMessage({
   search,
   setSearch,
   lastSalaryClaimAt,
+  membersHasMore,
+  loadingMoreMembers,
+  onLoadMoreMembers,
 }: {
   teamCount: number;
   referralStatsReady: boolean;
@@ -312,6 +389,9 @@ function MembersMessage({
   search: string;
   setSearch: (v: string) => void;
   lastSalaryClaimAt: string | null;
+  membersHasMore: boolean;
+  loadingMoreMembers: boolean;
+  onLoadMoreMembers: () => void;
 }) {
   if (loadingMembers) {
     return (
@@ -383,6 +463,20 @@ function MembersMessage({
             ))
           )}
         </div>
+        {membersHasMore && (
+          <button
+            type="button"
+            onClick={onLoadMoreMembers}
+            disabled={loadingMoreMembers || Boolean(search.trim())}
+            className="mt-3 w-full rounded-xl bg-white/[0.08] py-3 text-sm font-semibold text-white ring-1 ring-white/[0.1] hover:bg-white/12 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loadingMoreMembers
+              ? "Loading…"
+              : search.trim()
+                ? "Clear search to load more tiers"
+                : "Load more"}
+          </button>
+        )}
       </div>
     );
   }

@@ -31,6 +31,7 @@ export const getSalaryProgress = async (req, res) => {
       salaryComplete: data.salaryComplete,
       claimedSalaryStages: data.claimedSalaryStages,
       rules: data.rules,
+      salaryHistory: data.salaryHistory ?? [],
     });
   } catch (error) {
     return sendError(res, 500, error.message || "Failed to load salary progress");

@@ -3,42 +3,56 @@ import User from "../../models/User.js";
 import { SALARY_RULES } from "../utils/constants.js";
 import { addHybridLedgerEntries } from "./ledgerService.js";
 
-const MAX_GRAPH_DEPTH = 100;
+/** Max ObjectIds per recursive tier query ($in batches) — keeps queries bounded. */
+const FRONTIER_IN_CHUNK = 5000;
 
-/** Full fresh downline (all depths under root); optional cutoff by join date after last salary claim */
+/**
+ * Recursive fresh-downline count matching former $graphLookup + restrictSearchWithMatch
+ * semantics, without loading the entire subtree into Mongoose BSON memory (<graphLookup>.
+ * Only nodes matching freshness participate; wave BFS from root excludes root from tally.
+ */
 const countFreshTeam = async (rootId, lastClaimDate, session = null) => {
-  const oid = rootId instanceof mongoose.Types.ObjectId ? rootId : new mongoose.Types.ObjectId(rootId);
+  const oid =
+    rootId instanceof mongoose.Types.ObjectId
+      ? rootId
+      : new mongoose.Types.ObjectId(rootId);
 
-  const restrictSearchWithMatch =
+  const freshness =
     lastClaimDate instanceof Date && !Number.isNaN(lastClaimDate.getTime())
       ? { createdAt: { $gt: lastClaimDate } }
       : {};
 
-  const aggOpts = session != null ? { session } : {};
-  const rows = await User.aggregate(
-    [
-      { $match: { _id: oid } },
-      {
-        $graphLookup: {
-          from: User.collection.name,
-          startWith: "$_id",
-          connectFromField: "_id",
-          connectToField: "referredBy",
-          as: "downline",
-          maxDepth: MAX_GRAPH_DEPTH,
-          restrictSearchWithMatch,
-        },
-      },
-      {
-        $project: {
-          n: { $size: "$downline" },
-        },
-      },
-    ],
-    aggOpts
-  );
+  let frontier = [oid];
+  let total = 0;
 
-  return Number(rows[0]?.n ?? 0);
+  /** Hard cap avoids pathological depths locking the event loop. */
+  const MAX_WAVES = 4096;
+
+  for (let wave = 0; wave < MAX_WAVES && frontier.length > 0; wave += 1) {
+    const next = [];
+
+    for (let i = 0; i < frontier.length; i += FRONTIER_IN_CHUNK) {
+      const chunk = frontier.slice(i, i + FRONTIER_IN_CHUNK);
+      const finder = User.find({
+        referredBy: { $in: chunk },
+        ...freshness,
+      })
+        .select("_id")
+        .lean();
+
+      if (session) finder.session(session);
+      const rows = await finder.exec();
+
+      total += rows.length;
+      for (const r of rows) {
+        next.push(r._id);
+      }
+    }
+
+    frontier = next;
+  }
+
+  return total;
 };
 
 /**
@@ -47,7 +61,7 @@ const countFreshTeam = async (rootId, lastClaimDate, session = null) => {
  */
 export const migrateSalaryProgressFields = async (userId, session = null) => {
   let user = await User.findById(userId)
-    .select("salaryProgress claimedSalaryStages rewardBalance totalEarnings salaryStage")
+    .select("salaryProgress claimedSalaryStages rewardBalance totalEarnings salaryStage salaryHistory")
     .session(session ?? undefined);
 
   if (!user) return null;
@@ -79,7 +93,7 @@ export const migrateSalaryProgressFields = async (userId, session = null) => {
     );
 
     user = await User.findById(userId)
-      .select("salaryProgress claimedSalaryStages rewardBalance totalEarnings salaryStage")
+      .select("salaryProgress claimedSalaryStages rewardBalance totalEarnings salaryStage salaryHistory")
       .session(session ?? undefined);
   }
 
@@ -119,6 +133,26 @@ export const getFreshCounts = async (user, session = null) => {
 const ruleByStage = (stageNum) =>
   SALARY_RULES.find((r) => Number(r.stage) === Number(stageNum)) ?? null;
 
+/** Mongo filter for anchored lastClaimedAt (prevents claim races / mismatched freshness window). */
+const anchorLastClaimedAtCondition = (raw) => {
+  if (
+    raw != null &&
+    (raw instanceof Date || typeof raw === "string" || typeof raw === "number")
+  ) {
+    const asDate =
+      raw instanceof Date ? raw : new Date(raw);
+    if (!Number.isNaN(asDate.getTime())) {
+      return { "salaryProgress.lastClaimedAt": asDate };
+    }
+  }
+  return {
+    $or: [
+      { "salaryProgress.lastClaimedAt": { $exists: false } },
+      { "salaryProgress.lastClaimedAt": null },
+    ],
+  };
+};
+
 /**
  * Builds GET /api/user/salary-progress payload.
  */
@@ -145,6 +179,21 @@ export const buildSalaryProgressPayload = async (userId) => {
     direct >= Number(rule.directCount ?? 0) &&
     team >= Number(rule.teamCount ?? 0);
 
+  const historyRaw = Array.isArray(migrated.salaryHistory) ? migrated.salaryHistory : [];
+
+  const salaryHistory = [...historyRaw]
+    .slice(-100)
+    .map((h) => ({
+      stage: Number(h.stage),
+      amount: Number(h.amount ?? 0),
+      claimedAt: h.claimedAt != null ? h.claimedAt : null,
+    }))
+    .sort((a, b) => {
+      const ta = new Date(a.claimedAt || 0).getTime();
+      const tb = new Date(b.claimedAt || 0).getTime();
+      return tb - ta;
+    });
+
   return {
     stage: complete ? maxStageNum : nextStageNum,
     direct,
@@ -155,6 +204,7 @@ export const buildSalaryProgressPayload = async (userId) => {
     salaryComplete: complete,
     claimedSalaryStages: [...(migrated.claimedSalaryStages ?? [])].map(Number),
     rules: SALARY_RULES,
+    salaryHistory,
   };
 };
 
@@ -185,6 +235,8 @@ export const claimSalary = async (userId) => {
         throw new Error("Invalid salary stage");
       }
 
+      const anchorCond = anchorLastClaimedAtCondition(user.salaryProgress?.lastClaimedAt);
+
       const { direct, team } = await getFreshCounts(user, session);
 
       if (
@@ -194,20 +246,24 @@ export const claimSalary = async (userId) => {
         throw new Error("Salary stage not reached");
       }
 
-      const claimFilter =
+      /** Single atomic instant for persisted claim boundary (fixes split-ms exploit). */
+      const now = new Date();
+
+      const stageCond =
         prevStage === 0
           ? {
-              _id: userId,
               $or: [
                 { "salaryProgress.lastClaimedStage": 0 },
                 { "salaryProgress.lastClaimedStage": { $exists: false } },
                 { salaryProgress: { $exists: false } },
               ],
             }
-          : {
-              _id: userId,
-              "salaryProgress.lastClaimedStage": prevStage,
-            };
+          : { "salaryProgress.lastClaimedStage": prevStage };
+
+      const claimFilter = {
+        _id: userId,
+        $and: [stageCond, anchorCond],
+      };
 
       const updatedUser = await User.findOneAndUpdate(
         claimFilter,
@@ -218,11 +274,18 @@ export const claimSalary = async (userId) => {
           },
           $set: {
             "salaryProgress.lastClaimedStage": nextStage,
-            "salaryProgress.lastClaimedAt": new Date(),
+            "salaryProgress.lastClaimedAt": now,
             salaryStage: nextStage,
           },
           $addToSet: {
             claimedSalaryStages: nextStage,
+          },
+          $push: {
+            salaryHistory: {
+              stage: nextStage,
+              amount: rule.amount,
+              claimedAt: now,
+            },
           },
         },
         {
