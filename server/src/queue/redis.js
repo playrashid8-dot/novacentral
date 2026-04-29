@@ -1,1 +1,1 @@
-export { redis } from "../config/redis.js";
+export { getRedis } from "../config/redis.js";

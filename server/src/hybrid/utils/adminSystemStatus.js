@@ -6,7 +6,7 @@ import {
 } from "../listeners/realtimeListener.js";
 import { userMap } from "../services/userMap.js";
 import { depositQueue } from "../../queues/depositQueue.js";
-import { redis } from "../../config/redis.js";
+import { getRedis } from "../../config/redis.js";
 
 /**
  * Live hybrid health for admin dashboards (no schema / ROI changes).
@@ -17,6 +17,7 @@ export async function getHybridAdminSystemStatus() {
   const mongodb = mongoose.connection.readyState === 1;
 
   let redisOk = false;
+  const redis = getRedis();
   if (redis) {
     try {
       const pong = await redis.ping();

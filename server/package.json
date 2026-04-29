@@ -9,7 +9,7 @@
     "start": "node --expose-gc --max-old-space-size=1024 src/server.js",
     "start:api": "cross-env NOVA_SERVICE=api node --expose-gc --max-old-space-size=1024 src/server.js",
     "start:hybrid": "node --expose-gc --max-old-space-size=1024 src/hybridService.js",
-    "worker:deposit": "node --expose-gc --max-old-space-size=1024 src/workers/depositWorker.js",
+    "worker:deposit": "node --expose-gc --max-old-space-size=1024 src/worker.js",
     "test:e2e-hybrid": "node scripts/e2eHybridRuntimeTest.js",
     "test:load-health": "node scripts/loadTestHealth.mjs",
     "pm2:prod": "pm2 start ecosystem.config.cjs",

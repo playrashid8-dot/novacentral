@@ -2,7 +2,7 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 import auth from "../middleware/auth.js";
-import { redis } from "../config/redis.js";
+import { getRedis } from "../config/redis.js";
 import User from "../models/User.js";
 import HybridWithdrawal from "../hybrid/models/HybridWithdrawal.js";
 import { getCurrentRoiRate } from "../hybrid/services/roiService.js";
@@ -325,6 +325,7 @@ router.get("/dashboard", auth, async (req, res) => {
 ============================== */
 router.get("/team-members", auth, async (req, res) => {
   try {
+    const redis = getRedis();
     const userId = req.user._id;
     const page = Math.max(1, Number.parseInt(String(req.query.page || "1"), 10) || 1);
     const limit = Math.max(1, Math.min(Number(req.query.limit) || 50, 50));
@@ -396,6 +397,7 @@ router.get("/team-members", auth, async (req, res) => {
 ============================== */
 router.get("/referral-stats", auth, async (req, res) => {
   try {
+    const redis = getRedis();
     const userId = String(req.user._id);
     const cacheKey = `referral-stats:${userId}`;
 
@@ -444,6 +446,7 @@ router.get("/referral-stats", auth, async (req, res) => {
 
 router.get("/dashboard-summary", auth, async (req, res) => {
   try {
+    const redis = getRedis();
     const userId = String(req.user._id);
     const cacheKey = `dashboard:${userId}`;
 

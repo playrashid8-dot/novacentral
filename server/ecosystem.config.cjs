@@ -47,7 +47,7 @@ module.exports = {
     {
       name: "nova-worker-deposit",
       cwd,
-      script: "./src/workers/depositWorker.js",
+      script: "./src/worker.js",
       instances: 3,
       exec_mode: "fork",
       interpreter_args: interpreterArgs,

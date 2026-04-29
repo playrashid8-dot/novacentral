@@ -1,27 +1,25 @@
 import Redis from "ioredis";
 
-let redis = null;
+let client;
 
-if (process.env.REDIS_URL) {
-  redis = new Redis(process.env.REDIS_URL, {
-    /** BullMQ blocking commands require null; a finite value breaks the worker/queue */
-    maxRetriesPerRequest: null,
-    connectTimeout: 5000,
-    lazyConnect: true,
-  });
+export function getRedis() {
+  if (!process.env.REDIS_URL) {
+    console.warn("❌ REDIS_URL missing");
+    return null;
+  }
 
-  redis.on("connect", () => {
-    console.log("✅ Redis connected");
-  });
+  if (!client) {
+    client = new Redis(process.env.REDIS_URL, {
+      maxRetriesPerRequest: null,
+      lazyConnect: true,
+    });
 
-  redis.on("error", () => {
-    /* silent in production — avoids ECONNREFUSED spam */
-  });
+    client.on("connect", () => {
+      console.log("✅ Redis connected");
+    });
 
-  redis.on("reconnecting", () => {});
-  redis.on("end", () => {});
-} else {
-  console.warn("⚠️ REDIS_URL not found → Redis disabled");
+    client.on("error", () => {});
+  }
+
+  return client;
 }
-
-export { redis };

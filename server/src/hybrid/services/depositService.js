@@ -207,3 +207,9 @@ export const getUserHybridDeposits = async (userId) => {
   const deposits = await HybridDeposit.find({ userId }).sort({ createdAt: -1 }).lean();
   return enrichHybridDepositsWithConfirmations(deposits);
 };
+
+/** BullMQ worker entry — dynamic import avoids circular static imports with depositListener. */
+export async function processDepositJob(jobData) {
+  const { processDepositJob: run } = await import("./depositQueueProcessor.js");
+  return run(jobData);
+}

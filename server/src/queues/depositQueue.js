@@ -1,5 +1,7 @@
 import { Queue } from "bullmq";
-import { redis } from "../config/redis.js";
+import { getRedis } from "../config/redis.js";
+
+const connection = getRedis();
 
 /** Shared BullMQ worker / queue tuning: max jobs started per duration (global per queue in Redis). */
 export const DEPOSIT_QUEUE_LIMITER = {
@@ -7,9 +9,9 @@ export const DEPOSIT_QUEUE_LIMITER = {
   duration: 1000,
 };
 
-export const depositQueue = redis
+export const depositQueue = connection
   ? new Queue("depositQueue", {
-      connection: redis,
+      connection,
       limiter: DEPOSIT_QUEUE_LIMITER,
     })
   : null;
@@ -50,7 +52,7 @@ export function toSerializableTransferLog(log) {
  * @param {{ log: object, blockNumber?: number }} payload
  */
 export async function enqueueDepositJob({ log, blockNumber }) {
-  if (!redis || !depositQueue) {
+  if (!getRedis() || !depositQueue) {
     return null;
   }
 

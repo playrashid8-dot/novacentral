@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import User from "../../models/User.js";
 import { SALARY_RULES } from "../utils/constants.js";
 import { addHybridLedgerEntries } from "./ledgerService.js";
-import { redis } from "../../config/redis.js";
+import { getRedis } from "../../config/redis.js";
 
 /** Max ObjectIds per recursive tier query ($in batches) — keeps queries bounded. */
 const FRONTIER_IN_CHUNK = 5000;
@@ -21,6 +21,7 @@ const salaryCountCacheKey = (userId) => {
 /** Optional Redis-backed cache for computed fresh counts (30s TTL). */
 const tryGetSalaryCountCache = async (userId) => {
   let raw = null;
+  const redis = getRedis();
   if (redis) {
     try {
       raw = await redis.get(salaryCountCacheKey(userId));
@@ -41,6 +42,7 @@ const tryGetSalaryCountCache = async (userId) => {
 };
 
 const trySetSalaryCountCache = async (userId, direct, team) => {
+  const redis = getRedis();
   if (redis) {
     try {
       await redis.set(
@@ -56,6 +58,7 @@ const trySetSalaryCountCache = async (userId, direct, team) => {
 };
 
 const invalidateSalaryCountCache = async (userId) => {
+  const redis = getRedis();
   if (redis) {
     try {
       await redis.del(salaryCountCacheKey(userId));

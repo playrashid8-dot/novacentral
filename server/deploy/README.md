@@ -44,7 +44,7 @@ Manual equivalent (cluster uses one PORT):
 ```bash
 NOVA_SERVICE=api PORT=5000 pm2 start src/server.js -i 3 --name nova-api
 node --expose-gc --max-old-space-size=2048 src/hybridService.js &
-node --expose-gc --max-old-space-size=2048 src/workers/depositWorker.js &
+node --expose-gc --max-old-space-size=2048 src/worker.js &
 ```
 
 ---
