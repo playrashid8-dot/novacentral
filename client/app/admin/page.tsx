@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import AdminLayout, { adminFetch, formatCurrency, getUserLabel } from "../../components/admin/AdminLayout";
 import Loader from "../../components/admin/Loader";
@@ -196,6 +197,11 @@ export default function AdminControlPanelPage() {
         </div>
       ) : (
         <div className="space-y-8">
+          <p className="text-xs text-gray-500">
+            <Link href="/admin/dashboard" className="text-purple-300 hover:text-purple-200">
+              Open overview dashboard →
+            </Link>
+          </p>
           <section className="rounded-2xl bg-card p-5 shadow-soft">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-sm font-semibold text-white">System status</h2>

@@ -75,12 +75,15 @@ export async function adminFetch(path, options = {}) {
 }
 
 const navItems = [
-  { label: "Overview", href: "/admin" },
-  { label: "Analytics", href: "/admin/dashboard" },
+  { label: "Dashboard", href: "/admin/dashboard" },
+  { label: "Users", href: "/admin/users" },
   { label: "Deposits", href: "/admin/deposits" },
   { label: "Withdrawals", href: "/admin/withdrawals" },
-  { label: "Users", href: "/admin/users" },
-  { label: "Activity log", href: "/admin/logs" },
+  { label: "Salary", href: "/admin/salary" },
+  { label: "Fraud", href: "/admin/fraud" },
+  { label: "Logs", href: "/admin/logs" },
+  { label: "Analytics", href: "/admin/analytics" },
+  { label: "Control", href: "/admin" },
   { label: "Ledger", href: "/admin/ledger" },
 ];
 
@@ -190,7 +193,8 @@ export default function AdminLayout({ title, subtitle, children }) {
         {navItems.map((item) => {
           const active =
             pathname === item.href ||
-            (item.href === "/admin" && (pathname === "/admin" || pathname === "/admin/"));
+            (item.href === "/admin" &&
+              (pathname === "/admin" || pathname === "/admin/"));
 
           return (
             <Link

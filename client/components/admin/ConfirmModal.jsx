@@ -12,6 +12,7 @@ export default function ConfirmModal({
   confirmLoading = false,
   onConfirm,
   onCancel,
+  children,
 }) {
   useEffect(() => {
     if (!open) return;
@@ -45,6 +46,7 @@ export default function ConfirmModal({
         {message ? (
           <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-gray-300">{message}</p>
         ) : null}
+        {children ? <div className="mt-4">{children}</div> : null}
         <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button
             type="button"

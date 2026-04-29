@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import AdminLayout, { adminFetch, formatCurrency, getUserLabel } from "../../../components/admin/AdminLayout";
+import AdminLayout, { adminFetch, formatCurrency, formatDate, getUserLabel } from "../../../components/admin/AdminLayout";
 import Loader from "../../../components/admin/Loader";
 import Table from "../../../components/admin/Table";
 import AdminPagination from "../../../components/admin/AdminPagination";
@@ -11,8 +11,8 @@ import { pushAdminLog } from "../../../lib/adminActivityLog";
 import EmptyState from "../../../components/EmptyState";
 import { showSafeToast } from "../../../lib/toast";
 
-const PAGE_SIZE = 10;
-const ROW_CAP = 100;
+const PAGE_SIZE = 25;
+const ROW_CAP = 200;
 
 /** Primary labels aligned with backend status values — extended for legacy synonyms. */
 const statusMap: Record<string, string> = {
@@ -92,7 +92,7 @@ export default function AdminWithdrawalsPage() {
     const id = window.setInterval(() => {
       if (typeof document !== "undefined" && document.hidden) return;
       void loadWithdrawals(true);
-    }, 16000);
+    }, 15000);
     return () => clearInterval(id);
   }, [loadWithdrawals]);
 
@@ -305,7 +305,7 @@ export default function AdminWithdrawalsPage() {
         <EmptyState text="No records found" />
       ) : (
         <Table
-          columns={["User", "Gross", "Net", "Wallet", "Status", "Actions"]}
+          columns={["User", "Gross", "Net", "Wallet", "Status", "Time", "Actions"]}
           emptyText={listMode === "queue" ? "No rows in the pending queue" : "No withdrawals match filters"}
           footer={
             <AdminPagination
@@ -354,6 +354,9 @@ export default function AdminWithdrawalsPage() {
                   <span className={`inline-flex rounded-full px-3 py-1 text-xs ${badgeCls}`}>
                     {withdrawalStatusLabel(withdrawal.status)}
                   </span>
+                </td>
+                <td className="whitespace-nowrap px-4 py-4 text-xs text-gray-400">
+                  {formatDate(withdrawal.createdAt)}
                 </td>
                 <td className="min-w-[260px] px-4 py-4">
                   <div className="flex flex-col gap-2">

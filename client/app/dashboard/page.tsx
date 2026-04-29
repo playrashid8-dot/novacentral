@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { getApiErrorMessage, suppressDuplicateCatchToast } from "../../lib/api";
@@ -12,6 +12,8 @@ import AppToast from "../../components/AppToast";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import PageWrapper from "../../components/PageWrapper";
 import LiveRefreshIndicator from "../../components/LiveRefreshIndicator";
+
+const CARD = "rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -82,10 +84,6 @@ export default function Dashboard() {
   const totalEarnedUsd = Number(hybrid?.totalEarnings ?? user?.totalEarnings ?? 0);
   const depositUsd = Number(hybrid?.depositBalance ?? 0);
   const stakingUsd = Number(hybrid?.activeStakeAmount ?? 0);
-  const activeStakesCount = useMemo(
-    () => (hybrid?.stakes || []).filter((s: any) => String(s?.status || "").toLowerCase() === "active").length,
-    [hybrid],
-  );
   const roiRatePct = (Number(hybrid?.roiRate || 0) * 100).toFixed(2);
   const roiPrincipal = Number(hybrid?.roiPrincipalBase ?? 0);
   const canClaimRoi = hybrid?.canClaimRoi === true;
@@ -135,41 +133,38 @@ export default function Dashboard() {
         useSkeletonLoading
         emptyText="No data available"
       >
-        <div className="relative w-full max-w-full overflow-x-hidden pb-3 text-white">
+        <div className="relative w-full max-w-full overflow-x-hidden px-1 pb-3 text-white sm:px-0">
           <AppToast message={toast} tone={toastTone} />
 
           <motion.header
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35 }}
-            className="relative z-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+            className="relative z-10 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
           >
             <div>
-              <h1 className="text-xl font-black tracking-tight text-white sm:text-2xl">HybridEarn</h1>
+              <h1 className="text-lg font-bold tracking-tight text-white sm:text-2xl">HybridEarn</h1>
+              <p className="mt-0.5 text-[11px] text-gray-400 sm:text-xs">Smart Income Dashboard</p>
             </div>
-            <LiveRefreshIndicator lastUpdatedAt={lastUpdatedAt} />
+            <LiveRefreshIndicator lastUpdatedAt={lastUpdatedAt} className="sm:pt-1" />
           </motion.header>
 
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.05 }}
-            className="mt-6 grid grid-cols-3 gap-2 sm:gap-3"
+            className="mt-5 grid grid-cols-1 gap-2.5 sm:mt-6 sm:grid-cols-3 sm:gap-3"
           >
-            <StatTile label="Deposit balance" value={`$${depositUsd.toFixed(2)}`} />
-            <StatTile
-              label="Active plan"
-              value={`$${stakingUsd.toFixed(2)}`}
-              hint={activeStakesCount ? `${activeStakesCount} active` : undefined}
-            />
-            <StatTile label="Total earned" value={`$${animEarned.toFixed(2)}`} accent />
+            <StatTile cardClassName={CARD} label="Deposit Balance" value={`$${depositUsd.toFixed(2)}`} />
+            <StatTile cardClassName={CARD} label="Active Plan" value={`$${stakingUsd.toFixed(2)}`} />
+            <StatTile cardClassName={CARD} label="Total Earned" value={`$${animEarned.toFixed(2)}`} accent />
           </motion.div>
 
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.1 }}
-            className="mt-5 rounded-2xl border border-white/[0.1] bg-white/[0.04] p-5 shadow-[0_8px_40px_rgba(0,0,0,0.25)] backdrop-blur-xl ring-1 ring-white/[0.06]"
+            className={`mt-5 p-4 shadow-[0_8px_40px_rgba(0,0,0,0.25)] transition duration-300 hover:scale-[1.01] sm:p-5 ${CARD}`}
           >
             <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-400/85">
               Daily ROI
@@ -196,7 +191,7 @@ export default function Dashboard() {
                 type="button"
                 onClick={handleClaimRoi}
                 disabled={roiLoading || !canClaimRoi || currentVipLevel < 1}
-                className="inline-flex min-h-[48px] w-full shrink-0 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-green-400 px-6 py-3 text-sm font-black text-gray-950 shadow-[0_0_28px_rgba(16,185,129,0.35)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
+                className="inline-flex min-h-[48px] w-full shrink-0 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-green-400 px-6 py-3 text-sm font-black text-gray-950 shadow-[0_0_28px_rgba(16,185,129,0.35)] transition duration-300 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
               >
                 {roiLoading ? (
                   <>
@@ -216,7 +211,7 @@ export default function Dashboard() {
             )}
           </motion.div>
 
-          <div className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:mt-5 sm:grid-cols-4 sm:gap-3">
             <QuickAction label="Deposit" icon="↓" onClick={() => router.push("/deposit")} />
             <QuickAction label="Withdraw" icon="↑" onClick={() => router.push("/withdraw")} />
             <QuickAction label="Stake" icon="◆" onClick={() => router.push("/staking")} />
@@ -231,23 +226,22 @@ export default function Dashboard() {
 function StatTile({
   label,
   value,
-  hint,
   accent,
+  cardClassName,
 }: {
   label: string;
   value: string;
-  hint?: string;
   accent?: boolean;
+  cardClassName: string;
 }) {
   return (
     <div
-      className={`rounded-2xl border border-white/[0.08] bg-white/[0.05] p-4 shadow-soft backdrop-blur-xl ring-1 ring-white/[0.05] ${
-        accent ? "shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]" : ""
+      className={`${cardClassName} p-3 transition duration-300 hover:scale-[1.02] sm:p-4 ${
+        accent ? "shadow-[0_0_25px_rgba(16,185,129,0.35)]" : ""
       }`}
     >
-      <p className="text-[8px] font-semibold uppercase tracking-[0.16em] text-gray-500 sm:text-[9px] sm:tracking-[0.2em]">{label}</p>
-      <p className="mt-1.5 text-base font-black tabular-nums tracking-tight text-white sm:mt-2 sm:text-xl">{value}</p>
-      {hint ? <p className="mt-1 text-[10px] text-gray-500">{hint}</p> : null}
+      <p className="text-[10px] text-gray-400 sm:text-xs">{label}</p>
+      <h2 className="mt-1 text-xl font-bold tabular-nums text-white sm:mt-1.5 sm:text-2xl">{value}</h2>
     </div>
   );
 }
@@ -257,7 +251,7 @@ function QuickAction({ label, icon, onClick }: { label: string; icon: string; on
     <button
       type="button"
       onClick={onClick}
-      className="min-h-[52px] rounded-2xl border border-white/[0.08] bg-white/[0.04] p-2.5 text-center shadow-soft backdrop-blur-xl transition hover:border-emerald-500/35 active:scale-[0.98]"
+      className="min-h-[48px] w-full rounded-2xl border border-white/10 bg-white/5 p-2 text-center backdrop-blur-xl transition duration-300 hover:scale-[1.02] hover:border-emerald-500/35 active:scale-[0.98] sm:min-h-[52px] sm:p-2.5"
     >
       <div className="mx-auto mb-1 flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-green-400 text-sm font-black text-gray-950 shadow-[0_2px_14px_rgba(16,185,129,0.35)]">
         {icon}

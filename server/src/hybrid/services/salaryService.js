@@ -2,12 +2,57 @@ import mongoose from "mongoose";
 import User from "../../models/User.js";
 import { SALARY_RULES } from "../utils/constants.js";
 import { addHybridLedgerEntries } from "./ledgerService.js";
+import { redis } from "../../config/redis.js";
 
 /** Max ObjectIds per recursive tier query ($in batches) — keeps queries bounded. */
 const FRONTIER_IN_CHUNK = 5000;
 
 /** Salary milestones count only “active” investors: deposit balance at or above this (USDT). */
 const ACTIVE_DEPOSIT_MIN = 50;
+
+const salaryCountCacheKey = (userId) => {
+  const id =
+    userId instanceof mongoose.Types.ObjectId
+      ? userId.toString()
+      : String(userId ?? "");
+  return `salary_count:${id}`;
+};
+
+/** Optional Redis-backed cache for computed fresh counts (30s TTL). */
+const tryGetSalaryCountCache = async (userId) => {
+  try {
+    const raw = await redis.get(salaryCountCacheKey(userId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const direct = Number(parsed?.direct);
+    const team = Number(parsed?.team);
+    if (!Number.isFinite(direct) || !Number.isFinite(team)) return null;
+    return { direct, team };
+  } catch {
+    return null;
+  }
+};
+
+const trySetSalaryCountCache = async (userId, direct, team) => {
+  try {
+    await redis.set(
+      salaryCountCacheKey(userId),
+      JSON.stringify({ direct, team }),
+      "EX",
+      30
+    );
+  } catch {
+    /* optional boost — Redis optional */
+  }
+};
+
+const invalidateSalaryCountCache = async (userId) => {
+  try {
+    await redis.del(salaryCountCacheKey(userId));
+  } catch {
+    /* ignore */
+  }
+};
 
 /**
  * Recursive fresh-downline count matching former $graphLookup + restrictSearchWithMatch
@@ -30,10 +75,20 @@ const countFreshTeam = async (rootId, lastClaimDate, session = null) => {
 
   /** Hard cap avoids pathological depths locking the event loop. */
   const MAX_WAVES = 4096;
+  /** Extra guard against infinite / runaway traversal (paired with wave cap). */
+  const MAX_ITERATIONS = 100;
   /** Stop BFS when fresh-downline count exceeds cap (stability / memory). */
   const MAX_FRESH_COUNT = 10000;
 
+  let iterations = 0;
+
   waveLoop: for (let wave = 0; wave < MAX_WAVES && frontier.length > 0; wave += 1) {
+    iterations += 1;
+    if (iterations > MAX_ITERATIONS) {
+      console.warn("⚠️ BFS loop limit reached");
+      break waveLoop;
+    }
+
     const next = [];
 
     for (let i = 0; i < frontier.length; i += FRONTIER_IN_CHUNK) {
@@ -43,18 +98,25 @@ const countFreshTeam = async (rootId, lastClaimDate, session = null) => {
         ...freshness,
         depositBalance: { $gte: ACTIVE_DEPOSIT_MIN },
       })
-        .select("_id")
+        .select("_id depositBalance")
         .lean();
 
       if (session) finder.session(session);
       const rows = await finder.exec();
 
-      total += rows.length;
+      let accepted = 0;
+      for (const userRow of rows) {
+        /** Double-check active threshold (guard corrupt / legacy docs). */
+        if (Number(userRow?.depositBalance ?? 0) < ACTIVE_DEPOSIT_MIN) {
+          continue;
+        }
+        accepted += 1;
+        next.push(userRow._id);
+      }
+
+      total += accepted;
       if (total > MAX_FRESH_COUNT) {
         break waveLoop;
-      }
-      for (const r of rows) {
-        next.push(r._id);
       }
     }
 
@@ -128,6 +190,12 @@ export const getFreshCounts = async (user, session = null) => {
 
   const filter = lastClaim ? { createdAt: { $gt: lastClaim } } : {};
 
+  const cached =
+    session == null ? await tryGetSalaryCountCache(user._id) : null;
+  if (cached) {
+    return cached;
+  }
+
   let directQ = User.countDocuments({
     referredBy: user._id,
     depositBalance: { $gte: ACTIVE_DEPOSIT_MIN },
@@ -144,6 +212,10 @@ export const getFreshCounts = async (user, session = null) => {
   const team = await countFreshTeam(user._id, lastClaim ?? undefined, session);
   if (!Number.isFinite(team)) {
     throw new Error("Invalid team count");
+  }
+
+  if (session == null) {
+    await trySetSalaryCountCache(user._id, direct, team);
   }
 
   return { direct, team };
@@ -213,11 +285,20 @@ export const buildSalaryProgressPayload = async (userId) => {
       return tb - ta;
     });
 
+  const claimableStageNum = eligible ? nextStageNum : 0;
+
+  console.log("💰 Salary check:", {
+    userId: String(userId),
+    direct,
+    team,
+    stage: claimableStageNum,
+  });
+
   return {
     stage: complete ? maxStageNum : nextStageNum,
     direct,
     team,
-    claimableStage: eligible ? nextStageNum : 0,
+    claimableStage: claimableStageNum,
     lastClaimedStage,
     lastClaimedAt: migrated.salaryProgress?.lastClaimedAt ?? null,
     salaryComplete: complete,
@@ -347,8 +428,11 @@ export const claimSalary = async (userId) => {
       result = {
         stage: nextStage,
         amount: rule.amount,
+        claimedAt: now,
       };
     });
+
+    await invalidateSalaryCountCache(userId);
 
     return result;
   } finally {

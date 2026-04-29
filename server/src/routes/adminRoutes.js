@@ -12,6 +12,14 @@ import {
 import { scanHybridDeposits } from "../hybrid/services/depositListener.js";
 import { getProvider } from "../hybrid/utils/provider.js";
 import { getHybridAdminSystemStatus } from "../hybrid/utils/adminSystemStatus.js";
+import { writeAdminAudit } from "../utils/adminAudit.js";
+import {
+  buildAdminOverview,
+  buildFraudSignals,
+  salaryPayoutsPage,
+  logFeed,
+  getUserAdminDetail,
+} from "../services/adminPanelService.js";
 
 const router = express.Router();
 const sendAdminError = (res, err, context) => {
@@ -57,11 +65,189 @@ router.get("/system-status", auth, isAdmin, async (req, res) => {
 /* ==============================
    📥 HYBRID DEPOSITS
 ============================== */
+router.get("/overview", auth, isAdmin, async (req, res) => {
+  try {
+    const overview = await buildAdminOverview();
+    return res.json({
+      success: true,
+      msg: "Overview",
+      data: { overview },
+    });
+  } catch (err) {
+    return sendAdminError(res, err, "ADMIN OVERVIEW ERROR");
+  }
+});
+
+router.get("/fraud-signals", auth, isAdmin, async (req, res) => {
+  try {
+    const signals = await buildFraudSignals();
+    return res.json({
+      success: true,
+      msg: "Fraud signals",
+      data: { signals },
+    });
+  } catch (err) {
+    return sendAdminError(res, err, "ADMIN FRAUD SIGNALS ERROR");
+  }
+});
+
+router.get("/salary-payouts", auth, isAdmin, async (req, res) => {
+  try {
+    const page = req.query.page;
+    const limit = req.query.limit;
+    const search = req.query.search;
+    const data = await salaryPayoutsPage({
+      page,
+      limit,
+      search,
+    });
+    return res.json({
+      success: true,
+      msg: "Salary payouts",
+      data,
+    });
+  } catch (err) {
+    return sendAdminError(res, err, "ADMIN SALARY PAYOUTS ERROR");
+  }
+});
+
+router.get("/log-feed", auth, isAdmin, async (req, res) => {
+  try {
+    const type = String(req.query.type || "").toLowerCase();
+    const allowed = ["admin", "withdraw", "deposit", "salary"];
+    if (!allowed.includes(type)) {
+      return res.status(400).json({
+        success: false,
+        msg: `type must be one of: ${allowed.join(", ")}`,
+        data: null,
+      });
+    }
+    const data = await logFeed({
+      type,
+      page: req.query.page,
+      limit: req.query.limit,
+      search: req.query.search,
+    });
+    return res.json({
+      success: true,
+      msg: "Log feed",
+      data,
+    });
+  } catch (err) {
+    return sendAdminError(res, err, "ADMIN LOG FEED ERROR");
+  }
+});
+
+router.get("/users/:id/detail", auth, isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        msg: "Invalid user id",
+        data: null,
+      });
+    }
+    const detail = await getUserAdminDetail(id);
+    if (!detail) {
+      return res.status(404).json({ success: false, msg: "User not found", data: null });
+    }
+    return res.json({
+      success: true,
+      msg: "User detail",
+      data: detail,
+    });
+  } catch (err) {
+    return sendAdminError(res, err, "ADMIN USER DETAIL ERROR");
+  }
+});
+
+router.post("/users/:id/fraud-flag", auth, isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body || {};
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, msg: "Invalid user id", data: null });
+    }
+    const note = String(reason || "").trim().slice(0, 500);
+    const user = await User.findByIdAndUpdate(
+      id,
+      { $set: { adminFraudFlag: true, adminFraudReason: note } },
+      { new: true }
+    ).select("username email adminFraudFlag adminFraudReason");
+    if (!user) {
+      return res.status(404).json({ success: false, msg: "User not found", data: null });
+    }
+    await writeAdminAudit({
+      adminId: req.user._id,
+      category: "fraud",
+      action: "User flagged for fraud review",
+      targetUserId: id,
+      meta: { reason: note },
+    });
+    return res.json({
+      success: true,
+      msg: "User flagged",
+      data: { user },
+    });
+  } catch (err) {
+    return sendAdminError(res, err, "ADMIN FRAUD FLAG ERROR");
+  }
+});
+
+router.post("/users/:id/fraud-unflag", auth, isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, msg: "Invalid user id", data: null });
+    }
+    const user = await User.findByIdAndUpdate(
+      id,
+      { $set: { adminFraudFlag: false, adminFraudReason: "" } },
+      { new: true }
+    ).select("username email adminFraudFlag adminFraudReason");
+    if (!user) {
+      return res.status(404).json({ success: false, msg: "User not found", data: null });
+    }
+    await writeAdminAudit({
+      adminId: req.user._id,
+      category: "fraud",
+      action: "Fraud flag cleared",
+      targetUserId: id,
+      meta: {},
+    });
+    return res.json({
+      success: true,
+      msg: "Fraud flag cleared",
+      data: { user },
+    });
+  } catch (err) {
+    return sendAdminError(res, err, "ADMIN FRAUD UNFLAG ERROR");
+  }
+});
+
 router.get("/deposits", auth, isAdmin, async (req, res) => {
   try {
-    const deposits = await HybridDeposit.find()
+    const q = {};
+    const { from, to } = req.query || {};
+    if (from || to) {
+      q.createdAt = {};
+      if (from) {
+        const d = new Date(from);
+        if (!Number.isNaN(d.getTime())) q.createdAt.$gte = d;
+      }
+      if (to) {
+        const d = new Date(to);
+        if (!Number.isNaN(d.getTime())) q.createdAt.$lte = d;
+      }
+    }
+    const limRaw = Number(req.query.limit);
+    const lim = Math.min(Math.max(Number.isFinite(limRaw) ? limRaw : 2500, 1), 5000);
+
+    const deposits = await HybridDeposit.find(q)
       .populate("userId", "username email")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .limit(lim);
     const latestDeposits = deposits.map((d) => ({
       txHash: d.txHash,
       wallet: d.walletAddress,
@@ -141,6 +327,13 @@ router.post("/hybrid/withdraw/approve", auth, isAdmin, async (req, res) => {
       return res.status(400).json({ success: false, msg: "Invalid ID", data: {} });
     }
     const data = await adminApproveHybridWithdrawal(withdrawalId, req.user._id);
+    await writeAdminAudit({
+      adminId: req.user._id,
+      category: "withdraw",
+      action: "Withdrawal approved",
+      targetUserId: data?.userId,
+      meta: { withdrawalId: String(withdrawalId), status: data?.status, netAmount: data?.netAmount },
+    });
     return res.json({ success: true, msg: "Withdrawal approved", data: { withdrawal: data } });
   } catch (err) {
     return res.status(400).json({ success: false, msg: err.message, data: null });
@@ -157,6 +350,13 @@ router.post("/hybrid/withdraw/pay", auth, isAdmin, async (req, res) => {
       return res.status(400).json({ success: false, msg: "txHash required", data: {} });
     }
     const data = await adminMarkHybridWithdrawalPaid(withdrawalId, txHash, req.user._id);
+    await writeAdminAudit({
+      adminId: req.user._id,
+      category: "withdraw",
+      action: "Withdrawal marked paid",
+      targetUserId: data?.withdrawal?.userId ?? data?.userId,
+      meta: { withdrawalId: String(withdrawalId), txHash: String(txHash).trim() },
+    });
     return res.json({ success: true, msg: "Withdrawal marked as paid", data });
   } catch (err) {
     return res.status(400).json({ success: false, msg: err.message, data: null });
@@ -170,6 +370,13 @@ router.post("/hybrid/withdraw/reject", auth, isAdmin, async (req, res) => {
       return res.status(400).json({ success: false, msg: "Invalid ID", data: {} });
     }
     const data = await adminRejectHybridWithdrawal(withdrawalId);
+    await writeAdminAudit({
+      adminId: req.user._id,
+      category: "withdraw",
+      action: "Withdrawal rejected",
+      targetUserId: data?.userId,
+      meta: { withdrawalId: String(withdrawalId) },
+    });
     return res.json({ success: true, msg: "Withdrawal rejected and refunded", data: { withdrawal: data } });
   } catch (err) {
     return res.status(400).json({ success: false, msg: err.message, data: null });
@@ -184,6 +391,13 @@ router.post("/withdraw/approve/:id", auth, isAdmin, async (req, res) => {
       return res.status(400).json({ success: false, msg: "Invalid ID", data: {} });
     }
     const data = await adminApproveHybridWithdrawal(id, req.user._id);
+    await writeAdminAudit({
+      adminId: req.user._id,
+      category: "withdraw",
+      action: "Withdrawal approved",
+      targetUserId: data?.userId,
+      meta: { withdrawalId: String(id), status: data?.status, netAmount: data?.netAmount },
+    });
     return res.json({ success: true, msg: "Withdrawal approved", data: { withdrawal: data } });
   } catch (err) {
     return res.status(400).json({ success: false, msg: err.message, data: null });
@@ -197,6 +411,13 @@ router.post("/withdraw/reject/:id", auth, isAdmin, async (req, res) => {
       return res.status(400).json({ success: false, msg: "Invalid ID", data: {} });
     }
     const data = await adminRejectHybridWithdrawal(id);
+    await writeAdminAudit({
+      adminId: req.user._id,
+      category: "withdraw",
+      action: "Withdrawal rejected",
+      targetUserId: data?.userId,
+      meta: { withdrawalId: String(id) },
+    });
     return res.json({ success: true, msg: "Withdrawal rejected and refunded", data: { withdrawal: data } });
   } catch (err) {
     return res.status(400).json({ success: false, msg: err.message, data: null });
@@ -370,6 +591,13 @@ router.post("/set-vip", auth, isAdmin, async (req, res) => {
       return res.status(404).json({ success: false, msg: "User not found", data: null });
     }
     console.log("👑 VIP updated:", userId);
+    await writeAdminAudit({
+      adminId: req.user._id,
+      category: "admin",
+      action: `VIP set to ${nextLevel}`,
+      targetUserId: id,
+      meta: { vipLevel: nextLevel },
+    });
     return res.json({
       success: true,
       msg: "VIP level updated",
@@ -392,6 +620,13 @@ router.post("/block/:id", auth, isAdmin, async (req, res) => {
     if (!user) {
       return res.status(404).json({ success: false, msg: "User not found", data: null });
     }
+    await writeAdminAudit({
+      adminId: req.user._id,
+      category: "user",
+      action: "User blocked",
+      targetUserId: id,
+      meta: {},
+    });
     res.json({ success: true, msg: "User blocked", data: null });
   } catch (err) {
     sendAdminError(res, err, "ADMIN BLOCK ERROR");
@@ -410,6 +645,13 @@ router.post("/unblock/:id", auth, isAdmin, async (req, res) => {
     if (!user) {
       return res.status(404).json({ success: false, msg: "User not found", data: null });
     }
+    await writeAdminAudit({
+      adminId: req.user._id,
+      category: "user",
+      action: "User unblocked",
+      targetUserId: id,
+      meta: {},
+    });
     res.json({ success: true, msg: "User unblocked", data: null });
   } catch (err) {
     sendAdminError(res, err, "ADMIN UNBLOCK ERROR");
@@ -439,6 +681,13 @@ router.post("/reset-wallet/:id", auth, isAdmin, async (req, res) => {
     if (!user) {
       return res.status(404).json({ success: false, msg: "User not found", data: null });
     }
+    await writeAdminAudit({
+      adminId: req.user._id,
+      category: "admin",
+      action: "Wallet reset by admin",
+      targetUserId: id,
+      meta: {},
+    });
     res.json({ success: true, msg: "Wallet reset", data: null });
   } catch (err) {
     sendAdminError(res, err, "ADMIN RESET WALLET ERROR");

@@ -4,18 +4,20 @@ import { useEffect, useMemo, useState } from "react";
 import AdminLayout, {
   adminFetch,
   formatCurrency,
+  formatDate,
   getUserLabel,
 } from "../../../components/admin/AdminLayout";
 import Loader from "../../../components/admin/Loader";
 import Table from "../../../components/admin/Table";
 import AdminPagination from "../../../components/admin/AdminPagination";
 import ConfirmModal from "../../../components/admin/ConfirmModal";
+import { CARD } from "../../../lib/adminTheme";
 import { pushAdminLog } from "../../../lib/adminActivityLog";
 import EmptyState from "../../../components/EmptyState";
-import { showSafeToast } from "../../../lib/toast";
+import { showAdminToast, showSafeToast } from "../../../lib/toast";
 
-const PAGE_SIZE = 10;
-const ROW_CAP = 100;
+const PAGE_SIZE = 25;
+const ROW_CAP = 2000;
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<any[]>([]);
@@ -25,11 +27,14 @@ export default function AdminUsersPage() {
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
   const [processingId, setProcessingId] = useState("");
-  const [confirm, setConfirm] = useState<
-    null | { kind: "block" | "unblock"; user: any }
-  >(null);
+  const [confirm, setConfirm] = useState<null | { kind: "block" | "unblock"; user: any }>(
+    null
+  );
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [confirmActionLoading, setConfirmActionLoading] = useState(false);
+  const [detail, setDetail] = useState<null | { user: any; directTeam: any[] }>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [teamOnly, setTeamOnly] = useState<null | { user: any; directTeam: any[] }>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 400);
@@ -90,6 +95,38 @@ export default function AdminUsersPage() {
   const safePage = Math.min(page, totalPages);
   const slice = filteredUsers.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
+  const openDetails = async (user: any) => {
+    const id = user._id;
+    if (!id) return;
+    setDetailLoading(true);
+    setDetail(null);
+    try {
+      const payload = await adminFetch(`/admin/users/${id}/detail`);
+      const d = payload?.data;
+      setDetail({ user: d?.user, directTeam: d?.directTeam || [] });
+    } catch (e: any) {
+      showSafeToast(e?.message || "Failed to load user");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const openTeam = async (user: any) => {
+    const id = user._id;
+    if (!id) return;
+    setDetailLoading(true);
+    setTeamOnly(null);
+    try {
+      const payload = await adminFetch(`/admin/users/${id}/detail`);
+      const d = payload?.data;
+      setTeamOnly({ user: d?.user, directTeam: d?.directTeam || [] });
+    } catch (e: any) {
+      showSafeToast(e?.message || "Failed to load team");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   const runBlockToggle = async () => {
     if (!confirm || confirmActionLoading) return;
     const { kind, user } = confirm;
@@ -105,6 +142,7 @@ export default function AdminUsersPage() {
         action: kind === "block" ? "User blocked" : "User unblocked",
         detail: getUserLabel(user),
       });
+      showAdminToast(kind === "block" ? "User blocked" : "User unblocked", "success");
       setUsers((prev) =>
         prev.map((u) =>
           String(u._id) === String(id) ? { ...u, isBlocked: kind === "block" } : u
@@ -115,6 +153,7 @@ export default function AdminUsersPage() {
       const msg = err?.message || "Request failed";
       setError(msg);
       showSafeToast(msg);
+      showAdminToast(msg, "error");
       pushAdminLog({ level: "error", action: "User block/unblock failed", detail: msg });
     } finally {
       setProcessingId("");
@@ -125,7 +164,7 @@ export default function AdminUsersPage() {
   return (
     <AdminLayout
       title="User management"
-      subtitle="Search accounts, filter by status, block or unblock with confirmation."
+      subtitle="Search, filter, block or unblock, inspect account and direct team."
     >
       <div className="mb-4 grid gap-3 md:grid-cols-[1fr_180px]">
         <input
@@ -154,7 +193,15 @@ export default function AdminUsersPage() {
         <EmptyState text="No records found" />
       ) : (
         <Table
-          columns={["Username", "Balance", "VIP", "Status", "Actions"]}
+          columns={[
+            "Username",
+            "Email",
+            "Balance",
+            "Total deposit",
+            "Total withdraw",
+            "Status",
+            "Actions",
+          ]}
           emptyText="No users match your filters"
           footer={
             <AdminPagination
@@ -171,13 +218,18 @@ export default function AdminUsersPage() {
               <tr key={user._id} className="hover:bg-white/[0.03]">
                 <td className="whitespace-nowrap px-4 py-4">
                   <div className="font-medium text-white">{user.username || "—"}</div>
-                  <div className="text-xs text-gray-500">{user.email || "—"}</div>
+                </td>
+                <td className="max-w-[200px] truncate px-4 py-4 text-sm text-gray-400">
+                  {user.email || "—"}
                 </td>
                 <td className="whitespace-nowrap px-4 py-4 text-emerald-300 tabular-nums">
                   {formatCurrency(user.balance)}
                 </td>
-                <td className="whitespace-nowrap px-4 py-4 text-gray-300">
-                  VIP {Number(user.vipLevel || 0)}
+                <td className="whitespace-nowrap px-4 py-4 tabular-nums text-gray-200">
+                  {formatCurrency(user.totalInvested ?? 0)}
+                </td>
+                <td className="whitespace-nowrap px-4 py-4 tabular-nums text-sky-200">
+                  {formatCurrency(user.totalWithdraw ?? 0)}
                 </td>
                 <td className="whitespace-nowrap px-4 py-4">
                   <span
@@ -191,25 +243,45 @@ export default function AdminUsersPage() {
                   </span>
                 </td>
                 <td className="px-4 py-4">
-                  {user.isBlocked ? (
-                    <button
-                      type="button"
-                      disabled={Boolean(processingId) || confirmActionLoading}
-                      onClick={() => setConfirm({ kind: "unblock", user })}
-                      className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
-                    >
-                      {busy ? "…" : "Unblock"}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={Boolean(processingId) || confirmActionLoading}
-                      onClick={() => setConfirm({ kind: "block", user })}
-                      className="rounded-lg bg-amber-500/90 px-3 py-2 text-xs font-semibold text-black hover:bg-amber-400 disabled:opacity-50"
-                    >
-                      {busy ? "…" : "Block"}
-                    </button>
-                  )}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={Boolean(processingId) || confirmActionLoading}
+                        onClick={() => void openDetails(user)}
+                        className="rounded-lg border border-white/15 bg-white/5 px-2 py-1.5 text-[11px] text-gray-200 hover:bg-white/10"
+                      >
+                        Details
+                      </button>
+                      <button
+                        type="button"
+                        disabled={Boolean(processingId) || confirmActionLoading}
+                        onClick={() => void openTeam(user)}
+                        className="rounded-lg border border-white/15 bg-white/5 px-2 py-1.5 text-[11px] text-gray-200 hover:bg-white/10"
+                      >
+                        Team
+                      </button>
+                    </div>
+                    {user.isBlocked ? (
+                      <button
+                        type="button"
+                        disabled={Boolean(processingId) || confirmActionLoading}
+                        onClick={() => setConfirm({ kind: "unblock", user })}
+                        className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+                      >
+                        {busy ? "…" : "Unblock"}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={Boolean(processingId) || confirmActionLoading}
+                        onClick={() => setConfirm({ kind: "block", user })}
+                        className="rounded-lg bg-amber-500/90 px-3 py-2 text-xs font-semibold text-black hover:bg-amber-400 disabled:opacity-50"
+                      >
+                        {busy ? "…" : "Block"}
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             );
@@ -234,6 +306,95 @@ export default function AdminUsersPage() {
         onCancel={() => !confirmActionLoading && setConfirm(null)}
         onConfirm={runBlockToggle}
       />
+
+      {detailLoading ? (
+        <div className="fixed bottom-4 right-4 z-50 rounded-xl bg-black/80 px-4 py-2 text-sm text-white">
+          Loading…
+        </div>
+      ) : null}
+
+      {detail ? (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+          role="presentation"
+          onClick={() => setDetail(null)}
+        >
+          <div
+            className={`${CARD} max-h-[85vh] w-full max-w-lg overflow-y-auto p-6`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-white">User details</h3>
+            <dl className="mt-4 space-y-2 text-sm">
+              {[
+                ["Username", detail.user?.username],
+                ["Email", detail.user?.email],
+                ["Balance", formatCurrency(detail.user?.balance)],
+                ["Deposit balance", formatCurrency(detail.user?.depositBalance)],
+                ["Total invested", formatCurrency(detail.user?.totalInvested)],
+                ["Total withdraw", formatCurrency(detail.user?.totalWithdraw)],
+                ["VIP", String(detail.user?.vipLevel ?? 0)],
+                ["Created", formatDate(detail.user?.createdAt)],
+                ["Blocked", detail.user?.isBlocked ? "Yes" : "No"],
+              ].map(([k, v]) => (
+                <div key={k} className="flex justify-between gap-4 border-b border-white/5 py-1">
+                  <dt className="text-gray-500">{k}</dt>
+                  <dd className="text-right text-gray-200">{v}</dd>
+                </div>
+              ))}
+            </dl>
+            <button
+              type="button"
+              className="mt-6 w-full rounded-xl border border-white/15 py-2 text-sm text-gray-300 hover:bg-white/10"
+              onClick={() => setDetail(null)}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {teamOnly ? (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+          role="presentation"
+          onClick={() => setTeamOnly(null)}
+        >
+          <div
+            className={`${CARD} max-h-[85vh] w-full max-w-2xl overflow-y-auto p-6`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-white">
+              Direct team — {teamOnly.user?.username}
+            </h3>
+            <p className="mt-1 text-xs text-gray-500">{teamOnly.directTeam?.length || 0} referrals</p>
+            <ul className="mt-4 space-y-2 text-sm">
+              {teamOnly.directTeam?.length ? (
+                teamOnly.directTeam.map((m: any) => (
+                  <li
+                    key={String(m._id)}
+                    className="flex flex-wrap justify-between gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2"
+                  >
+                    <span className="font-medium text-white">{m.username}</span>
+                    <span className="text-xs text-gray-500">{m.email}</span>
+                    <span className="text-xs text-emerald-300 tabular-nums">
+                      Dep {formatCurrency(m.depositBalance)}
+                    </span>
+                  </li>
+                ))
+              ) : (
+                <li className="text-gray-500">No direct referrals.</li>
+              )}
+            </ul>
+            <button
+              type="button"
+              className="mt-6 w-full rounded-xl border border-white/15 py-2 text-sm text-gray-300 hover:bg-white/10"
+              onClick={() => setTeamOnly(null)}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      ) : null}
     </AdminLayout>
   );
 }

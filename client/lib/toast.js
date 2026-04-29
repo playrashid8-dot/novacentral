@@ -79,3 +79,41 @@ export function showSafeToast(rawMessage, opts = {}) {
     lastTime = now;
   }
 }
+
+/** Success / error / warning styling for admin actions */
+let lastAdminToastKey = "";
+let lastAdminToastAt = 0;
+
+/**
+ * @param {string} rawMessage
+ * @param {"success" | "error" | "warning"} [variant]
+ * @param {{ fallback?: string }} [opts]
+ */
+export function showAdminToast(rawMessage, variant = "success", opts = {}) {
+  if (typeof window === "undefined") return;
+
+  const message = normalizeMessage(rawMessage, opts);
+  if (!message) return;
+
+  const now = Date.now();
+  const key = `${variant}::${message}`;
+  if (key === lastAdminToastKey && now - lastAdminToastAt < 1200) return;
+  lastAdminToastKey = key;
+  lastAdminToastAt = now;
+
+  const base =
+    "fixed top-5 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg text-sm shadow-lg z-[60] animate-fade-in text-white max-w-[min(90vw,420px)] text-center";
+  const variantCls =
+    variant === "error"
+      ? "bg-red-600"
+      : variant === "warning"
+        ? "bg-amber-600"
+        : "bg-emerald-600";
+
+  const div = document.createElement("div");
+  div.innerText = message;
+  div.className = `${base} ${variantCls}`;
+  document.body.appendChild(div);
+
+  setTimeout(() => div.remove(), 2800);
+}

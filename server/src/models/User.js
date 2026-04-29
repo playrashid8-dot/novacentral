@@ -243,6 +243,19 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
+    /** Admin-only review flags (does not alter earn / withdraw logic) */
+    adminFraudFlag: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    adminFraudReason: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 500,
+    },
+
     // 🔐 SECURITY
     isAdmin: {
       type: Boolean,

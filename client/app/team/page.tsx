@@ -11,6 +11,8 @@ import ProtectedRoute from "../../components/ProtectedRoute";
 import PageWrapper from "../../components/PageWrapper";
 import LiveRefreshIndicator from "../../components/LiveRefreshIndicator";
 
+const CARD = "rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl";
+
 type ReferralStatsPayload = {
     directCount?: number;
     teamCount?: number;
@@ -236,14 +238,6 @@ function TeamContent({
     return () => window.clearTimeout(t);
   }, [search]);
 
-  const levelCounts = useMemo(() => {
-    const counts = { A: 0, B: 0, C: 0 };
-    members.forEach((m) => {
-      counts[m.level]++;
-    });
-    return counts;
-  }, [members]);
-
   const filteredMembers = useMemo(() => {
     const q = debouncedSearch.toLowerCase();
     if (!q) return members;
@@ -260,41 +254,39 @@ function TeamContent({
   );
 
   return (
-    <div className="relative w-full max-w-full overflow-x-hidden pb-3 text-white">
+    <div className="relative w-full max-w-full overflow-x-hidden px-1 pb-3 text-white sm:px-0">
       <AppToast message={toast} />
 
       <motion.header
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative z-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+        className="relative z-10 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
       >
         <div>
-          <h1 className="text-xl font-black tracking-tight text-white sm:text-2xl">Team</h1>
-          <p className="mt-1 text-[11px] text-gray-500">Referral overview</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-500">HybridEarn</p>
+          <h1 className="text-lg font-bold tracking-tight text-white sm:text-2xl">Team</h1>
+          <p className="mt-0.5 text-[11px] text-gray-400 sm:text-xs">Referral network & balances</p>
         </div>
-        <LiveRefreshIndicator lastUpdatedAt={lastUpdatedAt} />
+        <LiveRefreshIndicator lastUpdatedAt={lastUpdatedAt} className="shrink-0 sm:pt-1" />
       </motion.header>
 
       <motion.section
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.05 }}
-        className="mt-6"
+        className="mt-5 sm:mt-6"
       >
-        <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-indigo-300/85">Stats</p>
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
-          <StatPill label="Direct team (A)" value={referralStatsReady ? directCount : "—"} accent="text-emerald-200" />
-          <StatPill label="Total team" value={referralStatsReady ? teamCount : "—"} accent="text-sky-200" />
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-3">
+          <StatPill cardClassName={CARD} label="Direct team (A)" value={referralStatsReady ? directCount : "—"} accent="text-emerald-200" />
+          <StatPill cardClassName={CARD} label="Total team" value={referralStatsReady ? teamCount : "—"} accent="text-sky-200" />
           <StatPill
+            cardClassName={CARD}
             label="Total team income"
             value={referralStatsReady ? `$${referralIncome.toFixed(2)}` : "—"}
             accent="text-violet-200"
             isCurrency
           />
         </div>
-        <p className="mt-2 text-[10px] leading-relaxed text-gray-500">
-          Data based on real referral stats
-        </p>
       </motion.section>
 
       {!loading && (
@@ -302,7 +294,7 @@ function TeamContent({
         <Link href="/team/salary" className="block w-full">
           <button
             type="button"
-            className="w-full rounded-xl bg-purple-500 py-3 text-sm font-bold text-white shadow-lg shadow-purple-900/25 transition hover:bg-purple-400"
+            className={`w-full rounded-2xl border border-emerald-500/30 bg-emerald-600/90 py-3 text-sm font-semibold text-white shadow-[0_0_25px_rgba(16,185,129,0.25)] transition duration-300 hover:scale-[1.02] hover:bg-emerald-500`}
           >
             Team Salary
           </button>
@@ -314,18 +306,15 @@ function TeamContent({
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.12 }}
-        className="mt-6 rounded-2xl border border-white/[0.08] bg-white/[0.04] p-4 backdrop-blur-xl ring-1 ring-white/[0.05]"
+        className={`mt-5 p-3 transition duration-300 hover:scale-[1.005] sm:mt-6 sm:p-4 ${CARD}`}
       >
-        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400">Members</p>
-          <div className="flex flex-col items-end gap-0.5 text-[10px] text-gray-500">
-            <span>{referralStatsReady ? `${teamCount} in network` : "—"}</span>
-            {membersReady && (
-              <span className="tabular-nums text-gray-400">
-                Level A: {levelCounts.A} · B: {levelCounts.B} · C: {levelCounts.C}
-              </span>
-            )}
-          </div>
+          {referralStatsReady ? (
+            <span className="text-[10px] text-gray-500">{teamCount} in network</span>
+          ) : (
+            <span className="text-[10px] text-gray-500">—</span>
+          )}
         </div>
 
         <MembersMessage
@@ -353,17 +342,21 @@ function StatPill({
   value,
   accent,
   isCurrency,
+  cardClassName,
 }: {
   label: string;
   value: number | string;
   accent: string;
   isCurrency?: boolean;
+  cardClassName: string;
 }) {
   return (
-    <div className="rounded-2xl border border-white/[0.08] bg-black/25 px-3 py-3 text-center shadow-soft backdrop-blur-md ring-1 ring-white/[0.04]">
-      <p className="text-[8px] font-semibold uppercase tracking-[0.14em] text-gray-500">{label}</p>
+    <div
+      className={`${cardClassName} px-3 py-3 text-center transition duration-300 hover:scale-[1.02]`}
+    >
+      <p className="text-[10px] text-gray-400 sm:text-xs">{label}</p>
       <p
-        className={`mt-1 font-black tabular-nums sm:text-xl ${accent} ${isCurrency ? "text-base sm:text-lg" : "text-lg"}`}
+        className={`mt-1 font-bold tabular-nums sm:text-xl ${accent} ${isCurrency ? "text-base sm:text-lg" : "text-lg"}`}
       >
         {value}
       </p>
@@ -400,6 +393,14 @@ function MembersMessage({
   loadingMoreMembers: boolean;
   onLoadMoreMembers: () => void;
 }) {
+  const levelCounts = useMemo(() => {
+    const counts = { A: 0, B: 0, C: 0 };
+    members.forEach((m) => {
+      counts[m.level]++;
+    });
+    return counts;
+  }, [members]);
+
   if (loadingMembers) {
     return (
       <div className="space-y-2">
@@ -427,62 +428,99 @@ function MembersMessage({
   if (members.length > 0) {
     return (
       <div className="space-y-3">
-        <div className="text-sm font-bold text-emerald-400 tabular-nums">
-          Total Team Balance: ${totalBalance.toFixed(2)}
+        <div
+          className={`rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5 text-[11px] font-semibold text-emerald-200/95 tabular-nums sm:text-sm`}
+        >
+          Total team balance (A–C): ${totalBalance.toFixed(2)}
         </div>
+
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              { k: "A" as const, cls: "border-emerald-400/40 bg-emerald-500/10 text-emerald-200" },
+              { k: "B" as const, cls: "border-sky-400/40 bg-sky-500/10 text-sky-200" },
+              { k: "C" as const, cls: "border-violet-400/40 bg-violet-500/10 text-violet-200" },
+            ] as const
+          ).map(({ k, cls }) => (
+            <span
+              key={k}
+              className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold tabular-nums ${cls}`}
+            >
+              Level {k}: {levelCounts[k]}
+            </span>
+          ))}
+        </div>
+
         <input
           type="search"
           placeholder="Search username…"
-          className="mb-3 w-full rounded-xl bg-white/5 p-2 text-sm text-white placeholder:text-gray-500 ring-1 ring-white/[0.08] outline-none focus:ring-white/20"
+          className="mb-1 w-full rounded-2xl border border-white/10 bg-white/5 py-2.5 pl-3 pr-3 text-sm text-white shadow-none backdrop-blur-xl placeholder:text-gray-500 outline-none transition duration-300 focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/30"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           autoComplete="off"
         />
-        <div className="max-h-[min(420px,55vh)] space-y-3 overflow-y-auto pr-1">
+
+        <div className="max-h-[min(420px,55vh)] space-y-2 overflow-y-auto overflow-x-hidden pr-1 sm:space-y-2.5">
           {filteredMembers.length === 0 ? (
             <p className="py-4 text-center text-sm text-gray-500">No usernames match your search.</p>
           ) : (
             filteredMembers.map((userRow) => (
               <div
                 key={userRow.id ?? `${userRow.username}-${userRow.level}`}
-                className="flex justify-between rounded-xl bg-white/5 p-3 ring-1 ring-white/[0.06]"
+                className="flex items-center justify-between gap-2 rounded-2xl border border-white/10 bg-white/5 p-3 backdrop-blur-xl transition duration-300 hover:scale-[1.02]"
               >
-                <div className="min-w-0 pr-2">
-                  <p className="flex flex-wrap items-center gap-x-2 gap-y-1 truncate text-white">
+                <div className="min-w-0 flex-1">
+                  <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-white">
                     <span className="truncate">{userRow.username}</span>
+                    <span
+                      className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-bold ${
+                        userRow.level === "A"
+                          ? "border-emerald-400/50 bg-emerald-500/15 text-emerald-200"
+                          : userRow.level === "B"
+                            ? "border-sky-400/50 bg-sky-500/15 text-sky-200"
+                            : "border-violet-400/50 bg-violet-500/15 text-violet-200"
+                      }`}
+                    >
+                      {userRow.level}
+                    </span>
                     {isAfterClaim(userRow.joinedAt, lastSalaryClaimAt) ? (
-                      <span className="shrink-0 text-green-400 text-xs font-semibold uppercase tracking-wide">
-                        NEW
+                      <span className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-green-400">
+                        New
                       </span>
                     ) : null}
                   </p>
-                  <p className="text-xs text-gray-400">
-                    {userRow.joinedAt ? new Date(userRow.joinedAt).toLocaleDateString() : "—"}
+                  <p className="mt-0.5 text-[11px] text-gray-400">
+                    Joined {userRow.joinedAt ? new Date(userRow.joinedAt).toLocaleDateString() : "—"}
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="font-bold tabular-nums text-emerald-400">
+                  <p className="text-sm font-bold tabular-nums text-emerald-400 sm:text-base">
                     ${Number(userRow.balance).toFixed(2)}
                   </p>
-                  <p className="text-xs text-gray-400">Level {userRow.level}</p>
                 </div>
               </div>
             ))
           )}
         </div>
         {membersHasMore && (
-          <button
-            type="button"
-            onClick={onLoadMoreMembers}
-            disabled={loadingMoreMembers || Boolean(search.trim())}
-            className="mt-3 w-full rounded-xl bg-white/[0.08] py-3 text-sm font-semibold text-white ring-1 ring-white/[0.1] hover:bg-white/12 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loadingMoreMembers
-              ? "Loading…"
-              : search.trim()
-                ? "Clear search to load more tiers"
-                : "Load more"}
-          </button>
+          <div className="flex justify-center pt-1">
+            <button
+              type="button"
+              onClick={onLoadMoreMembers}
+              disabled={loadingMoreMembers || Boolean(search.trim())}
+              className={`rounded-xl px-6 py-2.5 text-sm transition duration-300 ${
+                loadingMoreMembers || search.trim()
+                  ? "cursor-not-allowed text-gray-600"
+                  : "text-gray-400 hover:text-gray-300 hover:scale-[1.02]"
+              }`}
+            >
+              {loadingMoreMembers
+                ? "Loading…"
+                : search.trim()
+                  ? "Clear search to load more"
+                  : "Load more"}
+            </button>
+          </div>
         )}
       </div>
     );
