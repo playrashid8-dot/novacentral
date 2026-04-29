@@ -13,6 +13,12 @@ export const claimHybridRoi = async () => {
   return response.data && Object.keys(response.data).length ? response.data : null;
 };
 
+export const fetchRoiClaimStatus = async () => {
+  const res = await API.get("/roi/claim-status");
+  const response = normalize(res.data);
+  return response.data && typeof response.data === "object" ? response.data : null;
+};
+
 export const claimHybridSalary = async () => {
   const res = await API.post("/salary/claim");
   const response = normalize(res.data);

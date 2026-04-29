@@ -52,16 +52,16 @@ export default function TeamPage() {
 
   const referralCode = String(user?.referralCode ?? "").trim();
   const referralIncome = Number(hybrid?.referralEarnings || 0);
-  const directCount = Number(hybrid?.salaryDirectCount || hybrid?.directCount || 0);
-  const teamCount = Number(hybrid?.salaryTeamCount || hybrid?.teamCount || 0);
-  const stage1Rule = hybrid?.salaryRules?.[0];
-  const salaryDirectNeed = Number(stage1Rule?.directCount ?? 3);
-  const salaryTeamNeed = Number(stage1Rule?.teamCount ?? 10);
-  const salaryStage = Number(hybrid?.salaryStage || 0);
-  const salaryReward = Number(
-    hybrid?.salaryRules?.find((r: { stage?: number }) => Number(r?.stage) === salaryStage)
-      ?.amount ?? 0,
-  );
+  const su = hybrid?.salaryUi;
+  const directCount = Number(su?.directCount ?? hybrid?.directCount ?? 0);
+  const teamCount = Number(su?.teamCount ?? hybrid?.teamCount ?? 0);
+  const claimableStage = Number(su?.claimableStage ?? hybrid?.salaryStage ?? 0);
+  const claimableAmount = Number(su?.claimableAmount ?? 0);
+  const nextDirectNeed = Number(su?.nextDirectNeed ?? hybrid?.salaryRules?.[0]?.directCount ?? 3);
+  const nextTeamNeed = Number(su?.nextTeamNeed ?? hybrid?.salaryRules?.[0]?.teamCount ?? 10);
+  const nextReward = su?.nextReward != null ? Number(su.nextReward) : null;
+  const nextStageNum = su?.nextStage != null ? Number(su.nextStage) : null;
+  const salaryClaimable = claimableStage > 0;
 
   const hasNoTeam = directCount === 0 && teamCount === 0;
 
@@ -78,7 +78,7 @@ export default function TeamPage() {
       showToast(
         salMsg ||
           `Salary claimed: $${Number(
-            (result as { amount?: number })?.amount || salaryReward || 0,
+            (result as { amount?: number })?.amount || claimableAmount || 0,
           ).toFixed(2)}`,
       );
       await loadUser(true);
@@ -192,16 +192,16 @@ export default function TeamPage() {
               Team progress
             </p>
             <ProgressBar
-              label="Direct progress"
+              label="Direct progress (next milestone)"
               value={directCount}
-              max={salaryDirectNeed}
-              hint={`${directCount} / ${salaryDirectNeed}`}
+              max={Math.max(nextDirectNeed, 1)}
+              hint={`${directCount} / ${nextDirectNeed}`}
             />
             <ProgressBar
-              label="Team progress"
+              label="Team progress (next milestone)"
               value={teamCount}
-              max={salaryTeamNeed}
-              hint={`${teamCount} / ${salaryTeamNeed}`}
+              max={Math.max(nextTeamNeed, 1)}
+              hint={`${teamCount} / ${nextTeamNeed}`}
             />
           </div>
 
@@ -212,19 +212,34 @@ export default function TeamPage() {
                 <h3 className="mt-0.5 text-base font-black text-white">Salary Rewards</h3>
               </div>
               <span className="shrink-0 rounded-full border border-yellow-300/20 bg-yellow-400/10 px-2 py-0.5 text-[9px] font-semibold text-yellow-100">
-                Stage {salaryStage || 0}
+                {salaryClaimable ? `Claim stage ${claimableStage}` : "Build team"}
               </span>
             </div>
 
+            <p className="mt-2 text-[11px] text-gray-400">
+              {nextStageNum != null ? (
+                <>
+                  Next milestone: stage {nextStageNum}
+                  {nextReward != null ? ` · up to $${nextReward.toFixed(0)}` : ""}
+                </>
+              ) : (
+                "All salary milestones claimed."
+              )}
+            </p>
+
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <MiniMetric title="Stage" value={salaryStage || 0} raw />
-              <MiniMetric title="Reward" value={salaryReward} />
+              <MiniMetric title="Ready stage" value={salaryClaimable ? claimableStage : "—"} raw />
+              <MiniMetric
+                title="Payout if claimed"
+                value={salaryClaimable ? claimableAmount : "—"}
+                raw={!salaryClaimable}
+              />
             </div>
 
             <GradientButton
               onClick={handleClaimSalary}
               loading={salaryLoading}
-              disabled={salaryStage <= 0}
+              disabled={!salaryClaimable || salaryLoading}
               className="mt-3"
             >
               {salaryLoading ? "Claiming..." : "Claim Salary Reward"}

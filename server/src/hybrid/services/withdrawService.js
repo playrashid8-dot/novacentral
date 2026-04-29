@@ -87,6 +87,13 @@ export const requestHybridWithdrawal = async (
         throw new Error("Pending withdrawal must be completed first");
       }
 
+      if (user.lastWithdrawRequest) {
+        const lastReq = new Date(user.lastWithdrawRequest).getTime();
+        if (Number.isFinite(lastReq) && Date.now() - lastReq < WITHDRAW_DELAY_MS) {
+          throw new Error("Withdrawal cooldown: wait 96 hours between requests");
+        }
+      }
+
       if (getSpendableHybridBalance(user) < numericAmount) {
         throw new Error("Insufficient Hybrid balance");
       }
@@ -596,6 +603,14 @@ export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash, adminI
       session
     );
 
+    console.info("[withdraw.paid]", {
+      withdrawalId: String(paid._id),
+      userId: String(paid.userId),
+      txHash: normalized,
+      walletAddress: String(paid.walletAddress || "").toLowerCase(),
+      netAmount: Number(paid.netAmount || 0),
+    });
+
     result = { withdrawal: paid, txHash: normalized };
     await session.commitTransaction();
     return result;
@@ -668,6 +683,7 @@ export const adminRejectHybridWithdrawal = async (withdrawalId) => {
           rewardBalance: rewardBack,
           depositBalance: depositBack,
         },
+        $set: { lastWithdrawRequest: null },
       },
       { new: true, session }
     );

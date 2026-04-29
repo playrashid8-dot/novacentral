@@ -60,22 +60,19 @@ export default function Referral() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const directCount = Number(hybrid?.salaryDirectCount || hybrid?.directCount || stats?.directCount || 0);
-  const teamCount = Number(hybrid?.salaryTeamCount || hybrid?.teamCount || stats?.teamCount || 0);
-  const stage1 = hybrid?.salaryRules?.[0];
-  const needDirect = stage1 != null ? Number(stage1.directCount) : NaN;
-  const needTeam = stage1 != null ? Number(stage1.teamCount) : NaN;
-  const needDirectBar = Number.isFinite(needDirect) && needDirect > 0 ? needDirect : 1;
-  const needTeamBar = Number.isFinite(needTeam) && needTeam > 0 ? needTeam : 1;
-  const salaryComplete =
-    stage1 != null &&
-    Number.isFinite(needDirect) &&
-    Number.isFinite(needTeam) &&
-    directCount >= needDirect &&
-    teamCount >= needTeam;
+  const su = hybrid?.salaryUi;
+  const directCount = Number(
+    su?.directCount ?? hybrid?.directCount ?? stats?.directCount ?? 0,
+  );
+  const teamCount = Number(su?.teamCount ?? hybrid?.teamCount ?? stats?.teamCount ?? 0);
+  const nextDirectNeed = Number(su?.nextDirectNeed ?? hybrid?.salaryRules?.[0]?.directCount ?? 3);
+  const nextTeamNeed = Number(su?.nextTeamNeed ?? hybrid?.salaryRules?.[0]?.teamCount ?? 10);
+  const needDirectBar = Number.isFinite(nextDirectNeed) && nextDirectNeed > 0 ? nextDirectNeed : 1;
+  const needTeamBar = Number.isFinite(nextTeamNeed) && nextTeamNeed > 0 ? nextTeamNeed : 1;
+  const salaryClaimable = Number(su?.claimableStage ?? hybrid?.salaryStage ?? 0) > 0;
 
   const claimSalary = async () => {
-    if (!salaryComplete || salaryLoading) return;
+    if (!salaryClaimable || salaryLoading) return;
 
     try {
       setSalaryLoading(true);
@@ -163,8 +160,6 @@ export default function Referral() {
           title="ROI Rate"
           value={`${(Number(hybrid?.roiRate || 0) * 100).toFixed(2)}%`}
         />
-        <Stat title="Salary Direct" value={hybrid?.salaryDirectCount || 0} />
-        <Stat title="Salary Team" value={hybrid?.salaryTeamCount || 0} />
       </div>
 
       <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur-2xl">
@@ -174,19 +169,13 @@ export default function Referral() {
             label="Direct"
             value={directCount}
             max={needDirectBar}
-            hint={
-              stage1
-                ? `Direct: ${directCount} / ${needDirect}`
-                : `Direct: ${directCount} (loading rules…)`
-            }
+            hint={`Direct: ${directCount} / ${nextDirectNeed}`}
           />
           <ProgressBar
             label="Team"
             value={teamCount}
             max={needTeamBar}
-            hint={
-              stage1 ? `Team: ${teamCount} / ${needTeam}` : `Team: ${teamCount} (loading rules…)`
-            }
+            hint={`Team: ${teamCount} / ${nextTeamNeed}`}
           />
         </div>
       </div>
@@ -205,16 +194,17 @@ export default function Referral() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-[10px] uppercase tracking-[0.24em] text-yellow-200/80">Salary Rewards</p>
-              <h3 className="mt-1 text-lg font-black text-white">Stage 1</h3>
+              <h3 className="mt-1 text-lg font-black text-white">
+                {su?.nextStage != null ? `Next: stage ${su.nextStage}` : "Salary milestones"}
+              </h3>
             </div>
-            <span className={`rounded-full border px-3 py-1 text-[10px] font-bold ${salaryComplete ? "border-green-300/30 bg-green-400/10 text-green-200" : "border-yellow-300/20 bg-yellow-400/10 text-yellow-200"}`}>
-              {salaryComplete ? "Complete" : "In Progress"}
+            <span className={`rounded-full border px-3 py-1 text-[10px] font-bold ${salaryClaimable ? "border-green-300/30 bg-green-400/10 text-green-200" : "border-yellow-300/20 bg-yellow-400/10 text-yellow-200"}`}>
+              {salaryClaimable ? "Reward ready" : "In progress"}
             </span>
           </div>
           <p className="mt-3 text-xs text-gray-400">
-            {stage1
-              ? `Requirement (stage 1): ${needDirect} direct + ${needTeam} team`
-              : "Loading salary rules from HybridEarn…"}
+            Next milestone needs {nextDirectNeed} direct + {nextTeamNeed} team. Claim unlocks when you
+            qualify for a stage you have not claimed yet.
           </p>
           <div className="mt-4 space-y-3">
             <ProgressBar label="Direct" value={directCount} max={needDirectBar} />
@@ -222,7 +212,7 @@ export default function Referral() {
           </div>
           <GradientButton
             onClick={claimSalary}
-            disabled={!salaryComplete || salaryLoading}
+            disabled={!salaryClaimable || salaryLoading}
             loading={salaryLoading}
             className="mt-4"
           >

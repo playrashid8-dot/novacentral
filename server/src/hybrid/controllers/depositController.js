@@ -1,8 +1,8 @@
 import User from "../../models/User.js";
 import { getUserHybridDeposits } from "../services/depositService.js";
 import { getUserStakes } from "../services/stakingService.js";
-import { getCurrentRoiRate } from "../services/roiService.js";
-import { refreshSalaryStage } from "../services/salaryService.js";
+import { getCurrentRoiRate, getRoiPrincipalBase } from "../services/roiService.js";
+import { getSalaryUiMeta, refreshSalaryStage } from "../services/salaryService.js";
 import { sendError, sendSuccess } from "../utils/response.js";
 import {
   LEVEL_RULES,
@@ -10,7 +10,7 @@ import {
   SALARY_RULES,
   WITHDRAW_MIN_AMOUNT,
 } from "../utils/constants.js";
-import { ONE_HOUR_MS, WITHDRAW_DELAY_MS } from "../utils/time.js";
+import { ONE_DAY_MS, ONE_HOUR_MS, WITHDRAW_DELAY_MS } from "../utils/time.js";
 
 export const getHybridDepositDashboard = async (req, res) => {
   try {
@@ -18,7 +18,7 @@ export const getHybridDepositDashboard = async (req, res) => {
 
     const [user, deposits, stakes] = await Promise.all([
       User.findById(req.user._id).select(
-        "walletAddress depositBalance rewardBalance referralEarnings level pendingWithdraw salaryStage salaryDirectCount salaryTeamCount lastDailyClaim directCount teamCount"
+        "walletAddress depositBalance rewardBalance referralEarnings level pendingWithdraw salaryStage salaryDirectCount salaryTeamCount lastDailyClaim directCount teamCount claimedSalaryStages totalEarnings"
       ),
       getUserHybridDeposits(req.user._id),
       getUserStakes(req.user._id),
@@ -31,6 +31,17 @@ export const getHybridDepositDashboard = async (req, res) => {
     const activeStakeAmount = stakes
       .filter((stake) => stake.status === "active")
       .reduce((sum, stake) => sum + Number(stake.amount || 0), 0);
+
+    const lastClaimMs = user.lastDailyClaim ? new Date(user.lastDailyClaim).getTime() : null;
+    const nowMs = Date.now();
+    const canClaimRoi =
+      !lastClaimMs || nowMs - lastClaimMs >= ONE_DAY_MS;
+    const nextRoiClaimAt =
+      !canClaimRoi && lastClaimMs
+        ? new Date(lastClaimMs + ONE_DAY_MS).toISOString()
+        : null;
+    const roiPrincipalBase = await getRoiPrincipalBase(req.user._id);
+    const salaryUi = getSalaryUiMeta(user);
 
     return sendSuccess(res, "Hybrid deposit data fetched successfully", {
       walletAddress: (user.walletAddress || "").toLowerCase(),
@@ -52,6 +63,11 @@ export const getHybridDepositDashboard = async (req, res) => {
       teamCount: Number(user.teamCount || 0),
       activeStakeAmount,
       lastDailyClaim: user.lastDailyClaim,
+      canClaimRoi,
+      nextRoiClaimAt,
+      roiPrincipalBase,
+      totalEarnings: Number(user.totalEarnings || 0),
+      salaryUi,
       deposits,
       stakes,
     });

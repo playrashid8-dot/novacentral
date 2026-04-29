@@ -1,6 +1,6 @@
 import { Worker } from "bullmq";
 import dotenv from "dotenv";
-import { Interface, id } from "ethers";
+import { Interface } from "ethers";
 
 dotenv.config();
 
@@ -9,16 +9,15 @@ import HybridDeposit from "../hybrid/models/HybridDeposit.js";
 import User from "../models/User.js";
 import { processDepositLog } from "../hybrid/services/depositListener.js";
 import { BSC_USDT_ABI } from "../hybrid/utils/constants.js";
-import { redis } from "../queue/redis.js";
+import { redis } from "../config/redis.js";
 
-const TRANSFER_TOPIC = id("Transfer(address,address,uint256)");
 const iface = new Interface(BSC_USDT_ABI);
 
 const decodeTopicAddress = (topic = "") =>
   `0x${String(topic).slice(-40).toLowerCase()}`;
 
-async function handleDeposit({ txHash, from, to, amount, blockNumber }) {
-  const normalized = String(txHash || "").toLowerCase();
+async function handleDeposit(serializedLog) {
+  const normalized = String(serializedLog?.transactionHash || "").toLowerCase();
 
   if (await HybridDeposit.exists({ txHash: normalized })) {
     console.log("⚠️ Duplicate skipped");
@@ -26,16 +25,17 @@ async function handleDeposit({ txHash, from, to, amount, blockNumber }) {
   }
 
   const log = {
-    transactionHash: txHash,
+    transactionHash: serializedLog.transactionHash,
     blockNumber:
-      blockNumber != null && Number.isFinite(Number(blockNumber))
-        ? Number(blockNumber)
+      serializedLog.blockNumber != null &&
+      Number.isFinite(Number(serializedLog.blockNumber))
+        ? Number(serializedLog.blockNumber)
         : undefined,
-    topics: [TRANSFER_TOPIC, from, to],
-    data: amount,
+    topics: [...(serializedLog.topics || [])],
+    data: serializedLog.data,
   };
 
-  const toAddr = decodeTopicAddress(to).toLowerCase();
+  const toAddr = decodeTopicAddress(log.topics?.[2]).toLowerCase();
   const user = await User.findOne({
     $expr: {
       $eq: [{ $toLower: { $ifNull: ["$walletAddress", ""] } }, toAddr],
@@ -70,8 +70,9 @@ setInterval(() => {
 const worker = new Worker(
   "depositQueue",
   async (job) => {
-    const { txHash, from, to, amount } = job.data;
-    await handleDeposit({ txHash, from, to, amount, blockNumber: job.data.blockNumber });
+    console.log("⚙️ Worker processing:", job.id);
+    const { log } = job.data;
+    await handleDeposit(log);
   },
   {
     connection: redis,

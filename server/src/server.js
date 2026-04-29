@@ -136,6 +136,9 @@ app.use(express.json({ limit: "10kb" }));
 // ✅ CSRF (after cookieParser + JSON — required for cookie-based secrets)
 app.use(csrfProtection);
 
+// ✅ HELMET (SECURITY HEADERS) — before routes so health + API share headers
+app.use(helmet());
+
 app.get("/api/csrf-token", (req, res) => {
   const token = req.csrfToken();
 
@@ -156,9 +159,6 @@ app.get("/api/csrf-token", (req, res) => {
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
 });
-
-// ✅ HELMET (SECURITY HEADERS)
-app.use(helmet());
 
 // ✅ LOGGER
 app.use(morgan("dev"));
@@ -181,7 +181,7 @@ app.use(globalLimiter);
 ============================== */
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 50,
+  max: 25,
   keyGenerator: (req) => ipKeyGenerator(req.ip),
   message: {
     success: false,

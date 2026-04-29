@@ -137,6 +137,13 @@ export const getStatusColor = (status) => {
   }
 };
 
+/** BEP20 / EVM address: 0x + 40 hex (42 chars total). */
+export const isValidEvmAddress42 = (addr) => {
+  const s = String(addr || "").trim();
+  if (!s.startsWith("0x") || s.length !== 42) return false;
+  return /^0x[a-fA-F0-9]{40}$/.test(s);
+};
+
 /** Withdrawal / generic tx status → Tailwind classes (visual clarity). */
 export const withdrawalStatusClass = (status) => {
   const s = String(status || "").toLowerCase();

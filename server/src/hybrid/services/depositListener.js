@@ -3,7 +3,10 @@ import User from "../../models/User.js";
 import HybridDeposit from "../models/HybridDeposit.js";
 import HybridSetting from "../models/HybridSetting.js";
 import { creditHybridDeposit } from "./depositService.js";
-import { enqueueDepositJob } from "../../queue/depositQueue.js";
+import {
+  enqueueDepositJob,
+  toSerializableTransferLog,
+} from "../../queues/depositQueue.js";
 import { BSC_USDT_ABI, HYBRID_TOKEN, MIN_HYBRID_DEPOSIT } from "../utils/constants.js";
 import { getProvider, getRpcUrls, withProviderRetry } from "../utils/provider.js";
 
@@ -288,12 +291,13 @@ async function executeDepositScan(
         }
 
         try {
+          const sLog = toSerializableTransferLog(log);
+          if (!sLog) {
+            continue;
+          }
           await enqueueDepositJob({
-            txHash: log.transactionHash,
-            from: log.topics[1],
-            to: log.topics[2],
-            amount: log.data,
-            blockNumber: log.blockNumber,
+            log: sLog,
+            blockNumber: sLog.blockNumber,
           });
           processed += 1;
         } catch (err) {

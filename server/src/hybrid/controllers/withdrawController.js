@@ -18,6 +18,16 @@ export const requestWithdraw = async (req, res) => {
       return sendError(res, 400, "Password required", null);
     }
 
+    const rawWallet = walletAddress != null ? String(walletAddress).trim() : "";
+    if (!rawWallet.startsWith("0x") || rawWallet.length !== 42) {
+      return sendError(
+        res,
+        400,
+        "Enter a valid BEP20 wallet: must start with 0x and be 42 characters",
+        null
+      );
+    }
+
     const user = await User.findById(req.user._id).select("+password isBlocked");
 
     if (!user) {
@@ -37,9 +47,17 @@ export const requestWithdraw = async (req, res) => {
     const result = await requestHybridWithdrawal(
       req.user._id,
       amount,
-      walletAddress,
+      rawWallet,
       getIdempotencyKey(req)
     );
+
+    const w = result?.withdrawal?.walletAddress || "";
+    console.info("[withdraw.request]", {
+      userId: String(req.user._id),
+      grossAmount: Number(result?.withdrawal?.grossAmount ?? amount),
+      walletAddress: w,
+      withdrawalId: result?.withdrawal?._id ? String(result.withdrawal._id) : null,
+    });
 
     return sendSuccess(res, "Withdrawal requested successfully", result);
   } catch (error) {

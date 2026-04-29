@@ -1,9 +1,9 @@
 /**
- * PM2: API replicas (distinct ports behind nginx upstream), hybrid singleton, BullMQ workers.
+ * PM2: API cluster (single PORT), dedicated hybrid (WS + engine), BullMQ workers.
  * From repo: cd server && pm2 start ecosystem.config.cjs
  *
- * Scaling: nginx round-robins 5000–5002 for NOVA_SERVICE=api forks.
- * Optional: pm2-runtime -i max is single-port cluster — use nginx multi-port fork mode instead per deploy/nginx/.
+ * API uses cluster mode (3 workers, one listen port). Nginx upstream targets :5000.
+ * Alternative: fork 3 processes on 5000–5002 and restore multi-server block in deploy/nginx.
  */
 const path = require("path");
 
@@ -18,42 +18,17 @@ const commonEnv = {
 module.exports = {
   apps: [
     {
-      name: "nova-api-5000",
+      name: "nova-api",
       cwd,
       script: "./src/server.js",
-      instances: 1,
-      exec_mode: "fork",
+      instances: 3,
+      exec_mode: "cluster",
       interpreter_args: interpreterArgs,
+      merge_logs: true,
       env: {
         ...commonEnv,
         NOVA_SERVICE: "api",
         PORT: 5000,
-      },
-    },
-    {
-      name: "nova-api-5001",
-      cwd,
-      script: "./src/server.js",
-      instances: 1,
-      exec_mode: "fork",
-      interpreter_args: interpreterArgs,
-      env: {
-        ...commonEnv,
-        NOVA_SERVICE: "api",
-        PORT: 5001,
-      },
-    },
-    {
-      name: "nova-api-5002",
-      cwd,
-      script: "./src/server.js",
-      instances: 1,
-      exec_mode: "fork",
-      interpreter_args: interpreterArgs,
-      env: {
-        ...commonEnv,
-        NOVA_SERVICE: "api",
-        PORT: 5002,
       },
     },
     {

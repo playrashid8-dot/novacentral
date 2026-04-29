@@ -4,10 +4,10 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { getApiErrorMessage } from "../../lib/api";
+import { getApiErrorMessage, suppressDuplicateCatchToast } from "../../lib/api";
 import { logout } from "../../lib/auth";
 import { fetchCurrentUser } from "../../lib/session";
-import { fetchHybridSummary } from "../../lib/hybrid";
+import { claimHybridRoi, fetchHybridSummary } from "../../lib/hybrid";
 import AppToast from "../../components/AppToast";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import PageWrapper from "../../components/PageWrapper";
@@ -20,6 +20,8 @@ export default function Dashboard() {
   const [displayBalance, setDisplayBalance] = useState(0);
   const [toast, setToast] = useState("");
   const [hybrid, setHybrid] = useState<any>(null);
+  const [roiLoading, setRoiLoading] = useState(false);
+  const [tick, setTick] = useState(0);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -47,9 +49,10 @@ export default function Dashboard() {
       if (!data) throw new Error("No user data");
 
       setUser(data);
-      setDisplayBalance(
-        Number(hybridData?.depositBalance || 0) + Number(hybridData?.rewardBalance || 0),
-      );
+      const dep = Number(hybridData?.depositBalance || 0);
+      const rew = Number(hybridData?.rewardBalance || 0);
+      const stake = Number(hybridData?.activeStakeAmount || 0);
+      setDisplayBalance(dep + rew + stake);
       setHybrid(hybridData);
     } catch (err: any) {
       if (!silent) {
@@ -62,16 +65,50 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    setDisplayBalance(
-      Number(hybrid?.depositBalance || 0) + Number(hybrid?.rewardBalance || 0),
-    );
-  }, [hybrid]);
+    if (!hybrid?.nextRoiClaimAt || hybrid?.canClaimRoi) return;
+    const id = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [hybrid?.nextRoiClaimAt, hybrid?.canClaimRoi]);
 
   const currentVipLevel = Number(hybrid?.level ?? 0);
   const withdrawableUsd =
     Number(hybrid?.depositBalance ?? 0) + Number(hybrid?.rewardBalance ?? 0);
+  const stakingUsd = Number(hybrid?.activeStakeAmount ?? 0);
+  const totalEarnedUsd = Number(hybrid?.totalEarnings ?? user?.totalEarnings ?? 0);
+  const roiRatePct = (Number(hybrid?.roiRate || 0) * 100).toFixed(2);
+  const roiPrincipal = Number(hybrid?.roiPrincipalBase ?? 0);
+  const canClaimRoi = hybrid?.canClaimRoi === true;
+  const roiWaitLabel = (() => {
+    void tick;
+    const iso = hybrid?.nextRoiClaimAt;
+    if (!iso || canClaimRoi) return canClaimRoi ? "Available now" : "";
+    const ms = new Date(iso).getTime() - Date.now();
+    if (ms <= 0) return "Available now";
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+    return `${h}h ${m}m ${s}s`;
+  })();
 
-  return (
+  const handleClaimRoi = async () => {
+    if (roiLoading || !canClaimRoi || currentVipLevel < 1) return;
+    try {
+      setRoiLoading(true);
+      const result: any = await claimHybridRoi();
+      showToast(
+        result?.amount != null
+          ? `ROI claimed: $${Number(result.amount).toFixed(2)}`
+          : "ROI claimed successfully",
+      );
+      await loadUser(true);
+    } catch (err: any) {
+      if (!suppressDuplicateCatchToast(err)) {
+        showToast(getApiErrorMessage(err, "Could not claim ROI"));
+      }
+    } finally {
+      setRoiLoading(false);
+    }
+  };
     <ProtectedRoute>
       <PageWrapper
         loading={loading}
@@ -139,19 +176,14 @@ export default function Dashboard() {
           >
             <MetricHeroCard
               title="Total balance"
-              subtitle="Deposit + rewards"
+              subtitle="Deposit + rewards + staking"
               value={`$${displayBalance.toFixed(2)}`}
               gradient="from-[#6366F1]/30 via-indigo-600/20 to-[#111827]"
-            />
-            <MetricHeroCard
-              title="Withdrawable"
-              subtitle="Available to request"
-              value={`$${withdrawableUsd.toFixed(2)}`}
-              gradient="from-cyan-500/15 via-indigo-600/15 to-[#111827]"
+              className="col-span-2"
             />
             <MetricHeroCard
               title="Deposit balance"
-              subtitle="Principal on platform"
+              subtitle="Liquid principal"
               value={`$${Number(hybrid?.depositBalance || 0).toFixed(2)}`}
               gradient="from-amber-500/15 via-[#6366F1]/10 to-[#111827]"
             />
@@ -163,13 +195,63 @@ export default function Dashboard() {
               accent="text-emerald-300/95"
             />
             <MetricHeroCard
-              title="Today profit"
-              subtitle="Last cycle estimate"
-              value={`$${Number(user?.todayProfit || 0).toFixed(2)}`}
-              gradient="from-fuchsia-500/12 via-indigo-600/12 to-[#111827]"
-              accent="text-fuchsia-200/95"
+              title="Staking balance"
+              subtitle="Active plans"
+              value={`$${stakingUsd.toFixed(2)}`}
+              gradient="from-violet-500/15 via-indigo-600/12 to-[#111827]"
+              accent="text-violet-200/95"
+            />
+            <MetricHeroCard
+              title="Total earned"
+              subtitle="All-time credited"
+              value={`$${totalEarnedUsd.toFixed(2)}`}
+              gradient="from-cyan-500/12 via-[#6366F1]/10 to-[#111827]"
+              accent="text-cyan-200/95"
+            />
+            <MetricHeroCard
+              title="Withdrawable"
+              subtitle="Available to withdraw"
+              value={`$${withdrawableUsd.toFixed(2)}`}
+              gradient="from-cyan-500/15 via-indigo-600/15 to-[#111827]"
               className="col-span-2"
             />
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-4 rounded-lg border border-amber-400/20 bg-[#111827]/95 p-3.5 shadow-md ring-1 ring-amber-400/10 backdrop-blur-xl"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-200/80">
+                  Daily ROI
+                </p>
+                <p className="mt-1 text-sm text-gray-300">
+                  Rate <span className="font-bold text-white">{roiRatePct}%</span> · Principal{" "}
+                  <span className="font-bold text-white">${roiPrincipal.toFixed(2)}</span>{" "}
+                  <span className="text-gray-500">(deposit + active stakes)</span>
+                </p>
+                {!canClaimRoi && hybrid?.nextRoiClaimAt ? (
+                  <p className="mt-1 text-[11px] text-amber-100/90">
+                    Next claim in <span className="font-mono font-semibold">{roiWaitLabel}</span>
+                  </p>
+                ) : (
+                  <p className="mt-1 text-[11px] text-emerald-200/90">You can claim your daily ROI now.</p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={handleClaimRoi}
+                disabled={roiLoading || !canClaimRoi || currentVipLevel < 1}
+                className="shrink-0 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2.5 text-sm font-black text-black shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                {roiLoading ? "Claiming…" : "Claim ROI"}
+              </button>
+            </div>
+            {currentVipLevel < 1 && (
+              <p className="mt-2 text-[11px] text-gray-500">Reach VIP 1 to unlock manual ROI claims.</p>
+            )}
           </motion.div>
 
           <div className="mt-4 grid grid-cols-3 gap-2">

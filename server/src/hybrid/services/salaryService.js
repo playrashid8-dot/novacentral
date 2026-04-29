@@ -6,13 +6,11 @@ import { addHybridLedgerEntries } from "./ledgerService.js";
 const getHighestSalaryRule = (user) => {
   let matchedRule = null;
   const claimedStages = new Set((user.claimedSalaryStages || []).map(Number));
+  const direct = Number(user.directCount || 0);
+  const team = Number(user.teamCount || 0);
 
   for (const rule of SALARY_RULES) {
-    if (
-      Number(user.salaryDirectCount || 0) >= rule.directCount &&
-      Number(user.salaryTeamCount || 0) >= rule.teamCount &&
-      !claimedStages.has(rule.stage)
-    ) {
+    if (direct >= rule.directCount && team >= rule.teamCount && !claimedStages.has(rule.stage)) {
       matchedRule = rule;
     }
   }
@@ -20,9 +18,34 @@ const getHighestSalaryRule = (user) => {
   return matchedRule;
 };
 
+/** Next unclaimed milestone (for progress UI), sorted by stage. */
+export const getNextSalaryRuleForUser = (user) => {
+  const claimed = new Set((user.claimedSalaryStages || []).map(Number));
+  const sorted = [...SALARY_RULES].sort((a, b) => a.stage - b.stage);
+  return sorted.find((r) => !claimed.has(r.stage)) || null;
+};
+
+export const getSalaryUiMeta = (user) => {
+  const claimable = getHighestSalaryRule(user);
+  const nextRule = getNextSalaryRuleForUser(user);
+  const d = Number(user.directCount || 0);
+  const t = Number(user.teamCount || 0);
+  return {
+    claimableStage: claimable?.stage ?? 0,
+    claimableAmount: claimable?.amount ?? 0,
+    nextStage: nextRule?.stage ?? null,
+    nextDirectNeed: nextRule?.directCount ?? null,
+    nextTeamNeed: nextRule?.teamCount ?? null,
+    nextReward: nextRule?.amount ?? null,
+    directCount: d,
+    teamCount: t,
+    claimedSalaryStages: [...(user.claimedSalaryStages || [])],
+  };
+};
+
 export const refreshSalaryStage = async (userId, session = null) => {
   const user = await User.findById(userId)
-    .select("salaryDirectCount salaryTeamCount salaryStage claimedSalaryStages")
+    .select("salaryDirectCount salaryTeamCount salaryStage claimedSalaryStages directCount teamCount")
     .session(session);
 
   if (!user) {
@@ -55,7 +78,7 @@ export const claimSalary = async (userId) => {
     await session.withTransaction(async () => {
       const user = await User.findById(userId)
         .select(
-          "salaryDirectCount salaryTeamCount salaryStage claimedSalaryStages rewardBalance totalEarnings"
+          "directCount teamCount claimedSalaryStages rewardBalance totalEarnings salaryStage"
         )
         .session(session);
 
@@ -72,19 +95,14 @@ export const claimSalary = async (userId) => {
       const updatedUser = await User.findOneAndUpdate(
         {
           _id: userId,
-          salaryDirectCount: { $gte: rule.directCount },
-          salaryTeamCount: { $gte: rule.teamCount },
+          directCount: { $gte: rule.directCount },
+          teamCount: { $gte: rule.teamCount },
           claimedSalaryStages: { $ne: rule.stage },
         },
         {
           $inc: {
             rewardBalance: rule.amount,
             totalEarnings: rule.amount,
-          },
-          $set: {
-            salaryStage: 0,
-            salaryDirectCount: 0,
-            salaryTeamCount: 0,
           },
           $addToSet: {
             claimedSalaryStages: rule.stage,
@@ -110,11 +128,15 @@ export const claimSalary = async (userId) => {
             source: "salary_claim",
             meta: {
               stage: rule.stage,
+              directCount: Number(user.directCount || 0),
+              teamCount: Number(user.teamCount || 0),
             },
           },
         ],
         session
       );
+
+      await refreshSalaryStage(userId, session);
 
       result = {
         stage: rule.stage,

@@ -1,10 +1,28 @@
 import mongoose from "mongoose";
 import User from "../../models/User.js";
+import HybridStake from "../models/HybridStake.js";
 import { ROI_RATES } from "../utils/constants.js";
 import { ONE_DAY_MS } from "../utils/time.js";
 import { addHybridLedgerEntries } from "./ledgerService.js";
 
 export const getCurrentRoiRate = (level) => ROI_RATES[Number(level || 0)] || 0;
+
+/** Eligible principal: on-hand deposit + funds locked in active staking plans (excludes rewardBalance to avoid compounding abuse). */
+export const getRoiPrincipalBase = async (userId, session = null) => {
+  const q = HybridStake.find({ userId, status: "active" }).select("amount");
+  if (session) {
+    q.session(session);
+  }
+  const stakes = await q.lean();
+  const staked = stakes.reduce((sum, s) => sum + Number(s.amount || 0), 0);
+  const depositQuery = User.findById(userId).select("depositBalance");
+  if (session) {
+    depositQuery.session(session);
+  }
+  const user = await depositQuery.lean();
+  const deposit = Number(user?.depositBalance || 0);
+  return Number((deposit + staked).toFixed(8));
+};
 
 export const claimDailyRoi = async (userId) => {
   const session = await mongoose.startSession();
@@ -38,10 +56,10 @@ export const claimDailyRoi = async (userId) => {
         throw new Error("Reach Hybrid level 1 to claim ROI");
       }
 
-      const totalBase = Number(user.depositBalance || 0) + Number(user.rewardBalance || 0);
+      const totalBase = await getRoiPrincipalBase(userId, session);
 
       if (totalBase <= 0) {
-        throw new Error("No eligible balance for ROI claim");
+        throw new Error("No eligible balance for ROI claim (keep a deposit or active stake)");
       }
 
       const reward = Number((totalBase * roiRate).toFixed(8));

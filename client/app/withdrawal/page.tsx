@@ -6,11 +6,10 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import AppToast from "../../components/AppToast";
-import { fetchCurrentUser } from "../../lib/session";
-import CountdownTimer from "../../components/CountdownTimer";
+import { fetchHybridSummary, fetchHybridWithdrawals, requestHybridWithdraw } from "../../lib/hybrid";
 import GlassCard from "../../components/GlassCard";
 import PrimaryButton from "../../components/PrimaryButton";
-import { withdrawalStatusClass } from "../../lib/helpers";
+import { withdrawalStatusClass, maskAddress, isValidEvmAddress42 } from "../../lib/helpers";
 import { fetchHybridSummary, fetchHybridWithdrawals, requestHybridWithdraw } from "../../lib/hybrid";
 
 const activePendingStatuses = ["pending", "claimable", "approved"];
@@ -72,11 +71,7 @@ export default function Withdrawal() {
     : 0;
 
   useEffect(() => {
-    Promise.all([fetchCurrentUser(), loadHybrid()]).then(([fresh]) => {
-      if (fresh) {
-        setWalletAddress(fresh.walletAddress || "");
-      }
-    });
+    loadHybrid();
   }, []);
 
   const withdraw = async () => {
@@ -96,8 +91,8 @@ export default function Withdrawal() {
       return showToast("Insufficient Hybrid balance");
     }
 
-    if (!walletAddress.trim()) {
-      return showToast("Wallet address is required");
+    if (!isValidEvmAddress42(walletAddress.trim())) {
+      return showToast("Enter a valid wallet: 0x + 40 hex characters (42 total)");
     }
 
     if (!withdrawPassword.trim()) {
@@ -206,12 +201,14 @@ export default function Withdrawal() {
 
           <input
             type="text"
-            placeholder="Wallet Address (BEP20)"
+            autoComplete="off"
+            placeholder="Enter Your Wallet Address"
             value={walletAddress}
             disabled={loading}
             onChange={(e) => setWalletAddress(e.target.value)}
             className="w-full mt-3 bg-white/[0.06] border border-white/10 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/25 focus:shadow-[0_0_28px_rgba(124,58,237,0.3)] outline-none p-3 rounded-xl text-sm transition-all duration-300 placeholder:text-gray-600"
           />
+          <p className="mt-1.5 text-[10px] text-gray-500">BEP20 USDT · must start with 0x and be exactly 42 characters.</p>
 
           <input
             type="password"
@@ -248,7 +245,12 @@ export default function Withdrawal() {
                     Net ${Number(w.netAmount ?? 0).toFixed(2)}{" "}
                     <span className="text-gray-500">· Gross ${Number(w.grossAmount ?? 0).toFixed(2)}</span>
                   </p>
-                  <p className={`text-[10px] font-medium ${withdrawalStatusClass(w.status)}`}>{w.status}</p>
+                  <p className="text-[10px] text-gray-400 font-mono">
+                    {w.walletAddress ? maskAddress(String(w.walletAddress)) : "—"}
+                  </p>
+                  <p className={`text-[10px] font-medium uppercase ${withdrawalStatusClass(w.status)}`}>
+                    {w.status}
+                  </p>
                 </div>
                 <p className="text-[10px] text-gray-500">
                   {w.createdAt ? new Date(w.createdAt).toLocaleDateString() : ""}

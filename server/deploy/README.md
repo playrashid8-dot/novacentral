@@ -18,18 +18,29 @@ This folder documents **load balancing**, **multi-instance HTTP**, **separate hy
 
 Deploy `deploy/nginx/nova-central.conf` (adapt `server_name`, TLS, upstream addresses).
 
-Uses **least_conn** to upstream backends, **Upgrade** headers for WebSocket long-poll style traffic, **`proxy_next_upstream`** for failover on errors.
+Default upstream targets **`127.0.0.1:5000`** when API runs as **PM2 cluster** (`nova-api`: 3 workers, one listen port). Redis queue + workers use BullMQ against **`REDIS_URL`**.
+
+Uses **least_conn** across upstream members (single member with cluster mode), **Upgrade** headers for WebSocket-style traffic to the API, **`proxy_next_upstream`** for failover on errors.
+
+To use **nginx round-robin across three ports** instead, run three forked API processes on `5000–5002` (see commented block in `nova-central.conf`) and point upstream at those servers.
 
 ---
 
-## Part 3 — Multiple API instances + same `.env`
+## Part 3 — API cluster + hybrid + workers + same `.env`
 
 ```bash
-# Linux/macOS/Git Bash — same MongoDB URI and JWT_SECRET everywhere
-NOVA_SERVICE=api PORT=5000 node --expose-gc --max-old-space-size=2048 src/server.js &
-NOVA_SERVICE=api PORT=5001 node --expose-gc --max-old-space-size=2048 src/server.js &
-NOVA_SERVICE=api PORT=5002 node --expose-gc --max-old-space-size=2048 src/server.js &
+# Redis must be running locally or reachable via REDIS_URL before workers/hybrid enqueue jobs.
+# Same MongoDB URI and JWT_SECRET everywhere.
+cd server
+pm2 start ecosystem.config.cjs
+```
+
+Manual equivalent (cluster uses one PORT):
+
+```bash
+NOVA_SERVICE=api PORT=5000 pm2 start src/server.js -i 3 --name nova-api
 node --expose-gc --max-old-space-size=2048 src/hybridService.js &
+node --expose-gc --max-old-space-size=2048 src/workers/depositWorker.js &
 ```
 
 ---
@@ -44,7 +55,7 @@ pm2 logs
 pm2 monit
 ```
 
-Multicore utilization: each **API port** runs one fork — nginx spreads load. Optionally add more entries to `ecosystem.config.cjs`.
+Multicore utilization: **nova-api** uses **cluster mode** (`instances: 3`) on **PORT=5000**. **nova-worker-deposit** runs **2** fork processes consuming **`depositQueue`**. **nova-hybrid** is a **singleton** (WebSocket + engine).
 
 ---
 
@@ -81,9 +92,10 @@ BASE_URL=http://127.0.0.1:80 CONCURRENT=150 REPEATS=5 node scripts/loadTestHealt
 
 | Check | ✅ / ❌ |
 |-------|--------|
-| Load balancer working | |
-| Multi-instance running | |
+| Load balancer / nginx upstream | |
+| API cluster (`nova-api`) | |
+| Redis + `depositQueue` + workers | |
+| Hybrid singleton stable | |
 | Auto scaling active (cloud/K8s/ops) | |
-| System stable | |
 
 **FINAL STATUS — SYSTEM SCALABLE:** ✅ / ❌

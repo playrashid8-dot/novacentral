@@ -113,9 +113,13 @@ async function emitWsConnectivityLog(provider) {
 }
 
 export const getWsProvider = () => {
-  const url = String(process.env.HYBRID_BSC_WS_URL || "").trim();
+  const url = String(
+    process.env.HYBRID_BSC_WS_URL || process.env.BSC_WS_URL || ""
+  ).trim();
   if (!url) {
-    throw new Error("HYBRID_BSC_WS_URL is required for WebSocket provider access");
+    throw new Error(
+      "HYBRID_BSC_WS_URL or BSC_WS_URL is required for WebSocket provider access"
+    );
   }
   if (!wsProvider) {
     wsProvider = new WebSocketProvider(url);

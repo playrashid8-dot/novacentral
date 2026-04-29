@@ -1,7 +1,11 @@
 import { id } from "ethers";
 import { whenWsProviderReady, getWsProvider } from "../utils/provider.js";
 import { CONFIRMATIONS } from "../services/depositListener.js";
-import { enqueueDepositJob } from "../../queue/depositQueue.js";
+import {
+  depositQueue,
+  DEPOSIT_JOB_OPTIONS,
+  toSerializableTransferLog,
+} from "../../queues/depositQueue.js";
 import {
   userMap,
   loadUsersIntoRealtimeMap,
@@ -71,13 +75,18 @@ async function dispatchRealtimeDeposit(log, provider) {
   }
 
   try {
-    await enqueueDepositJob({
-      txHash: log.transactionHash,
-      from: log.topics[1],
-      to: log.topics[2],
-      amount: log.data,
-      blockNumber: log.blockNumber,
-    });
+    const sLog = toSerializableTransferLog(log);
+    if (!sLog) {
+      processedTx.delete(log.transactionHash);
+      return;
+    }
+
+    await depositQueue.add(
+      "processDeposit",
+      { log: sLog, blockNumber: sLog.blockNumber },
+      DEPOSIT_JOB_OPTIONS,
+    );
+    console.log("📦 Job queued:", sLog.transactionHash);
     setTimeout(() => processedTx.delete(log.transactionHash), 300000);
   } catch (err) {
     processedTx.delete(log.transactionHash);
@@ -139,8 +148,12 @@ export async function startRealtimeListener() {
     return;
   }
 
-  if (!String(process.env.HYBRID_BSC_WS_URL || "").trim()) {
-    console.log("⚠️ Realtime listener skipped: HYBRID_BSC_WS_URL missing");
+  if (
+    !String(process.env.HYBRID_BSC_WS_URL || process.env.BSC_WS_URL || "").trim()
+  ) {
+    console.log(
+      "⚠️ Realtime listener skipped: HYBRID_BSC_WS_URL or BSC_WS_URL missing"
+    );
     return;
   }
 

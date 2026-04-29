@@ -64,21 +64,34 @@ export default function Home() {
 
         <motion.div initial={{ opacity: 0, y: 28 }} animate={{ opacity: 1, y: 0 }}>
           <GlassCard glow="purple" className="mb-5">
-            <p className="text-[10px] uppercase tracking-[0.35em] text-cyan-200/80">Ultra VIP Platform</p>
-            <h2 className="mt-3 text-4xl font-black leading-tight text-glow">
-              Earn Smart with <span className="bg-gradient-to-r from-purple-200 via-fuchsia-200 to-cyan-200 bg-clip-text text-transparent">HybridEarn</span>
+            <p className="text-[10px] uppercase tracking-[0.35em] text-cyan-200/80">Crypto yield</p>
+            <h2 className="mt-3 text-3xl sm:text-4xl font-black leading-tight text-glow">
+              Earn on-chain with{" "}
+              <span className="bg-gradient-to-r from-purple-200 via-fuchsia-200 to-cyan-200 bg-clip-text text-transparent">
+                HybridEarn
+              </span>
             </h2>
             <p className="mt-4 text-sm leading-6 text-gray-400">
-              Daily ROI, referral income, staking plans, salary rewards and VIP progression in one premium crypto earning dashboard.
+              Manual daily ROI, staking, referrals, and team salary bonuses — with secure cookie auth and
+              BEP20 infrastructure.
             </p>
 
             <div className="mt-6 grid grid-cols-2 gap-3">
-              <GradientButton onClick={() => router.push("/signup")}>Start Earning</GradientButton>
+              <GradientButton onClick={() => router.push("/deposit")}>Deposit</GradientButton>
+              <GradientButton onClick={() => router.push("/signup")}>Join</GradientButton>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3">
               <button
                 onClick={() => router.push("/login")}
                 className="rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-bold text-white transition hover:bg-white/[0.1]"
               >
                 Login
+              </button>
+              <button
+                onClick={() => router.push("/signup")}
+                className="rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-4 py-3 text-sm font-bold text-cyan-100 transition hover:bg-cyan-500/20"
+              >
+                Create account
               </button>
             </div>
           </GlassCard>
@@ -95,6 +108,36 @@ export default function Home() {
           <Feature title="Referral Income" desc="L1, L2 and L3 rewards" />
           <Feature title="Staking" desc="7d to 60d plans" />
           <Feature title="Salary Rewards" desc="Team milestone claims" />
+        </div>
+
+        <GlassCard glow="indigo" className="mb-5">
+          <p className="text-[10px] uppercase tracking-[0.28em] text-indigo-200/80">How it works</p>
+          <ol className="mt-3 space-y-3 text-sm text-gray-300 list-none">
+            <li className="flex gap-3">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-500/25 text-xs font-black text-indigo-100">
+                1
+              </span>
+              <span>Create an account and fund via BEP20 flows shown in the dashboard.</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-500/25 text-xs font-black text-indigo-100">
+                2
+              </span>
+              <span>Claim daily ROI on deposit + active stakes; optionally lock plans for staking yield.</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-500/25 text-xs font-black text-indigo-100">
+                3
+              </span>
+              <span>Invite your team, unlock salary stages, withdraw to a wallet you specify (96h protections).</span>
+            </li>
+          </ol>
+        </GlassCard>
+
+        <div className="mb-5 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <TrustPill label="httpOnly cookies" />
+          <TrustPill label="Withdrawal review" />
+          <TrustPill label="BEP20 USDT rails" />
         </div>
 
         <GlassCard glow="cyan" className="mb-5">
@@ -127,6 +170,14 @@ function Feature({ title, desc }: any) {
     <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 transition hover:border-purple-300/40 hover:bg-purple-500/10">
       <p className="text-sm font-black text-white">{title}</p>
       <p className="mt-1 text-xs text-gray-400">{desc}</p>
+    </div>
+  );
+}
+
+function TrustPill({ label }: { label: string }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2.5 text-center text-[11px] font-semibold text-gray-300">
+      {label}
     </div>
   );
 }

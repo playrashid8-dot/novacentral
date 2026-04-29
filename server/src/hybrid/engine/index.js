@@ -53,7 +53,9 @@ const logHybridBootstrapStatus = async () => {
     rpcOk && contractOk && isEnabled(process.env.HYBRID_EARN_ENABLED);
   const creditOk = isEnabled(process.env.HYBRID_EARN_ENABLED);
   const systemStable = rpcOk && contractOk;
-  const wsConfigured = Boolean(String(process.env.HYBRID_BSC_WS_URL || "").trim());
+  const wsConfigured = Boolean(
+    String(process.env.HYBRID_BSC_WS_URL || process.env.BSC_WS_URL || "").trim()
+  );
   /** WS module implements close/error → destroy + delay + resubscribe */
   const autoReconnectOk =
     creditOk &&

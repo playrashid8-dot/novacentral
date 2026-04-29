@@ -1,4 +1,5 @@
 import express from "express";
+import bcrypt from "bcryptjs";
 import auth from "../middleware/auth.js";
 import User from "../models/User.js";
 import HybridWithdrawal from "../hybrid/models/HybridWithdrawal.js";
@@ -39,6 +40,57 @@ router.get("/me", auth, async (req, res) => {
   } catch (err) {
     console.error("GET /me ERROR:", err.message);
     res.status(500).json({ success: false, msg: "Server error", data: null });
+  }
+});
+
+router.post("/password", auth, async (req, res) => {
+  try {
+    let { currentPassword, newPassword } = req.body;
+    currentPassword = currentPassword != null ? String(currentPassword) : "";
+    newPassword = newPassword != null ? String(newPassword) : "";
+
+    if (!currentPassword.trim() || !newPassword.trim()) {
+      return res.status(400).json({
+        success: false,
+        msg: "Current password and new password are required",
+        data: null,
+      });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        success: false,
+        msg: "New password must be at least 8 characters",
+        data: null,
+      });
+    }
+
+    const user = await User.findById(req.user._id).select("+password isBlocked");
+
+    if (!user) {
+      return res.status(404).json({ success: false, msg: "User not found", data: null });
+    }
+
+    if (user.isBlocked) {
+      return res.status(403).json({ success: false, msg: "Account blocked", data: null });
+    }
+
+    const ok = await bcrypt.compare(currentPassword, user.password);
+    if (!ok) {
+      return res.status(400).json({
+        success: false,
+        msg: "Current password is incorrect",
+        data: null,
+      });
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+
+    return res.json({ success: true, msg: "Password updated successfully", data: null });
+  } catch (err) {
+    console.error("POST /password ERROR:", err.message);
+    return res.status(500).json({ success: false, msg: "Server error", data: null });
   }
 });
 

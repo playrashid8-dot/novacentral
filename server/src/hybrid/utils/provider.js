@@ -1,14 +1,14 @@
 import { JsonRpcProvider } from "ethers";
 
-/** WebSocket (HYBRID_BSC_WS_URL) — see hybrid/utils/wsProvider.js */
+/** WebSocket — HYBRID_BSC_WS_URL or BSC_WS_URL — see hybrid/utils/wsProvider.js */
 export { getWsProvider, whenWsProviderReady } from "./wsProvider.js";
 
 /**
- * RPC priority (env only): HYBRID_BSC_RPC_URL (main, e.g. NodeReal) →
+ * RPC priority (env only): HYBRID_BSC_RPC_URL or BSC_RPC_URL (main, e.g. NodeReal) →
  * HYBRID_BSC_RPC_FALLBACK (e.g. publicnode) → HYBRID_BSC_RPC_BACKUP (e.g. ankr).
  */
 const RPC_URLS = [
-  String(process.env.HYBRID_BSC_RPC_URL || "").trim(),
+  String(process.env.HYBRID_BSC_RPC_URL || process.env.BSC_RPC_URL || "").trim(),
   String(process.env.HYBRID_BSC_RPC_FALLBACK || "").trim(),
   String(process.env.HYBRID_BSC_RPC_BACKUP || "").trim(),
 ]
@@ -31,7 +31,7 @@ export const getCurrentRpcUrl = () => uniqueRpcs[currentIndex] || "";
 
 export const getProvider = () => {
   if (uniqueRpcs.length === 0) {
-    throw new Error("HYBRID_BSC_RPC_URL is required for BSC provider access");
+    throw new Error("HYBRID_BSC_RPC_URL or BSC_RPC_URL is required for BSC provider access");
   }
   const url = uniqueRpcs[currentIndex % uniqueRpcs.length];
   return new JsonRpcProvider(url);
@@ -51,7 +51,7 @@ const defaultRetries = () => Math.max(24, uniqueRpcs.length * SWITCH_AFTER_CONSE
 
 export const withProviderRetry = async (fn, retries = null) => {
   if (uniqueRpcs.length === 0) {
-    throw new Error("HYBRID_BSC_RPC_URL is required for BSC provider access");
+    throw new Error("HYBRID_BSC_RPC_URL or BSC_RPC_URL is required for BSC provider access");
   }
 
   const maxAttempts = retries == null ? defaultRetries() : Math.max(1, Number(retries) || 1);
