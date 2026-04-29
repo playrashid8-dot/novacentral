@@ -2,21 +2,19 @@
 
 import { logout } from "../../lib/auth";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import { fetchCurrentUser, updateUserPassword } from "../../lib/session";
 import { fetchHybridSummary } from "../../lib/hybrid";
 import GlassCard from "../../components/GlassCard";
-import StatCard from "../../components/StatCard";
 import PageWrapper from "../../components/PageWrapper";
 import AppToast from "../../components/AppToast";
 import { copyToClipboard, maskAddress } from "../../lib/helpers";
 import { getApiErrorMessage } from "../../lib/api";
+import VipBadge from "../../components/ui/VipBadge";
 
 export default function Profile() {
-  const router = useRouter();
   const [user, setUser]: any = useState(null);
   const [hybrid, setHybrid]: any = useState(null);
   const [loading, setLoading] = useState(true);
@@ -42,6 +40,7 @@ export default function Profile() {
 
   const walletDisplayRaw = hybrid?.walletAddress || user?.walletAddress || "";
   const walletMasked = walletDisplayRaw ? maskAddress(walletDisplayRaw) : "—";
+  const vipLevel = Number(hybrid?.level ?? user?.level ?? 0);
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const referralLink =
@@ -91,73 +90,48 @@ export default function Profile() {
   return (
     <ProtectedRoute>
       <PageWrapper loading={loading} data={user?._id}>
-        <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 pb-28 text-white relative bg-[#040406] overflow-x-hidden w-full">
+        <div className="relative mx-auto min-h-screen w-full max-w-[420px] overflow-x-hidden px-4 pb-28 pt-6 text-white">
           <AppToast message={toast} />
 
-          <div className="absolute w-[500px] h-[500px] bg-purple-600 opacity-20 blur-[150px] top-[-150px] left-[-150px]" />
-          <div className="absolute w-[500px] h-[500px] bg-indigo-600 opacity-20 blur-[150px] bottom-[-150px] right-[-150px]" />
-
-          <div className="flex justify-between items-center mb-6 relative z-10">
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.3em] text-purple-300/70">Account Center</p>
-              <h1 className="text-2xl font-black bg-gradient-to-r from-purple-300 via-fuchsia-300 to-blue-300 bg-clip-text text-transparent">
-                Profile
-              </h1>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => router.push("/dashboard")}
-              className="w-full max-w-[100px] shrink-0 rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2.5 text-sm text-purple-300 shadow-md transition hover:bg-purple-500/15 hover:shadow-lg sm:w-auto sm:max-w-none"
-            >
-              Back
-            </button>
-          </div>
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+            <p className="text-[10px] uppercase tracking-[0.28em] text-emerald-400/75">HybridEarn</p>
+            <h1 className="mt-1 text-2xl font-black tracking-tight text-white">Profile</h1>
+          </motion.div>
 
           <motion.div
-            initial={{ opacity: 0, y: 40 }}
+            initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
-            className="p-[1px] rounded-3xl bg-gradient-to-r from-purple-500 via-fuchsia-500 to-indigo-500 shadow-[0_0_50px_rgba(124,58,237,0.32)]"
+            transition={{ delay: 0.05 }}
+            className="relative mt-8 rounded-3xl border border-white/[0.1] bg-white/[0.05] p-6 text-center shadow-[0_12px_48px_rgba(0,0,0,0.35)] backdrop-blur-xl ring-1 ring-white/[0.06]"
           >
-            <div className="bg-[#0b0b0f]/95 p-5 rounded-3xl text-center backdrop-blur-2xl">
-              <div className="flex justify-center mb-3">
-                <div className="p-[2px] rounded-full bg-gradient-to-r from-purple-500 to-cyan-500">
-                  <Image
-                    src="/logo.png"
-                    alt="user"
-                    width={70}
-                    height={70}
-                    className="rounded-full bg-black"
-                  />
-                </div>
+            <div className="flex justify-center">
+              <div className="rounded-full bg-gradient-to-br from-emerald-400/80 to-cyan-500/80 p-[3px] shadow-[0_0_32px_rgba(16,185,129,0.35)]">
+                <Image src="/logo.png" alt="" width={88} height={88} className="rounded-full bg-black" />
               </div>
-              <h2 className="font-bold text-lg">{user?.username}</h2>
-              <p className="text-xs text-gray-400">{user?.email}</p>
-              <span className="mt-3 inline-flex rounded-full border border-purple-300/20 bg-purple-500/10 px-4 py-1 text-xs font-bold text-purple-100">
-                VIP {Number(hybrid?.level || user?.level || 0)}
-              </span>
-              <p className="text-[11px] text-gray-500 mt-1">ID: {user?._id?.slice(0, 8)}…</p>
+            </div>
+            <h2 className="mt-4 text-xl font-bold">{user?.username || "—"}</h2>
+            <div className="mt-3 flex justify-center">
+              <VipBadge level={vipLevel} showGlow={vipLevel > 0} />
+            </div>
+            <div className="mt-5 rounded-2xl border border-white/[0.08] bg-black/30 px-4 py-3 text-left">
+              <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-gray-500">Referral ID</p>
+              <p className="mt-1 font-mono text-sm font-bold tracking-wide text-emerald-100/95">
+                {user?.referralCode || "—"}
+              </p>
             </div>
           </motion.div>
 
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <StatCard title="Deposit" value={`$${Number(hybrid?.depositBalance ?? 0).toFixed(2)}`} tone="purple" />
-            <StatCard title="Rewards" value={`$${Number(hybrid?.rewardBalance ?? 0).toFixed(2)}`} tone="cyan" />
-          </div>
-
-          <GlassCard glow="cyan" className="mt-5">
-            <h3 className="text-sm font-semibold mb-3 text-gray-200">Account</h3>
+          <GlassCard glow="cyan" className="mt-6">
+            <h3 className="mb-4 text-sm font-semibold text-gray-200">Account</h3>
             <div className="space-y-3 text-sm">
-              <Info label="Username" value={user?.username || "-"} />
-              <Info label="Email" value={user?.email || "-"} />
-              <Info label="Platform wallet" value={walletMasked} />
-              <Info label="Referral code" value={user?.referralCode || "—"} />
+              <Info label="Email" value={user?.email || "—"} />
+              <Info label="Wallet" value={walletMasked} mono />
             </div>
           </GlassCard>
 
           <GlassCard glow="purple" className="mt-5">
-            <h3 className="text-sm font-semibold mb-2 text-gray-200">Referral link</h3>
-            <p className="text-[11px] text-gray-500 mb-3">Share this URL to register referrals under your account.</p>
+            <h3 className="mb-2 text-sm font-semibold text-gray-200">Referral link</h3>
+            <p className="mb-3 text-[11px] text-gray-500">Share this URL to invite your network.</p>
             <p className="break-all rounded-xl border border-white/10 bg-black/40 p-3 font-mono text-[11px] text-purple-100">
               {referralLink || "—"}
             </p>
@@ -168,13 +142,6 @@ export default function Profile() {
               className="mt-3 w-full rounded-xl border border-purple-400/30 bg-purple-500/15 py-2.5 text-sm font-semibold text-purple-100 disabled:opacity-40"
             >
               {copiedLink ? "Copied" : "Copy referral link"}
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push("/team")}
-              className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.06] py-2.5 text-sm text-gray-200"
-            >
-              Team & salary milestones
             </button>
           </GlassCard>
 
@@ -211,7 +178,7 @@ export default function Profile() {
           <button
             type="button"
             onClick={logout}
-            className="mt-6 w-full rounded-xl bg-red-500/20 text-red-400 p-3 font-semibold hover:bg-red-500/30 transition shadow-md hover:shadow-lg"
+            className="mt-8 w-full rounded-2xl border border-red-500/30 bg-red-500/15 py-3.5 text-sm font-semibold text-red-200 transition hover:bg-red-500/25"
           >
             Logout
           </button>
@@ -221,11 +188,13 @@ export default function Profile() {
   );
 }
 
-function Info({ label, value }: any) {
+function Info({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
       <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">{label}</p>
-      <p className="mt-1 break-all text-sm font-semibold text-white">{value}</p>
+      <p className={`mt-1 break-all text-sm font-semibold text-white ${mono ? "font-mono text-[13px]" : ""}`}>
+        {value}
+      </p>
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { fetchHybridSummary } from "../lib/hybrid";
 
-const ROUTES = new Set(["/dashboard", "/deposit", "/withdraw", "/history", "/staking", "/investment"]);
+const ROUTES = new Set(["/deposit", "/withdraw", "/history", "/staking", "/investment"]);
 
 function MobileStickyBalanceInner() {
   const pathname = usePathname();

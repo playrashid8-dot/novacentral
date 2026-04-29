@@ -16,9 +16,6 @@ export default function AppNavbar() {
             className="h-9 w-9 rounded-full shadow-[0_0_20px_rgba(16,185,129,0.4)]"
           />
           <div className="text-left leading-tight">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-400/80">
-              NovaCentral
-            </p>
             <p className="text-sm font-bold text-white">HybridEarn</p>
           </div>
         </Link>
