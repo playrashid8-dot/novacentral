@@ -85,6 +85,8 @@ const saveLastProcessedBlock = async (blockNumber) => {
 export async function processDepositLog(log, iface, usersByWallet) {
   const txHash = String(log.transactionHash || "").toLowerCase();
   const toAddress = decodeTopicAddress(log.topics?.[2]).toLowerCase();
+  /** Alias for deposit skip debug (matches realtime listener wording). */
+  const to = toAddress;
   const fromAddress = decodeTopicAddress(log.topics?.[1]).toLowerCase();
 
   if (!txHash || !toAddress || toAddress === "0x") {
@@ -95,6 +97,7 @@ export async function processDepositLog(log, iface, usersByWallet) {
   const matchedUser = usersByWallet.get(toAddress);
 
   if (!matchedUser) {
+    console.log("❌ No user found for wallet:", to);
     return { creditFailure: false, processedDelta: 0 };
   }
 
@@ -164,7 +167,7 @@ async function executeDepositScan(
   const skipProbe = scanOptions.skipProbe === true;
   const isManualRescan = scanOptions.isManualRescan === true;
   if (scanOptions.backupScanTriggered === true) {
-    console.log("🛟 Backup scan triggered");
+    console.log("🛟 Backup scan running...");
   }
   getProvider();
   const usdtContractNorm = String(process.env.HYBRID_USDT_CONTRACT || "")
@@ -270,7 +273,14 @@ async function executeDepositScan(
     if (toAddresses.length > 0) {
       const users = await User.find({
         $expr: {
-          $in: [{ $toLower: { $ifNull: ["$walletAddress", ""] } }, toAddresses],
+          $in: [
+            {
+              $toLower: {
+                $trim: { input: { $ifNull: ["$walletAddress", ""] } },
+              },
+            },
+            toAddresses,
+          ],
         },
       }).select("_id walletAddress");
 
@@ -279,7 +289,12 @@ async function executeDepositScan(
       }
 
       const usersByWallet = new Map(
-        users.map((user) => [(user.walletAddress || "").toLowerCase(), user])
+        users.map((user) => [
+          String(user.walletAddress || "")
+            .trim()
+            .toLowerCase(),
+          user,
+        ])
       );
 
       if (!quiet) {

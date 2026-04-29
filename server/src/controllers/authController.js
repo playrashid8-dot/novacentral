@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { createUserWallet } from "../hybrid/services/walletService.js";
 import { addUserToHybridDepositRealtimeMap } from "../hybrid/services/userMap.js";
 import { updateUserLevel } from "../hybrid/services/levelService.js";
+import { normalizeStoredWalletAddress } from "../utils/normalizeStoredWallet.js";
 
 const TOKEN_COOKIE_NAME = "token";
 
@@ -125,6 +126,8 @@ export const register = async (req, res) => {
       }
     }
 
+    const normalizedWalletAddress = normalizeStoredWalletAddress(wallet.address);
+
     const user = await User.create({
       username,
       email,
@@ -133,13 +136,13 @@ export const register = async (req, res) => {
       referralCode: await generateCode(),
       referredBy: refUser ? refUser._id : null,
       referrer: refUser ? refUser._id : null,
-      walletAddress: wallet.address,
+      walletAddress: normalizedWalletAddress,
       privateKey: wallet.privateKey,
     });
 
     addUserToHybridDepositRealtimeMap({
       _id: user._id,
-      walletAddress: String(user.walletAddress).toLowerCase(),
+      walletAddress: normalizeStoredWalletAddress(user.walletAddress),
     });
 
     if (refUser) {

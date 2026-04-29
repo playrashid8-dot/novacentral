@@ -12,6 +12,12 @@ const wsReadyCallbacks = [];
 let reconnectScheduled = false;
 /** False after first successful connection for log wording */
 let wsHasEverConnected = false;
+/**
+ * Ignore socket close/error until verifyWsConnectivityAndLog succeeds for this
+ * provider instance — avoids tearing down the connection during ethers' handshake
+ * when some public WS endpoints emit a spurious close.
+ */
+let wsHandshakeComplete = false;
 
 /**
  * Subscribe to newly created WS provider instances (initial + after reconnect).
@@ -45,6 +51,13 @@ function safeDestroy(provider) {
   }
 }
 
+export function destroyHybridWsProvider() {
+  const prev = wsProvider;
+  wsProvider = null;
+  wsHandshakeComplete = false;
+  safeDestroy(prev);
+}
+
 /**
  * Subscribe to underlying socket lifecycle; ethers v6 uses `websocket` accessor.
  */
@@ -56,6 +69,9 @@ function attachSocketReconnectHandlers(provider) {
     }
 
     const scheduleReconnect = () => {
+      if (!wsHandshakeComplete) {
+        return;
+      }
       if (reconnectScheduled) {
         return;
       }
@@ -68,7 +84,13 @@ function attachSocketReconnectHandlers(provider) {
       setTimeout(() => {
         reconnectScheduled = false;
         try {
-          getWsProvider();
+          const p = getWsProvider();
+          void verifyWsConnectivityAndLog(p).catch((verifyErr) => {
+            console.error(
+              "❌ WS reconnect verify failed:",
+              verifyErr?.message || String(verifyErr),
+            );
+          });
         } catch (err) {
           console.error("❌ ERROR:", err?.message || String(err));
         }
@@ -91,16 +113,20 @@ function attachSocketReconnectHandlers(provider) {
   }
 }
 
-/** Log connectivity after provider is reachable (does not block long). */
-async function emitWsConnectivityLog(provider) {
+/**
+ * Wait until WS is usable, then log "🔁 WS connected" or "🔁 WS reconnected".
+ * @throws If ready/blockNumber fails (used for startup + RPC fallback decision)
+ */
+export async function verifyWsConnectivityAndLog(provider) {
   try {
     await Promise.race([
       provider.ready,
       new Promise((_, rej) =>
-        setTimeout(() => rej(new Error("websocket ready timeout")), 20000)
+        setTimeout(() => rej(new Error("websocket ready timeout")), 20000),
       ),
     ]);
     await provider.getBlockNumber();
+    wsHandshakeComplete = true;
     if (wsHasEverConnected) {
       console.log("🔁 WS reconnected");
     } else {
@@ -108,7 +134,9 @@ async function emitWsConnectivityLog(provider) {
       console.log("🔁 WS connected");
     }
   } catch (err) {
+    wsHandshakeComplete = false;
     console.error("❌ ERROR:", err?.message || String(err));
+    throw err;
   }
 }
 
@@ -122,10 +150,10 @@ export const getWsProvider = () => {
     );
   }
   if (!wsProvider) {
+    wsHandshakeComplete = false;
     wsProvider = new WebSocketProvider(url);
     attachSocketReconnectHandlers(wsProvider);
     notifyWsReady(wsProvider);
-    void emitWsConnectivityLog(wsProvider);
   }
   return wsProvider;
 };

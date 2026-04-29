@@ -18,7 +18,7 @@ async function refillUserMapFromDb() {
     if (user.walletAddress == null || String(user.walletAddress).trim() === "") {
       continue;
     }
-    userMap.set(String(user.walletAddress).toLowerCase(), user);
+    userMap.set(String(user.walletAddress).trim().toLowerCase(), user);
   }
 }
 
@@ -87,7 +87,7 @@ export function addUserToHybridDepositRealtimeMap(userDoc) {
   if (addr == null || String(addr).trim() === "") {
     return;
   }
-  const lower = String(addr).toLowerCase();
+  const lower = String(addr).trim().toLowerCase();
   userMap.set(lower, {
     _id: userDoc._id,
     walletAddress: lower,

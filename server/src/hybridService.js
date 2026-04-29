@@ -8,6 +8,17 @@ import connectDB from "./config/db.js";
 import { runHybridStartupRecovery, startHybridEngine } from "./hybrid/engine/index.js";
 import { startRealtimeListener } from "./hybrid/listeners/realtimeListener.js";
 
+const _hybridWs = String(
+  process.env.HYBRID_BSC_WS_URL || process.env.BSC_WS_URL || ""
+).trim();
+if (!_hybridWs) {
+  console.warn(
+    "⚠️ HYBRID_BSC_WS_URL (or BSC_WS_URL) missing — realtime will use RPC subscription only"
+  );
+} else {
+  console.log("✅ HYBRID_BSC_WS_URL loaded for realtime deposits");
+}
+
 await connectDB();
 
 await startRealtimeListener();

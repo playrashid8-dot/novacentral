@@ -81,17 +81,29 @@ async function handleDeposit(serializedLog) {
 
   const user = await User.findOne({
     $expr: {
-      $eq: [{ $toLower: { $ifNull: ["$walletAddress", ""] } }, toAddr],
+      $eq: [
+        {
+          $toLower: {
+            $trim: { input: { $ifNull: ["$walletAddress", ""] } },
+          },
+        },
+        toAddr,
+      ],
     },
   }).select("_id walletAddress");
 
   if (!user) {
-    console.warn("❌ Safety check: no user for wallet", { txHash: normalized, wallet: toAddr });
+    console.log("❌ No user found for wallet:", toAddr);
     return { outcome: "skip", reason: "no_user", txHash: normalized, processedDelta: 0 };
   }
 
   const usersByWallet = new Map([
-    [(user.walletAddress || "").toLowerCase(), user],
+    [
+      String(user.walletAddress || "")
+        .trim()
+        .toLowerCase(),
+      user,
+    ],
   ]);
 
   const r = await processDepositLog(log, iface, usersByWallet);

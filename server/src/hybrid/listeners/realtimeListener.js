@@ -4,6 +4,8 @@ import {
   getWsProvider,
   initializeHybridRpc,
   getProvider,
+  verifyWsConnectivityAndLog,
+  destroyHybridWsProvider,
 } from "../utils/provider.js";
 import { BSC_USDT_ABI, HYBRID_TOKEN } from "../utils/constants.js";
 import { CONFIRMATIONS } from "../services/depositListener.js";
@@ -96,6 +98,7 @@ async function dispatchRealtimeDeposit(log, provider) {
   const to = `0x${String(log.topics[2]).slice(26).toLowerCase()}`;
   const user = userMap.get(to);
   if (!user) {
+    console.log("❌ No user found for wallet:", to);
     processedTx.delete(log.transactionHash);
     return;
   }
@@ -187,11 +190,14 @@ async function initRealtimeSubscription() {
     });
   }
 
+  let provider;
   try {
-    getWsProvider();
+    provider = getWsProvider();
+    await verifyWsConnectivityAndLog(provider);
   } catch (err) {
     console.error("❌ WebSocket provider error:", err?.message || String(err));
-    return;
+    destroyHybridWsProvider();
+    throw err;
   }
 
   hybridWebSocketRealtimeActive = true;
@@ -248,7 +254,18 @@ export async function startRealtimeListener() {
 
   try {
     if (wsUrl) {
-      await initRealtimeSubscription();
+      try {
+        await initRealtimeSubscription();
+      } catch (wsErr) {
+        console.warn(
+          "⚠️ WebSocket unavailable — using RPC fallback:",
+          wsErr?.message || String(wsErr),
+        );
+        hybridWebSocketRealtimeActive = false;
+        if (!realtimeStarted) {
+          initRpcRealtimeSubscription();
+        }
+      }
     } else {
       console.log("⚠️ Using RPC fallback (WebSocket not configured)");
       initRpcRealtimeSubscription();
