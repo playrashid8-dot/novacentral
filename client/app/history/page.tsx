@@ -87,7 +87,7 @@ export default function History() {
 
   return (
     <ProtectedRoute>
-    <div className="relative w-full max-w-full overflow-x-hidden pb-4 text-white">
+    <div className="relative w-full max-w-full overflow-x-hidden pb-24 text-white">
 
       {/* HEADER */}
       <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-start sm:justify-between">

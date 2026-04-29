@@ -90,7 +90,7 @@ export default function Profile() {
   return (
     <ProtectedRoute>
       <PageWrapper loading={loading} data={user?._id}>
-        <div className="relative mx-auto min-h-screen w-full max-w-[420px] overflow-x-hidden px-4 pb-28 pt-6 text-white">
+        <div className="relative mx-auto min-h-screen w-full max-w-[420px] overflow-x-hidden px-4 pb-24 pt-6 text-white">
           <AppToast message={toast} />
 
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>

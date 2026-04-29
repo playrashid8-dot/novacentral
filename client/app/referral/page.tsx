@@ -145,7 +145,7 @@ export default function Referral() {
   return (
     <ProtectedRoute>
       <PageWrapper loading={pageLoading} skipEmpty>
-        <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 pb-10 text-white relative bg-[#040406] overflow-x-hidden w-full">
+        <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 pb-24 text-white relative bg-[#040406] overflow-x-hidden w-full">
           <AppToast message={toast} />
 
           <div className="absolute w-[500px] h-[500px] bg-purple-600 opacity-20 blur-[150px] top-[-150px] left-[-150px]" />

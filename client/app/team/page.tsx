@@ -72,11 +72,6 @@ export default function TeamPage() {
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [lastSalaryClaimAt, setLastSalaryClaimAt] = useState<string | null>(null);
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(""), 2500);
-  };
-
   const {
     data: teamBundle,
     isLoading: loadingTeamBundle,
@@ -85,6 +80,15 @@ export default function TeamPage() {
 
   const user = teamBundle?.user;
   const summary = teamBundle?.summary;
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), 2500);
+  };
+
+  const referralCode = String(
+    summary?.referralStats?.referralCode ?? user?.referralCode ?? ""
+  ).trim();
 
   const loadingPage = loadingTeamBundle && !user;
   const loadingStats = loadingTeamBundle && !teamBundle;
@@ -146,6 +150,7 @@ export default function TeamPage() {
           directCount={directCount}
           teamCount={teamCount}
           referralIncome={referralIncome}
+          referralCode={referralCode}
           referralStatsReady={referralStatsReady}
           members={members}
           membersReady={membersReady}
@@ -155,6 +160,7 @@ export default function TeamPage() {
           toast={toast}
           membersHasMore={membersHasMore}
           loadingMoreMembers={loadingMoreMembers}
+          showToast={showToast}
           onLoadMoreMembers={() => void loadMoreMembers()}
         />
       </PageWrapper>
@@ -169,6 +175,7 @@ function TeamContent({
   directCount,
   teamCount,
   referralIncome,
+  referralCode,
   referralStatsReady,
   members,
   membersReady,
@@ -178,6 +185,7 @@ function TeamContent({
   toast,
   membersHasMore,
   loadingMoreMembers,
+  showToast,
   onLoadMoreMembers,
 }: {
   loadingPage: boolean;
@@ -186,6 +194,7 @@ function TeamContent({
   directCount: number;
   teamCount: number;
   referralIncome: number;
+  referralCode: string;
   referralStatsReady: boolean;
   members: TeamMemberRow[];
   membersReady: boolean;
@@ -195,6 +204,7 @@ function TeamContent({
   toast: string;
   membersHasMore: boolean;
   loadingMoreMembers: boolean;
+  showToast: (msg: string) => void;
   onLoadMoreMembers: () => void;
 }) {
   const [search, setSearch] = useState("");
@@ -221,7 +231,7 @@ function TeamContent({
   );
 
   return (
-    <div className="relative w-full max-w-full overflow-x-hidden px-1 pb-3 text-white sm:px-0">
+    <div className="relative w-full max-w-full overflow-x-hidden px-1 pb-24 text-white sm:px-0">
       <AppToast message={toast} />
 
       <motion.header
@@ -304,6 +314,8 @@ function TeamContent({
           search={search}
           setSearch={setSearch}
           lastSalaryClaimAt={lastSalaryClaimAt}
+          referralCode={referralCode}
+          showToast={showToast}
           membersHasMore={membersHasMore}
           loadingMoreMembers={loadingMoreMembers}
           onLoadMoreMembers={onLoadMoreMembers}
@@ -351,6 +363,8 @@ function MembersMessage({
   search,
   setSearch,
   lastSalaryClaimAt,
+  referralCode,
+  showToast,
   membersHasMore,
   loadingMoreMembers,
   onLoadMoreMembers,
@@ -365,6 +379,8 @@ function MembersMessage({
   search: string;
   setSearch: (v: string) => void;
   lastSalaryClaimAt: string | null;
+  referralCode: string;
+  showToast: (msg: string) => void;
   membersHasMore: boolean;
   loadingMoreMembers: boolean;
   onLoadMoreMembers: () => void;
@@ -503,10 +519,31 @@ function MembersMessage({
   }
 
   if (teamCount === 0) {
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const link = `${origin}/signup?ref=${encodeURIComponent(referralCode)}`;
+    const copyReferral = async () => {
+      if (!referralCode) {
+        showToast("Open Profile to copy your referral code");
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(link);
+        showToast("Referral link copied");
+      } catch {
+        showToast("Could not copy link");
+      }
+    };
     return (
       <div className="rounded-xl border border-white/[0.06] bg-black/25 px-3 py-8 text-center">
         <p className="text-sm font-medium text-gray-300">No team members yet — share your referral link</p>
         <p className="mt-2 text-[11px] text-gray-500">Use My referral link on Profile to invite partners.</p>
+        <button
+          type="button"
+          onClick={() => void copyReferral()}
+          className="mt-5 w-full max-w-xs rounded-2xl border border-emerald-500/35 bg-emerald-500/15 py-3 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-500/25 active:scale-[0.99]"
+        >
+          Copy Referral Link
+        </button>
       </div>
     );
   }

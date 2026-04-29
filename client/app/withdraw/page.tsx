@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { motion } from "framer-motion";
-import { useRouter } from "next/navigation";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import AppToast from "../../components/AppToast";
 import { getApiErrorMessage, suppressDuplicateCatchToast } from "../../lib/api";
@@ -46,8 +45,6 @@ const glassCard =
   "rounded-2xl border border-white/[0.08] bg-white/5 shadow-soft backdrop-blur-xl";
 
 export default function WithdrawPage() {
-  const router = useRouter();
-
   const [amount, setAmount] = useState("");
   const [walletAddress, setWalletAddress] = useState("");
   const [withdrawPassword, setWithdrawPassword] = useState("");
@@ -229,7 +226,7 @@ export default function WithdrawPage() {
 
   return (
     <ProtectedRoute>
-      <div className={`relative w-full max-w-lg space-y-4 px-4 pb-8 text-white`}>
+      <div className={`relative w-full max-w-lg space-y-4 px-4 pb-24 text-white`}>
         <AppToast message={toast} tone={toastTone} />
 
         {loadError ? (
@@ -260,24 +257,6 @@ export default function WithdrawPage() {
             </p>
           </motion.div>
         ) : null}
-
-        <div className={`p-5 ${glassCard}`}>
-          <p className="text-xs font-medium text-gray-400">Total Balance</p>
-          {dataLoading ? (
-            <SkeletonLine className="mt-3 h-10 w-40 max-w-full rounded-lg" />
-          ) : (
-            <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight text-white">
-              ${spendableHybridBalance.toFixed(2)}
-            </p>
-          )}
-          <button
-            type="button"
-            onClick={() => router.push("/deposit")}
-            className="mt-4 w-full rounded-xl border border-white/10 bg-white/[0.08] py-3 text-sm font-semibold text-white transition hover:border-emerald-500/35 hover:bg-emerald-500/15 active:scale-[0.99]"
-          >
-            Add Funds
-          </button>
-        </div>
 
         <Card className={`!bg-white/5 !shadow-soft backdrop-blur-xl ${glassCard} !border-white/[0.08]`}>
           <div className="space-y-4">

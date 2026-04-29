@@ -9,6 +9,7 @@ import Card from "../../components/ui/Card";
 import { fetchCurrentUser } from "../../lib/session";
 import { fetchHybridSummary } from "../../lib/hybrid";
 import SkeletonCard from "../../components/SkeletonCard";
+import { SkeletonLine } from "../../components/Skeleton";
 import StatusBadge from "../../components/StatusBadge";
 import { STATUS } from "../../lib/constants";
 
@@ -33,6 +34,8 @@ export default function Deposit() {
   const [user, setUser]: any = useState(null);
   const [hybrid, setHybrid]: any = useState(null);
   const [walletLoading, setWalletLoading] = useState(true);
+  const [slowWalletHint, setSlowWalletHint] = useState(false);
+  const [refreshNonce, setRefreshNonce] = useState(0);
   const prevDoneMap = useRef<Map<string, boolean>>(new Map());
   const [flashId, setFlashId] = useState<string | null>(null);
 
@@ -43,8 +46,18 @@ export default function Deposit() {
       : 50;
 
   useEffect(() => {
+    if (!walletLoading) {
+      setSlowWalletHint(false);
+      return;
+    }
+    const id = window.setTimeout(() => setSlowWalletHint(true), 2000);
+    return () => clearTimeout(id);
+  }, [walletLoading]);
+
+  useEffect(() => {
     let cancelled = false;
     let retryTimer: ReturnType<typeof setTimeout>;
+    setWalletLoading(true);
 
     const loadWallet = async (attempt = 0) => {
       const [fresh, hybridData] = await Promise.all([
@@ -73,7 +86,11 @@ export default function Deposit() {
       cancelled = true;
       clearTimeout(retryTimer);
     };
-  }, []);
+  }, [refreshNonce]);
+
+  const refreshWalletUi = () => {
+    setRefreshNonce((n) => n + 1);
+  };
 
   useEffect(() => {
     const list = hybrid?.deposits || [];
@@ -101,7 +118,7 @@ export default function Deposit() {
 
   return (
     <ProtectedRoute>
-      <div className="relative w-full max-w-full overflow-x-hidden pb-8 text-white">
+      <div className="relative w-full max-w-full overflow-x-hidden pb-24 text-white">
         <AppToast message={toast} />
 
         <h1 className="mb-6 text-2xl font-bold tracking-tight text-white sm:text-3xl">Deposit</h1>
@@ -134,9 +151,24 @@ export default function Deposit() {
             <div className="rounded-2xl border border-white/[0.08] bg-black/30 p-4 backdrop-blur-sm">
               <div className="min-w-0 break-all font-mono text-[13px] leading-relaxed text-gray-100">
                 {!wallet && walletLoading ? (
-                  <span className="inline-flex items-center gap-2 text-gray-400">
-                    <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-emerald-500/30 border-t-emerald-400" />
-                    Generating wallet…
+                  <span className="flex flex-col gap-2">
+                    <span className="inline-flex flex-wrap items-center gap-x-2 text-[11px] text-gray-400 sm:flex-row">
+                      <SkeletonLine className="h-3 min-w-[120px] max-w-[min(100%,260px)] flex-1" />
+                      {slowWalletHint ? (
+                        <span>
+                          Still generating…{" "}
+                          <button
+                            type="button"
+                            onClick={refreshWalletUi}
+                            className="font-semibold text-emerald-300/95 underline underline-offset-2 hover:text-emerald-200"
+                          >
+                            tap refresh
+                          </button>
+                        </span>
+                      ) : (
+                        <span className="text-gray-500">Preparing wallet address…</span>
+                      )}
+                    </span>
                   </span>
                 ) : wallet ? (
                   wallet

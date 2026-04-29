@@ -149,7 +149,7 @@ export default function Investment() {
 
   return (
     <ProtectedRoute>
-    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 pb-8 text-white relative bg-[#040406] overflow-x-hidden w-full">
+    <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 pb-24 text-white relative bg-[#040406] overflow-x-hidden w-full">
       <AppToast message={toast} />
 
       {/* 🌌 BACKGROUND */}

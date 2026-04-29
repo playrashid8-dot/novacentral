@@ -123,7 +123,7 @@ export default function Dashboard() {
         data={user?._id}
         emptyText="No data available"
       >
-        <div className="relative w-full max-w-full overflow-x-hidden px-1 pb-3 text-white sm:px-0">
+        <div className="relative w-full max-w-full overflow-x-hidden px-1 pb-24 text-white sm:px-0">
           <AppToast message={toast} tone={toastTone} />
 
           <header className="relative z-10 flex flex-col gap-3 transition-opacity duration-300 ease-out sm:flex-row sm:items-start sm:justify-between">

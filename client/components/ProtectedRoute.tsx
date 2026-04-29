@@ -53,7 +53,7 @@ export default function ProtectedRoute({
 
   if (checking || redirecting) {
     return (
-      <div className="w-full px-3 pb-24 pt-4 sm:px-6" aria-busy aria-label="Checking session">
+      <div className="w-full px-3 pb-24 pt-4 sm:px-6" aria-busy aria-label="Loading page">
         <PageSkeleton />
       </div>
     );
