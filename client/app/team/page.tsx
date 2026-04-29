@@ -18,6 +18,14 @@ type ReferralStatsPayload = {
     teamVolume?: number;
 };
 
+type TeamMemberRow = {
+    id?: string;
+    username: string;
+    level: "A" | "B" | "C";
+    joinedAt: string;
+    balance: number;
+};
+
 export default function TeamPage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -25,6 +33,8 @@ export default function TeamPage() {
   const [stats, setStats] = useState<ReferralStatsPayload | null>(null);
   const [referralStatsReady, setReferralStatsReady] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
+  const [members, setMembers] = useState<TeamMemberRow[]>([]);
+  const [membersReady, setMembersReady] = useState(false);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -34,9 +44,10 @@ export default function TeamPage() {
   const load = useCallback(async (silent: boolean) => {
     try {
       if (!silent) setLoading(true);
-      const [data, res] = await Promise.all([
+      const [data, res, teamRes] = await Promise.all([
         fetchCurrentUser(),
         API.get("/user/referral-stats").catch(() => null),
+        API.get("/user/team-members").catch(() => null),
       ]);
       if (!data) throw new Error("No user data");
       setUser(data);
@@ -50,12 +61,20 @@ export default function TeamPage() {
       } else {
         setStats(null);
       }
+      if (teamRes?.data && normalize(teamRes.data).success) {
+        const teamEnvelope = normalize(teamRes.data);
+        const raw = teamEnvelope.data;
+        setMembers(Array.isArray(raw) ? (raw as TeamMemberRow[]) : []);
+      } else {
+        setMembers([]);
+      }
       setLastUpdatedAt(Date.now());
     } catch (err: any) {
       if (!silent) showToast(getApiErrorMessage(err, "Session expired 🔒"));
       logout();
     } finally {
       setReferralStatsReady(true);
+      setMembersReady(true);
       if (!silent) setLoading(false);
     }
   }, []);
@@ -84,6 +103,8 @@ export default function TeamPage() {
           teamCount={teamCount}
           referralIncome={referralIncome}
           referralStatsReady={referralStatsReady}
+          members={members}
+          membersReady={membersReady}
           lastUpdatedAt={lastUpdatedAt}
           toast={toast}
         />
@@ -97,6 +118,8 @@ function TeamContent({
   teamCount,
   referralIncome,
   referralStatsReady,
+  members,
+  membersReady,
   lastUpdatedAt,
   toast,
 }: {
@@ -104,9 +127,15 @@ function TeamContent({
   teamCount: number;
   referralIncome: number;
   referralStatsReady: boolean;
+  members: TeamMemberRow[];
+  membersReady: boolean;
   lastUpdatedAt: number | null;
   toast: string;
 }) {
+  const countA = members.filter((u) => u.level === "A").length;
+  const countB = members.filter((u) => u.level === "B").length;
+  const countC = members.filter((u) => u.level === "C").length;
+
   return (
     <div className="relative w-full max-w-full overflow-x-hidden pb-3 text-white">
       <AppToast message={toast} />
@@ -151,14 +180,24 @@ function TeamContent({
         transition={{ delay: 0.12 }}
         className="mt-6 rounded-2xl border border-white/[0.08] bg-white/[0.04] p-4 backdrop-blur-xl ring-1 ring-white/[0.05]"
       >
-        <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400">Members</p>
-          <span className="text-[10px] text-gray-500">
-            {referralStatsReady ? `${teamCount} in network` : "—"}
-          </span>
+          <div className="flex flex-col items-end gap-0.5 text-[10px] text-gray-500">
+            <span>{referralStatsReady ? `${teamCount} in network` : "—"}</span>
+            {membersReady && (
+              <span className="tabular-nums text-gray-400">
+                Level A: {countA} · B: {countB} · C: {countC}
+              </span>
+            )}
+          </div>
         </div>
 
-        <MembersMessage teamCount={teamCount} referralStatsReady={referralStatsReady} />
+        <MembersMessage
+          teamCount={teamCount}
+          referralStatsReady={referralStatsReady}
+          members={members}
+          membersReady={membersReady}
+        />
       </motion.section>
     </div>
   );
@@ -187,11 +226,45 @@ function StatPill({
   );
 }
 
-function MembersMessage({ teamCount, referralStatsReady }: { teamCount: number; referralStatsReady: boolean }) {
-  if (!referralStatsReady) {
+function MembersMessage({
+  teamCount,
+  referralStatsReady,
+  members,
+  membersReady,
+}: {
+  teamCount: number;
+  referralStatsReady: boolean;
+  members: TeamMemberRow[];
+  membersReady: boolean;
+}) {
+  if (!referralStatsReady || !membersReady) {
     return (
       <div className="rounded-xl border border-white/[0.06] bg-black/25 px-3 py-8 text-center">
         <p className="text-sm text-gray-500">Loading team information…</p>
+      </div>
+    );
+  }
+
+  if (members.length > 0) {
+    return (
+      <div className="max-h-[min(420px,55vh)] space-y-3 overflow-y-auto pr-1">
+        {members.map((userRow) => (
+          <div
+            key={userRow.id ?? `${userRow.username}-${userRow.level}`}
+            className="flex justify-between rounded-xl bg-white/5 p-3 ring-1 ring-white/[0.06]"
+          >
+            <div className="min-w-0 pr-2">
+              <p className="truncate text-white">{userRow.username}</p>
+              <p className="text-xs text-gray-400">
+                {userRow.joinedAt ? new Date(userRow.joinedAt).toLocaleDateString() : "—"}
+              </p>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="font-bold tabular-nums text-emerald-400">${Number(userRow.balance).toFixed(2)}</p>
+              <p className="text-xs text-gray-400">Level {userRow.level}</p>
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
@@ -207,9 +280,9 @@ function MembersMessage({ teamCount, referralStatsReady }: { teamCount: number; 
 
   return (
     <div className="rounded-xl border border-white/[0.06] bg-black/25 px-3 py-8 text-center">
-      <p className="text-sm text-gray-400">Team member data not available</p>
+      <p className="text-sm text-gray-400">Couldn&apos;t load member list</p>
       <p className="mt-2 text-[11px] leading-relaxed text-gray-500">
-        Individual usernames and balances are not listed by the app. Totals above reflect your referral stats.
+        Stats above reflect your full network. This list covers levels A–C only and refreshes automatically.
       </p>
     </div>
   );

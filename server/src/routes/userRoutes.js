@@ -205,6 +205,67 @@ router.get("/dashboard", auth, async (req, res) => {
 });
 
 /* ==============================
+   👥 TEAM MEMBERS (READ — referral tree A / B / C)
+============================== */
+router.get("/team-members", auth, async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const viewer = await User.findById(userId).select("isBlocked");
+    if (!viewer) {
+      return res.status(404).json({ success: false, msg: "User not found", data: null });
+    }
+    if (viewer.isBlocked) {
+      return res.status(403).json({ success: false, msg: "Account blocked", data: null });
+    }
+
+    const levelA = await User.find({ referredBy: userId })
+      .select("username depositBalance rewardBalance createdAt")
+      .lean();
+
+    const levelAIds = levelA.map((u) => u._id);
+    const levelB =
+      levelAIds.length > 0
+        ? await User.find({ referredBy: { $in: levelAIds } })
+            .select("username depositBalance rewardBalance createdAt")
+            .lean()
+        : [];
+
+    const levelBIds = levelB.map((u) => u._id);
+    const levelC =
+      levelBIds.length > 0
+        ? await User.find({ referredBy: { $in: levelBIds } })
+            .select("username depositBalance rewardBalance createdAt")
+            .lean()
+        : [];
+
+    const format = (users, level) =>
+      users.map((u) => ({
+        id: String(u._id),
+        username: u.username,
+        level,
+        joinedAt: u.createdAt,
+        balance: Number(u.depositBalance || 0) + Number(u.rewardBalance || 0),
+      }));
+
+    const members = [
+      ...format(levelA, "A"),
+      ...format(levelB, "B"),
+      ...format(levelC, "C"),
+    ];
+
+    return res.json({
+      success: true,
+      msg: "Team members loaded",
+      data: members,
+    });
+  } catch (err) {
+    console.error("Team members error:", err);
+    return res.status(500).json({ success: false, msg: "Failed to load team", data: null });
+  }
+});
+
+/* ==============================
    👥 REFERRAL STATS
 ============================== */
 router.get("/referral-stats", auth, async (req, res) => {
