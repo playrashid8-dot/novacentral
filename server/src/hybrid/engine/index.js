@@ -14,7 +14,10 @@ import {
   warnIfHybridEarnEnvInvalid,
 } from "../utils/hybridEarnEnv.js";
 import { depositQueue } from "../../queues/depositQueue.js";
-import { isHybridRealtimeListenerStarted } from "../listeners/realtimeListener.js";
+import {
+  isHybridRealtimeListenerStarted,
+  isHybridWebSocketRealtimeActive,
+} from "../listeners/realtimeListener.js";
 import { userMap } from "../services/userMap.js";
 import hybridConfig from "../../config/hybridConfig.js";
 import { Wallet, parseEther, formatEther } from "ethers";
@@ -89,22 +92,11 @@ const logHybridBootstrapStatus = async () => {
     rpcOk &&
     Boolean(String(process.env.HYBRID_USDT_CONTRACT || "").trim());
 
-  console.log(
-    `RPC Working: ${rpcOk ? "✅" : "❌"}${rpcOk && getCurrentRpcUrl() ? ` (${getCurrentRpcUrl()})` : ""}`
-  );
-  console.log(`Fallback Used: ${getRpcFallbackUsed() ? "Yes" : "No"}`);
-  console.log(`Realtime Listener: ${realtimeOk ? "✅" : "❌"}`);
-  console.log(`Auto Reconnect: ${autoReconnectOk ? "✅" : "❌"}`);
-  console.log(`Recovery Working: ${recoveryOk ? "✅" : "❌"}`);
-  console.log(`Backup Polling: ${backupScanOk ? "✅" : "❌"}`);
-  console.log(`Duplicate Protection: ${duplicateProtectionOk ? "✅" : "❌"}`);
-  console.log(`Deposit Detection: ${depositDetectOk ? "✅" : "❌"}`);
-  console.log(`Queue Working: ${queueOk ? "✅" : "❌"}`);
-  console.log(`Credit System: ${creditOk ? "✅" : "❌"}`);
-  console.log(`Gas Transfer: ${gasOk ? "✅" : "❌"}`);
-  console.log(`Swap Working: ${sweepReady ? "✅" : "❌"}`);
-
-  const systemReady =
+  const wsActive = isHybridWebSocketRealtimeActive();
+  const depositParsingOk =
+    Boolean(String(process.env.HYBRID_USDT_CONTRACT || "").trim()) && creditOk;
+  const workerProcessingOk = queueOk;
+  const systemStable =
     rpcOk &&
     realtimeOk &&
     depositDetectOk &&
@@ -113,16 +105,29 @@ const logHybridBootstrapStatus = async () => {
     duplicateProtectionOk &&
     contractOk;
 
+  console.log(
+    `RPC Working: ${rpcOk ? "✅" : "❌"}${rpcOk && getCurrentRpcUrl() ? ` (${getCurrentRpcUrl()})` : ""}`
+  );
+  console.log(`Fallback Used: ${getRpcFallbackUsed() ? "Yes" : "No"}`);
+  console.log(`Auto Reconnect: ${autoReconnectOk ? "✅" : "❌"}`);
+  console.log(`Recovery Working: ${recoveryOk ? "✅" : "❌"}`);
+  console.log(`Backup Polling: ${backupScanOk ? "✅" : "❌"}`);
+  console.log(`Credit System: ${creditOk ? "✅" : "❌"}`);
+  console.log(`Gas Transfer: ${gasOk ? "✅" : "❌"}`);
+  console.log(`Swap Working: ${sweepReady ? "✅" : "❌"}`);
+
   console.log("🔥 FINAL STATUS:");
   console.log(`RPC Connected: ${rpcOk ? "✅" : "❌"}`);
-  console.log(`Listener Active: ${realtimeOk ? "✅" : "❌"}`);
-  console.log(`Users Loaded: ${userMap.size}`);
+  console.log(`Realtime Listener: ${realtimeOk ? "✅" : "❌"}`);
+  console.log(`WebSocket Active: ${wsActive ? "✅" : "❌"}`);
+  console.log(`Duplicate Safe: ${duplicateProtectionOk ? "✅" : "❌"}`);
+  console.log(`User Map: ${userMap.size}`);
+  console.log(`Deposit Parsing: ${depositParsingOk ? "✅" : "❌"}`);
+  console.log(`Queue Working: ${queueOk ? "✅" : "❌"}`);
+  console.log(`Worker Processing: ${workerProcessingOk ? "✅" : "❌"}`);
   console.log(`Deposit Detection: ${depositDetectOk ? "✅" : "❌"}`);
-  console.log(`Queue Triggered: ${queueOk ? "✅" : "❌"}`);
-  console.log(
-    `Worker Processing: ${queueOk ? "✅ (BullMQ OK — confirm deposit worker)" : "❌"}`
-  );
-  console.log(`System Ready: ${systemReady ? "✅" : "❌"}`);
+  console.log(`System Stable: ${systemStable ? "✅" : "❌"}`);
+  console.log(`System Ready: ${systemStable ? "✅" : "❌"}`);
 };
 
 const runSweepEngine = async () => {

@@ -5,13 +5,16 @@ export const depositQueue = new Queue("depositQueue", {
   connection: redis,
 });
 
-/** Shared BullMQ options for deposit jobs (retries / backoff). */
+/** Shared BullMQ options for deposit jobs (retries / backoff / idempotent jobId = txHash). */
 export const DEPOSIT_JOB_OPTIONS = {
   attempts: 5,
   backoff: {
     type: "exponential",
     delay: 5000,
   },
+  /** Frees custom jobId after success so the same txHash can be re-queued only if needed. */
+  removeOnComplete: true,
+  removeOnFail: { count: 2000 },
 };
 
 /** JSON-serializable copy of an ethers Transfer log for Redis / BullMQ */
@@ -28,6 +31,9 @@ export function toSerializableTransferLog(log) {
     topics: [...(log.topics || [])],
     data: log.data,
     blockNumber,
+    ...(log.address != null && String(log.address).trim() !== ""
+      ? { address: String(log.address).trim() }
+      : {}),
   };
 }
 
@@ -40,12 +46,32 @@ export async function enqueueDepositJob({ log, blockNumber }) {
     blockNumber: blockNumber !== undefined ? blockNumber : log?.blockNumber,
   };
 
-  const job = await depositQueue.add(
-    "processDeposit",
-    { log: merged, blockNumber: merged.blockNumber },
-    DEPOSIT_JOB_OPTIONS,
-  );
+  const txHash = String(merged.transactionHash || "").trim().toLowerCase();
+  if (!txHash) {
+    console.error("❌ Queue failure: missing transactionHash on deposit job payload");
+    throw new Error("enqueueDepositJob: transactionHash required");
+  }
 
-  console.log("📦 Job queued");
-  return job;
+  const addOpts = {
+    ...DEPOSIT_JOB_OPTIONS,
+    jobId: txHash,
+  };
+
+  try {
+    const job = await depositQueue.add(
+      "deposit",
+      { log: merged, blockNumber: merged.blockNumber },
+      addOpts,
+    );
+    console.log("📦 Job queued:", txHash);
+    return job;
+  } catch (err) {
+    const msg = err?.message || String(err);
+    if (/already exists|duplicate|JobId/i.test(msg)) {
+      console.log("📦 Duplicate job skipped (queue):", txHash);
+      return null;
+    }
+    console.error("❌ Queue failure:", msg);
+    throw err;
+  }
 }

@@ -302,13 +302,15 @@ async function executeDepositScan(
           if (!sLog) {
             continue;
           }
-          await enqueueDepositJob({
+          const job = await enqueueDepositJob({
             log: sLog,
             blockNumber: sLog.blockNumber,
           });
-          processed += 1;
+          if (job) {
+            processed += 1;
+          }
         } catch (err) {
-          console.error("❌ ERROR:", err?.message || String(err));
+          console.error("❌ Queue failure:", err?.message || String(err));
           chunkHadCreditFailure = true;
         }
       }

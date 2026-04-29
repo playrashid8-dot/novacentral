@@ -56,7 +56,9 @@ export async function waitForDepositWalletsInMap() {
 
 let periodicRefreshStarted = false;
 
-/** Full refresh every 60s — single code path with initial load; tracks lastSync for observability. */
+const USER_MAP_REFRESH_MS = 5 * 60 * 1000;
+
+/** Full refresh every 5 minutes — single code path with initial load; tracks lastSync for observability. */
 export function startUserMapPeriodicRefresh() {
   if (periodicRefreshStarted) {
     return;
@@ -65,13 +67,16 @@ export function startUserMapPeriodicRefresh() {
 
   setInterval(async () => {
     try {
+      if (userMap.size === 0) {
+        console.warn("⚠️ User map empty — forcing DB reload");
+      }
       await refillUserMapFromDb();
       lastSync = Date.now();
       console.log("🔄 User map refreshed", userMap.size);
     } catch (err) {
-      console.log("❌ User sync error:", err.message);
+      console.error("❌ User sync error:", err?.message || String(err));
     }
-  }, 60000);
+  }, USER_MAP_REFRESH_MS);
 }
 
 /**
