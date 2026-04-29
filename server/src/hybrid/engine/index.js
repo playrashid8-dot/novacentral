@@ -5,8 +5,10 @@ import {
   checkRpcHealth,
   getCurrentRpcUrl,
   getProvider,
+  getRpcFallbackUsed,
   getRpcUrls,
 } from "../utils/provider.js";
+import { depositQueue } from "../../queues/depositQueue.js";
 import { isHybridRealtimeListenerStarted } from "../listeners/realtimeListener.js";
 import hybridConfig from "../../config/hybridConfig.js";
 import { Wallet, parseEther, formatEther } from "ethers";
@@ -26,6 +28,14 @@ const logHybridBootstrapStatus = async () => {
   const usdt = String(process.env.HYBRID_USDT_CONTRACT || "").trim().toLowerCase();
   const contractOk = usdt === "0x55d398326f99059ff775485246999027b3197955";
   let gasOk = false;
+  let queueOk = false;
+
+  try {
+    await depositQueue.getJobCounts();
+    queueOk = true;
+  } catch (_) {
+    queueOk = false;
+  }
 
   try {
     if (!hybridConfig.gasKey) {
@@ -52,7 +62,6 @@ const logHybridBootstrapStatus = async () => {
   const depositDetectOk =
     rpcOk && contractOk && isEnabled(process.env.HYBRID_EARN_ENABLED);
   const creditOk = isEnabled(process.env.HYBRID_EARN_ENABLED);
-  const systemStable = rpcOk && contractOk;
   const wsConfigured = Boolean(
     String(process.env.HYBRID_BSC_WS_URL || process.env.BSC_WS_URL || "").trim()
   );
@@ -74,29 +83,31 @@ const logHybridBootstrapStatus = async () => {
     rpcOk &&
     Boolean(String(process.env.HYBRID_USDT_CONTRACT || "").trim());
 
+  console.log(
+    `RPC Working: ${rpcOk ? "✅" : "❌"}${rpcOk && getCurrentRpcUrl() ? ` (${getCurrentRpcUrl()})` : ""}`
+  );
+  console.log(`Fallback Used: ${getRpcFallbackUsed() ? "Yes" : "No"}`);
   console.log(`Realtime Listener: ${realtimeOk ? "✅" : "❌"}`);
   console.log(`Auto Reconnect: ${autoReconnectOk ? "✅" : "❌"}`);
   console.log(`Recovery Working: ${recoveryOk ? "✅" : "❌"}`);
   console.log(`Backup Polling: ${backupScanOk ? "✅" : "❌"}`);
   console.log(`Duplicate Protection: ${duplicateProtectionOk ? "✅" : "❌"}`);
-  console.log(
-    `RPC Working: ${rpcOk ? "✅" : "❌"}${rpcOk && getCurrentRpcUrl() ? ` (${getCurrentRpcUrl()})` : ""}`
-  );
   console.log(`Deposit Detection: ${depositDetectOk ? "✅" : "❌"}`);
+  console.log(`Queue Working: ${queueOk ? "✅" : "❌"}`);
   console.log(`Credit System: ${creditOk ? "✅" : "❌"}`);
   console.log(`Gas Transfer: ${gasOk ? "✅" : "❌"}`);
-  console.log(`Sweep: ${sweepReady ? "✅" : "❌"}`);
-  console.log(`System Stable: ${systemStable ? "✅" : "❌"}`);
+  console.log(`Swap Working: ${sweepReady ? "✅" : "❌"}`);
 
   const systemReady =
+    rpcOk &&
     realtimeOk &&
-    autoReconnectOk &&
-    recoveryOk &&
+    depositDetectOk &&
+    queueOk &&
     backupScanOk &&
     duplicateProtectionOk &&
-    systemStable;
+    contractOk;
 
-  console.log(`🔥 FINAL STATUS:\nSYSTEM READY: ${systemReady ? "✅" : "❌"}`);
+  console.log(`System Ready: ${systemReady ? "✅" : "❌"}`);
 };
 
 const runSweepEngine = async () => {
@@ -156,8 +167,6 @@ export const startDepositListener = () => {
   console.log("⚠️ Polling disabled — using real-time listener");
 
   hybridTimer = setInterval(async () => {
-    console.log("🛟 Backup scan running...");
-
     try {
       await scanHybridDeposits(null, null, { blocks: 50 });
     } catch (error) {

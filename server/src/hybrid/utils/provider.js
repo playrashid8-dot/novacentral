@@ -25,25 +25,54 @@ const SWITCH_AFTER_CONSECUTIVE_FAILURES = 3;
 
 let consecutiveRpcFailures = 0;
 
+/** True after startup probe if a non-primary URL was selected, or after runtime switch away from index 0 */
+let rpcFallbackUsedSession = false;
+
+let cachedJsonRpcProvider = null;
+let cachedJsonRpcUrl = null;
+
 export const getRpcUrls = () => [...uniqueRpcs];
 
 export const getCurrentRpcUrl = () => uniqueRpcs[currentIndex] || "";
+
+export const getRpcFallbackUsed = () => rpcFallbackUsedSession;
 
 export const getProvider = () => {
   if (uniqueRpcs.length === 0) {
     throw new Error("HYBRID_BSC_RPC_URL or BSC_RPC_URL is required for BSC provider access");
   }
   const url = uniqueRpcs[currentIndex % uniqueRpcs.length];
-  return new JsonRpcProvider(url);
+  if (!cachedJsonRpcProvider || cachedJsonRpcUrl !== url) {
+    try {
+      cachedJsonRpcProvider?.destroy?.();
+    } catch (_) {
+      /* ignore */
+    }
+    cachedJsonRpcProvider = new JsonRpcProvider(url);
+    cachedJsonRpcUrl = url;
+  }
+  return cachedJsonRpcProvider;
 };
 
 const switchRpc = () => {
   if (uniqueRpcs.length === 0) {
     return;
   }
+  const prev = currentIndex;
   console.log("🔁 Switching RPC...");
   currentIndex = (currentIndex + 1) % uniqueRpcs.length;
   console.log("   Using:", uniqueRpcs[currentIndex]);
+  if (prev !== currentIndex && currentIndex !== 0) {
+    rpcFallbackUsedSession = true;
+    console.log("RPC Fallback Used ⚠️");
+  }
+  cachedJsonRpcUrl = null;
+  try {
+    cachedJsonRpcProvider?.destroy?.();
+  } catch (_) {
+    /* ignore */
+  }
+  cachedJsonRpcProvider = null;
 };
 
 /** Enough attempts to allow multiple strikes per RPC before rotation + failover chain */
@@ -90,6 +119,55 @@ export const withProviderRetry = async (fn, retries = null) => {
 
   throw lastError;
 };
+
+/**
+ * Pick first working RPC via getBlockNumber + getNetwork; updates current index for scans.
+ * @returns {Promise<boolean>}
+ */
+export async function initializeHybridRpc() {
+  if (uniqueRpcs.length === 0) {
+    console.error("❌ ERROR:", "No HYBRID_BSC_RPC_URL / BSC_RPC_URL configured");
+    return false;
+  }
+
+  rpcFallbackUsedSession = false;
+
+  for (let i = 0; i < uniqueRpcs.length; i += 1) {
+    currentIndex = i;
+    cachedJsonRpcUrl = null;
+    try {
+      cachedJsonRpcProvider?.destroy?.();
+    } catch (_) {
+      /* ignore */
+    }
+    cachedJsonRpcProvider = null;
+
+    try {
+      const p = getProvider();
+      const block = await p.getBlockNumber();
+      const net = await p.getNetwork();
+      console.log("RPC Connected ✅", `chainId=${net.chainId}`, `block=${block}`);
+      if (i > 0) {
+        rpcFallbackUsedSession = true;
+        console.log("RPC Fallback Used ⚠️");
+      }
+      return true;
+    } catch (err) {
+      console.error("❌ RPC probe failed:", uniqueRpcs[i], err?.message || String(err));
+    }
+  }
+
+  console.error("❌ ERROR:", "All RPC endpoints failed probe (getBlockNumber / getNetwork)");
+  currentIndex = 0;
+  cachedJsonRpcUrl = null;
+  try {
+    cachedJsonRpcProvider?.destroy?.();
+  } catch (_) {
+    /* ignore */
+  }
+  cachedJsonRpcProvider = null;
+  return false;
+}
 
 export const checkRpcHealth = async () => {
   if (uniqueRpcs.length === 0) {

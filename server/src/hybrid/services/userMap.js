@@ -28,6 +28,32 @@ export async function loadUsersIntoRealtimeMap() {
   console.log("👤 Users loaded:", userMap.size);
 }
 
+/**
+ * Reload from DB until at least one wallet exists or retries exhausted (startup race / empty DB).
+ */
+export async function waitForDepositWalletsInMap() {
+  const maxEmptyRetries = 60;
+  let emptyRetries = 0;
+
+  while (userMap.size === 0 && emptyRetries < maxEmptyRetries) {
+    await loadUsersIntoRealtimeMap();
+    if (userMap.size > 0) {
+      return userMap.size;
+    }
+    emptyRetries += 1;
+    console.warn("⚠️ User map empty — reloading from DB; blocking listener start…");
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+
+  if (userMap.size === 0) {
+    console.warn(
+      "⚠️ No deposit wallets in DB after retries — listener will start; deposits match once users exist"
+    );
+  }
+
+  return userMap.size;
+}
+
 let periodicRefreshStarted = false;
 
 /** Full refresh every 60s — single code path with initial load; tracks lastSync for observability. */

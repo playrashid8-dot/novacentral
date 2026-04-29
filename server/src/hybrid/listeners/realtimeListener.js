@@ -1,14 +1,20 @@
 import { id } from "ethers";
-import { whenWsProviderReady, getWsProvider } from "../utils/provider.js";
+import {
+  whenWsProviderReady,
+  getWsProvider,
+  initializeHybridRpc,
+  getProvider,
+} from "../utils/provider.js";
 import { CONFIRMATIONS } from "../services/depositListener.js";
 import {
-  depositQueue,
+  enqueueDepositJob,
   DEPOSIT_JOB_OPTIONS,
   toSerializableTransferLog,
 } from "../../queues/depositQueue.js";
 import {
   userMap,
   loadUsersIntoRealtimeMap,
+  waitForDepositWalletsInMap,
   startUserMapPeriodicRefresh,
 } from "../services/userMap.js";
 
@@ -34,6 +40,7 @@ const processedTx = new Set();
 
 let realtimeStarted = false;
 let listenerHookRegistered = false;
+let rpcListenerRegistered = false;
 
 /** For health / bootstrap logs (WebSocket path active). */
 export const isHybridRealtimeListenerStarted = () => realtimeStarted;
@@ -74,6 +81,8 @@ async function dispatchRealtimeDeposit(log, provider) {
     return;
   }
 
+  console.log(`📥 Deposit detected: ${log.transactionHash}`);
+
   try {
     const sLog = toSerializableTransferLog(log);
     if (!sLog) {
@@ -81,12 +90,10 @@ async function dispatchRealtimeDeposit(log, provider) {
       return;
     }
 
-    await depositQueue.add(
-      "processDeposit",
-      { log: sLog, blockNumber: sLog.blockNumber },
-      DEPOSIT_JOB_OPTIONS,
-    );
-    console.log("📦 Job queued:", sLog.transactionHash);
+    await enqueueDepositJob({
+      log: sLog,
+      blockNumber: sLog.blockNumber,
+    });
     setTimeout(() => processedTx.delete(log.transactionHash), 300000);
   } catch (err) {
     processedTx.delete(log.transactionHash);
@@ -134,6 +141,26 @@ async function initRealtimeSubscription() {
   console.log("🚀 Real-time listener started");
 }
 
+function initRpcRealtimeSubscription() {
+  const filter = {
+    address: String(process.env.HYBRID_USDT_CONTRACT || "").trim(),
+    topics: [TRANSFER_TOPIC],
+  };
+
+  if (rpcListenerRegistered) {
+    return;
+  }
+  rpcListenerRegistered = true;
+
+  const provider = getProvider();
+  provider.on(filter, (log) => {
+    setImmediate(() => void onTransferLog(log, provider));
+  });
+
+  realtimeStarted = true;
+  console.log("🚀 Real-time listener started (RPC Transfer subscription)");
+}
+
 export async function startRealtimeListener() {
   if (realtimeStarted) {
     return;
@@ -148,21 +175,22 @@ export async function startRealtimeListener() {
     return;
   }
 
-  if (
-    !String(process.env.HYBRID_BSC_WS_URL || process.env.BSC_WS_URL || "").trim()
-  ) {
-    console.log(
-      "⚠️ Realtime listener skipped: HYBRID_BSC_WS_URL or BSC_WS_URL missing"
-    );
-    return;
-  }
-
-  await loadUsersIntoRealtimeMap();
+  await initializeHybridRpc();
+  await waitForDepositWalletsInMap();
   await new Promise((r) => setTimeout(r, 500));
+
+  const wsUrl = String(process.env.HYBRID_BSC_WS_URL || process.env.BSC_WS_URL || "").trim();
+
   try {
-    await initRealtimeSubscription();
+    if (wsUrl) {
+      await initRealtimeSubscription();
+    } else {
+      console.log("ℹ️ WebSocket URL not set — using BSC JSON-RPC for USDT Transfer events");
+      initRpcRealtimeSubscription();
+    }
   } catch (err) {
-    console.log("❌ WS failed — running in backup mode only");
+    console.log("❌ Realtime listener failed — backup scan will cover deposits");
+    console.log(err?.message || String(err));
   }
 
   startUserMapPeriodicRefresh();

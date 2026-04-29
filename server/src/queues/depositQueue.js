@@ -46,6 +46,6 @@ export async function enqueueDepositJob({ log, blockNumber }) {
     DEPOSIT_JOB_OPTIONS,
   );
 
-  console.log("📦 Job queued:", merged.transactionHash);
+  console.log("📦 Job queued");
   return job;
 }

@@ -158,11 +158,17 @@ async function executeSweepForDeposit(depositStub) {
 
   const tokenContract = new Contract(hybridConfig.usdtContract, BSC_USDT_ABI, signer);
 
-  await ensureMinBnbForSweep(user.walletAddress);
+  try {
+    await ensureMinBnbForSweep(user.walletAddress);
+  } catch (err) {
+    console.log("❌ No gas for swap");
+    throw err;
+  }
 
   const bnbBalance = await provider.getBalance(user.walletAddress);
   console.log("⛽ Wallet BNB (pre-sweep):", formatEther(bnbBalance));
   if (bnbBalance < MIN_SAFE_GAS) {
+    console.log("❌ No gas for swap");
     console.error("❌ ERROR:", "Critical: BNB too low for safe transaction");
     throw new Error("Critical: BNB too low for safe transaction");
   }
@@ -174,12 +180,12 @@ async function executeSweepForDeposit(depositStub) {
     return { skipped: true, reason: "No USDT balance to sweep" };
   }
 
-  console.log("💸 Sweeping USDT");
   console.log(
     "   Amount:",
     formatUnits(currentBalance, HYBRID_TOKEN.decimals),
     HYBRID_TOKEN.symbol
   );
+  console.log("🔄 Swap started");
   const sweepTx = await tokenContract.transfer(hybridConfig.adminWallet, currentBalance);
   const receipt = await sweepTx.wait();
 
@@ -189,7 +195,7 @@ async function executeSweepForDeposit(depositStub) {
   }
 
   const sweepTxHash = String(receipt.hash || sweepTx.hash || "").toLowerCase();
-  console.log("✅ Sweep success");
+  console.log("✅ Swap completed");
   console.log("✅ Sweep tx:", sweepTxHash);
 
   const updated = await HybridDeposit.findOneAndUpdate(

@@ -125,7 +125,7 @@ export async function processDepositLog(log, iface, usersByWallet) {
     return { creditFailure: false, processedDelta: 0 };
   }
 
-  console.log("📥 Deposit detected");
+  console.log(`📥 Deposit detected: ${txHash}`);
   console.log("📥 Checking deposits for:", userWalletLower);
   console.log("📥 Deposit detail:", {
     txHash: shortTx(txHash),
@@ -160,6 +160,9 @@ async function executeDepositScan(
   const quiet = scanOptions.quiet === true;
   const skipProbe = scanOptions.skipProbe === true;
   const isManualRescan = scanOptions.isManualRescan === true;
+  if (scanOptions.backupScanTriggered === true) {
+    console.log("🛟 Backup scan triggered");
+  }
   getProvider();
   const usdtContractNorm = String(process.env.HYBRID_USDT_CONTRACT || "")
     .trim()
@@ -382,7 +385,12 @@ export const scanHybridDeposits = async (
     const span = Math.max(1, Number(backupSpanRaw) || 50);
     resolvedFrom = Math.max(0, latestBlock - (span - 1));
     resolvedTo = latestBlock;
-    scanOpts = { ...scanOpts, quiet: true, skipProbe: true };
+    scanOpts = {
+      ...scanOpts,
+      quiet: true,
+      skipProbe: true,
+      backupScanTriggered: true,
+    };
   }
 
   if (isScanning) {
