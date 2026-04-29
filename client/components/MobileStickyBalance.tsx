@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { fetchHybridSummary } from "../lib/hybrid";
 
-const ROUTES = new Set(["/deposit", "/withdraw", "/history", "/staking", "/investment"]);
+/** Deposit excluded — balance strip adds clutter on the deposit screen itself. */
+const ROUTES = new Set(["/withdraw", "/history", "/staking", "/investment"]);
 
 function MobileStickyBalanceInner() {
   const pathname = usePathname();
