@@ -12,7 +12,7 @@ export default function ConfirmModal({
   confirmLoading = false,
   onConfirm,
   onCancel,
-  children,
+  children = null,
 }) {
   useEffect(() => {
     if (!open) return;

@@ -430,7 +430,9 @@ export default function AdminWithdrawalsPage() {
         confirmLoading={confirmActionLoading}
         onCancel={() => !confirmActionLoading && setConfirm(null)}
         onConfirm={execConfirmed}
-      />
+      >
+        {null}
+      </ConfirmModal>
     </AdminLayout>
   );
 }

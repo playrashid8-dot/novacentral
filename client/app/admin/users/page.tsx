@@ -305,7 +305,9 @@ export default function AdminUsersPage() {
         confirmLoading={confirmActionLoading}
         onCancel={() => !confirmActionLoading && setConfirm(null)}
         onConfirm={runBlockToggle}
-      />
+      >
+        {null}
+      </ConfirmModal>
 
       {detailLoading ? (
         <div className="fixed bottom-4 right-4 z-50 rounded-xl bg-black/80 px-4 py-2 text-sm text-white">
