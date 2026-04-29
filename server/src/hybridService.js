@@ -21,8 +21,17 @@ if (!_hybridWs) {
 
 await connectDB();
 
-await startRealtimeListener();
-await runHybridStartupRecovery({ blocks: 1000 });
+try {
+  await startRealtimeListener();
+} catch (err) {
+  console.error("Recovery crash prevented:", err?.message || String(err));
+}
+
+try {
+  await runHybridStartupRecovery({ blocks: 1000 });
+} catch (e) {
+  console.error("Recovery crash prevented:", e?.message || String(e));
+}
 startHybridEngine();
 
 const app = express();

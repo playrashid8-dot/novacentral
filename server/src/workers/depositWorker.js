@@ -8,6 +8,7 @@ import User from "../models/User.js";
 import { processDepositLog } from "../hybrid/services/depositListener.js";
 import { BSC_USDT_ABI, HYBRID_TOKEN } from "../hybrid/utils/constants.js";
 import { redis } from "../config/redis.js";
+import { DEPOSIT_QUEUE_LIMITER } from "../queues/depositQueue.js";
 
 const iface = new Interface(BSC_USDT_ABI);
 
@@ -136,6 +137,7 @@ const worker = new Worker(
   {
     connection: redis,
     concurrency: 5,
+    limiter: DEPOSIT_QUEUE_LIMITER,
   },
 );
 

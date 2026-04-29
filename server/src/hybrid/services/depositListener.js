@@ -22,8 +22,24 @@ const MIN_DEPOSIT_AMOUNT = MIN_HYBRID_DEPOSIT;
 const SAFE_LOOKBACK_BLOCKS = 3000;
 /** BSC RPCs often reject eth_getLogs over large spans — keep chunks bounded */
 const CHUNK_SIZE = 200;
+/** Cap checkpoint→tip recovery window (blocks from chain tip) to avoid RPC/OOM */
+const MAX_SCAN_BLOCKS = 2000;
+/** Deduplicate scan-path enqueue across chunks / retries (in-memory only) */
+const seenTx = new Set();
 /** Reorg / fake-log safety: always ≥ 2 (see business rules) */
 export const CONFIRMATIONS = 3;
+
+const devLog = (...args) => {
+  if (process.env.NODE_ENV === "development") {
+    console.log(...args);
+  }
+};
+
+const maybeSampleLog = (...args) => {
+  if (process.env.NODE_ENV === "development" || Math.random() < 0.1) {
+    console.log(...args);
+  }
+};
 
 /** Canonical BSC mainnet USDT — mismatch suggests misconfigured HYBRID_USDT_CONTRACT */
 const BSC_MAINNET_USDT = "0x55d398326f99059ff775485246999027b3197955";
@@ -90,20 +106,20 @@ export async function processDepositLog(log, iface, usersByWallet) {
   const fromAddress = decodeTopicAddress(log.topics?.[1]).toLowerCase();
 
   if (!txHash || !toAddress || toAddress === "0x") {
-    console.log("Deposit skipped: invalid transfer log", { blockNumber: log.blockNumber });
+    devLog("Deposit skipped: invalid transfer log", { blockNumber: log.blockNumber });
     return { creditFailure: false, processedDelta: 0 };
   }
 
   const matchedUser = usersByWallet.get(toAddress);
 
   if (!matchedUser) {
-    console.log("❌ No user found for wallet:", to);
+    devLog("❌ No user found for wallet:", to);
     return { creditFailure: false, processedDelta: 0 };
   }
 
   const userWalletLower = String(matchedUser.walletAddress || "").trim().toLowerCase();
   if (toAddress === userWalletLower) {
-    console.log("🎯 Target wallet matched");
+    devLog("🎯 Target wallet matched");
   }
 
   const existing = await HybridDeposit.findOne({ txHash })
@@ -111,7 +127,7 @@ export async function processDepositLog(log, iface, usersByWallet) {
     .lean();
 
   if (existing) {
-    console.log("Duplicate tx skipped:", shortTx(txHash));
+    devLog("Duplicate tx skipped:", shortTx(txHash));
     return { creditFailure: false, processedDelta: 0 };
   }
 
@@ -129,12 +145,12 @@ export async function processDepositLog(log, iface, usersByWallet) {
   const amount = Number(formatUnits(parsed.args.value, HYBRID_TOKEN.decimals));
 
   if (!Number.isFinite(amount) || amount <= 0) {
-    console.log("Deposit skipped: invalid amount", { wallet: shortAddr(toAddress) });
+    devLog("Deposit skipped: invalid amount", { wallet: shortAddr(toAddress) });
     return { creditFailure: false, processedDelta: 0 };
   }
 
   if (amount < MIN_DEPOSIT_AMOUNT) {
-    console.log("Deposit skipped: below minimum", {
+    devLog("Deposit skipped: below minimum", {
       wallet: shortAddr(toAddress),
       minimum: MIN_DEPOSIT_AMOUNT,
     });
@@ -142,8 +158,8 @@ export async function processDepositLog(log, iface, usersByWallet) {
   }
 
   console.log(`📥 Deposit detected: ${txHash}`);
-  console.log("📥 Checking deposits for:", userWalletLower);
-  console.log("📥 Deposit detail:", {
+  devLog("📥 Checking deposits for:", userWalletLower);
+  devLog("📥 Deposit detail:", {
     txHash: shortTx(txHash),
     amount,
     to: shortAddr(toAddress),
@@ -178,7 +194,7 @@ async function executeDepositScan(
   const isManualRescan = scanOptions.isManualRescan === true;
   const logEmptyOnZero = scanOptions.logEmptyOnZero === true;
   if (scanOptions.backupScanTriggered === true) {
-    console.log("🛟 Backup scan running...");
+    devLog("🛟 Backup scan running...");
   }
   getProvider();
   const usdtContractNorm = String(process.env.HYBRID_USDT_CONTRACT || "")
@@ -211,7 +227,7 @@ async function executeDepositScan(
           })
         );
         if (!quiet) {
-          console.log("📊 Logs count:", probeLogs.length);
+          devLog("📊 Logs count:", probeLogs.length);
         }
       }
     } catch (probeErr) {
@@ -244,15 +260,23 @@ async function executeDepositScan(
     fromBlock = Math.max(0, fromBlock - REORG_BUFFER);
   }
 
+  /** Unbounded checkpoint scan only — keeps manual / explicit ranges intact */
+  const isOpenEndedCheckpointScan =
+    fromBlockOverride === null && toBlockOverride === null && !manualExplicitRange;
+  if (isOpenEndedCheckpointScan) {
+    const floorFromTip = Math.max(0, latestBlock - MAX_SCAN_BLOCKS);
+    fromBlock = Math.max(fromBlock, floorFromTip);
+  }
+
   if (fromBlock > latestBlock) {
     if (!quiet) {
-      console.log("Deposit listener up to date");
+      devLog("Deposit listener up to date");
     }
     return { skipped: false, processed: 0 };
   }
 
   if (!quiet && latestBlock - fromBlock > 5000) {
-    console.log("⚠️ Large block range, splitting...");
+    maybeSampleLog("⚠️ Large block range, splitting...");
   }
 
   let processed = 0;
@@ -262,7 +286,7 @@ async function executeDepositScan(
     let chunkHadCreditFailure = false;
 
     if (!quiet) {
-      console.log("Hybrid deposit scan");
+      devLog("Hybrid deposit scan");
     }
 
     let logs = [];
@@ -282,32 +306,34 @@ async function executeDepositScan(
     try {
       logs = await fetchChunkLogs();
     } catch (err) {
-      console.log("❌ RPC failed — retrying...");
+      maybeSampleLog("❌ RPC failed — retrying...");
       await new Promise((r) => setTimeout(r, 2000));
       try {
         logs = await fetchChunkLogs();
       } catch (err2) {
-        console.log("❌ ERROR:", err2?.message || String(err2));
+        console.error("❌ ERROR:", err2?.message || String(err2));
         await new Promise((r) => setTimeout(r, 3000));
         continue;
       }
     }
 
     if (logs.length === 0) {
-      console.log("⚠️ Empty scan result — retrying...");
+      maybeSampleLog("⚠️ Empty scan result — retrying...");
       try {
         await new Promise((r) => setTimeout(r, 1500));
         logs = await fetchChunkLogs();
       } catch (retryErr) {
-        console.log("❌ ERROR:", retryErr?.message || String(retryErr));
+        console.error("❌ ERROR:", retryErr?.message || String(retryErr));
       }
     }
 
     if (!quiet) {
-      console.log("📊 Logs count:", logs.length);
+      devLog("📊 Logs count:", logs.length);
     }
     if (!quiet && logs.length === 0) {
-      console.log("Deposit listener: no Transfer logs in this chunk (may still advance checkpoint)");
+      devLog(
+        "Deposit listener: no Transfer logs in this chunk (may still advance checkpoint)"
+      );
     }
 
     const toAddresses = [
@@ -333,7 +359,7 @@ async function executeDepositScan(
       }).select("_id walletAddress");
 
       if (!quiet) {
-        console.log("👤 Users loaded:", users.length);
+        devLog("👤 Users loaded:", users.length);
       }
 
       const usersByWallet = new Map(
@@ -346,7 +372,7 @@ async function executeDepositScan(
       );
 
       if (!quiet) {
-        console.log("Deposit listener wallet match summary:", {
+        devLog("Deposit listener wallet match summary:", {
           depositWallets: toAddresses.length,
           matchedUsers: users.length,
         });
@@ -370,6 +396,14 @@ async function executeDepositScan(
             continue;
           }
           const txHash = String(log.transactionHash || "").trim().toLowerCase();
+          if (!txHash) continue;
+          if (seenTx.has(txHash)) {
+            continue;
+          }
+          seenTx.add(txHash);
+          if (seenTx.size > 5000) {
+            seenTx.clear();
+          }
           const job = await enqueueDepositJob({
             log: sLog,
             blockNumber: sLog.blockNumber,
@@ -383,11 +417,11 @@ async function executeDepositScan(
         }
       }
     } else if (!quiet) {
-      console.log("Deposit listener found no recipient addresses");
+      devLog("Deposit listener found no recipient addresses");
     }
 
     if (logs.length > 0 && processed === processedBeforeChunk) {
-      console.log("🚨 Logs found but no deposits processed");
+      maybeSampleLog("🚨 Logs found but no deposits processed");
     }
 
     logs = null;
@@ -395,7 +429,7 @@ async function executeDepositScan(
       global.gc();
     }
     if (!quiet) {
-      console.log("🧠 Memory:", process.memoryUsage().heapUsed / 1024 / 1024, "MB");
+      devLog("🧠 Memory:", process.memoryUsage().heapUsed / 1024 / 1024, "MB");
     }
     await new Promise((r) => setTimeout(r, 150));
 
@@ -410,14 +444,14 @@ async function executeDepositScan(
     if (!isManualRescan) {
       if (toBlock > latestBlock) {
         if (!quiet) {
-          console.log("Skipping invalid block range (checkpoint)");
+          devLog("Skipping invalid block range (checkpoint)");
         }
         break;
       }
       try {
         await saveLastProcessedBlock(toBlock);
         if (!quiet) {
-          console.log("Checkpoint saved:", toBlock);
+          devLog("Checkpoint saved:", toBlock);
         }
       } catch (err) {
         console.error("❌ ERROR:", err?.message || String(err));
@@ -428,7 +462,7 @@ async function executeDepositScan(
   }
 
   if (processed === 0 && (!quiet || logEmptyOnZero)) {
-    console.log("🚨 No deposits found — possible miss or already processed");
+    maybeSampleLog("🚨 No deposits found — possible miss or already processed");
   }
 
   return { skipped: false, processed };
@@ -504,7 +538,7 @@ export const scanHybridDeposits = async (
   }
 
   if (isScanning) {
-    console.log("⏳ Skipping — scan already running");
+    devLog("⏳ Skipping — scan already running");
     return { skipped: true };
   }
 
@@ -513,7 +547,7 @@ export const scanHybridDeposits = async (
   try {
     return await executeDepositScan(resolvedFrom, resolvedTo, scanOpts);
   } catch (err) {
-    console.log("❌ ERROR:", err?.message || String(err));
+    console.error("❌ ERROR:", err?.message || String(err));
     await new Promise((r) => setTimeout(r, 3000));
     throw err;
   } finally {

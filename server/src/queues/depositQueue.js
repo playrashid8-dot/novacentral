@@ -1,6 +1,12 @@
 import { Queue } from "bullmq";
 import { redis } from "../config/redis.js";
 
+/** Shared BullMQ worker / queue tuning: max jobs started per duration (global per queue in Redis). */
+export const DEPOSIT_QUEUE_LIMITER = {
+  max: 50,
+  duration: 1000,
+};
+
 export const depositQueue = new Queue("depositQueue", {
   connection: redis,
 });
@@ -63,12 +69,16 @@ export async function enqueueDepositJob({ log, blockNumber }) {
       { log: merged, blockNumber: merged.blockNumber },
       addOpts,
     );
-    console.log("📦 Job queued:", txHash);
+    if (process.env.NODE_ENV === "development" || Math.random() < 0.1) {
+      console.log("📦 Job queued:", txHash);
+    }
     return job;
   } catch (err) {
     const msg = err?.message || String(err);
     if (/already exists|duplicate|JobId/i.test(msg)) {
-      console.log("📦 Duplicate job skipped (queue):", txHash);
+      if (process.env.NODE_ENV === "development" || Math.random() < 0.1) {
+        console.log("📦 Duplicate job skipped (queue):", txHash);
+      }
       return null;
     }
     console.error("❌ Queue failure:", msg);

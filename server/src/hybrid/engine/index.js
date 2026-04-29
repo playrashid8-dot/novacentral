@@ -31,6 +31,9 @@ let sweepRunning = false;
 
 const BASE_SCAN = 300;
 
+const isHybridRecoverySchedulesEnabled = () =>
+  String(process.env.HYBRID_RECOVERY ?? "true").toLowerCase() !== "false";
+
 const logHybridBootstrapStatus = async () => {
   warnIfHybridEarnEnvInvalid();
 
@@ -195,7 +198,7 @@ export async function runHybridStartupRecovery(options = {}) {
     ? Math.max(1, Number(options.blocks))
     : 1000;
   try {
-    console.log("🔄 Missed deposit recovery (checkpoint → chain tip)...");
+    console.log("🔄 Missed deposit recovery (checkpoint → chain tip, capped window)...");
     await scanHybridDeposits(null, null, { quiet: true, skipProbe: true });
     console.log(
       `🔄 Startup backup window (last ${startupBackupBlocks} confirmed blocks)...`
@@ -206,7 +209,7 @@ export async function runHybridStartupRecovery(options = {}) {
       blocks: startupBackupBlocks,
     });
   } catch (err) {
-    console.error("❌ ERROR:", err?.message || String(err));
+    console.error("Recovery crash prevented:", err?.message || String(err));
   }
 }
 
@@ -227,38 +230,37 @@ export const startDepositListener = () => {
 
   console.log("⚠️ Polling disabled — using real-time listener");
 
-  hybridTimer = setInterval(async () => {
-    try {
-      console.log("🚨 Recovery triggered — possible missed deposit");
-      let dynamicScan = BASE_SCAN;
-      const result = await scanHybridDeposits(null, null, {
-        blocks: BASE_SCAN,
-        logEmptyOnZero: true,
-      });
-      if (!result?.skipped && result?.processed === 0) {
-        dynamicScan = 2000;
-        console.log("⚠️ Expanding scan window:", dynamicScan);
+  if (isHybridRecoverySchedulesEnabled()) {
+    hybridTimer = setInterval(async () => {
+      try {
+        if (process.env.NODE_ENV === "development" || Math.random() < 0.1) {
+          console.log("🚨 Recovery triggered — possible missed deposit");
+        }
         await scanHybridDeposits(null, null, {
-          blocks: dynamicScan,
+          blocks: BASE_SCAN,
           logEmptyOnZero: true,
         });
+      } catch (error) {
+        console.error("Recovery crash prevented:", error?.message || String(error));
       }
-    } catch (error) {
-      console.error(
-        "❌ Auto recovery scan failed:",
-        error?.message || String(error)
-      );
-    }
-  }, 60000);
+    }, 60000);
 
-  deepScanTimer = setInterval(async () => {
-    try {
-      console.log("🔎 Deep recovery scan running...");
-      await scanHybridDeposits(null, null, { blocks: 5000, logEmptyOnZero: true });
-    } catch (e) {
-      console.error("❌ Deep scan failed:", e?.message || String(e));
-    }
-  }, 600000);
+    deepScanTimer = setInterval(async () => {
+      try {
+        if (process.env.NODE_ENV === "development" || Math.random() < 0.1) {
+          console.log("🔎 Deep recovery scan running...");
+        }
+        await scanHybridDeposits(null, null, {
+          blocks: 2000,
+          logEmptyOnZero: true,
+        });
+      } catch (e) {
+        console.error("Recovery crash prevented:", e?.message || String(e));
+      }
+    }, 600000);
+  } else {
+    console.warn("⚠️ HYBRID_RECOVERY=false — periodic recovery scans disabled");
+  }
 
   runSweepEngine();
   sweepTimer = setInterval(runSweepEngine, sweepEngineMs);
@@ -280,12 +282,14 @@ export const startDepositListener = () => {
 
   if (!healthTimer) {
     healthTimer = setInterval(() => {
-      console.log("💚 Hybrid alive | users:", userMap.size);
+      if (process.env.NODE_ENV === "development" || Math.random() < 0.1) {
+        console.log("💚 Hybrid alive | users:", userMap.size);
+      }
     }, 60000);
   }
 
   console.log(
-    `HYBRID engine started (auto recovery 60000ms: ${BASE_SCAN}→2000 adaptive + deep scan 600000ms/5000 blocks, sweep ${sweepEngineMs}ms, claimable ${claimableMs}ms)`
+    `HYBRID engine started (recovery scans: ${isHybridRecoverySchedulesEnabled() ? `60000ms/${BASE_SCAN} blocks + deep 600000ms/2000` : "off"}, sweep ${sweepEngineMs}ms, claimable ${claimableMs}ms)`
   );
 
   void logHybridBootstrapStatus();

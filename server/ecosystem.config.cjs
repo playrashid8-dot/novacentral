@@ -10,7 +10,7 @@ const path = require("path");
 
 const cwd = __dirname;
 
-const interpreterArgs = "--expose-gc --max-old-space-size=2048";
+const interpreterArgs = "--expose-gc --max-old-space-size=1024";
 
 const commonEnv = {
   NODE_ENV: process.env.NODE_ENV || "production",

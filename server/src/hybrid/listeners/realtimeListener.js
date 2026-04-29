@@ -46,6 +46,9 @@ whenWsProviderReady(async () => {
 
 /** Dedupe duplicate WebSocket deliveries of the same tx within the TTL window. */
 const processedTx = new Set();
+/** Suppress repeated “waiting confirmations” handling for the same tx (WS replay / head lag). */
+const pendingTx = new Map();
+const PENDING_TX_MAX = 5000;
 
 let realtimeStarted = false;
 let listenerHookRegistered = false;
@@ -79,6 +82,32 @@ async function dispatchRealtimeDeposit(log, provider) {
     return;
   }
 
+  const txHash = log.transactionHash;
+  const txKey = String(txHash).toLowerCase();
+
+  const head = await provider.getBlockNumber();
+  const bn = log.blockNumber != null ? Number(log.blockNumber) : NaN;
+  /** Must run before processedTx so WS replays while unconfirmed collapse on pendingTx */
+  if (Number.isFinite(bn) && bn > head - CONFIRMATIONS) {
+    if (pendingTx.has(txKey)) {
+      return;
+    }
+    pendingTx.set(txKey, true);
+    if (pendingTx.size > PENDING_TX_MAX) {
+      pendingTx.clear();
+    }
+    if (process.env.NODE_ENV === "development" || Math.random() < 0.1) {
+      console.log("⏳ Waiting confirmations:", txHash);
+    }
+    setTimeout(() => {
+      pendingTx.delete(txKey);
+      void dispatchRealtimeDeposit(log, provider);
+    }, 12000);
+    return;
+  }
+
+  pendingTx.delete(txKey);
+
   if (processedTx.has(log.transactionHash)) {
     return;
   }
@@ -87,15 +116,6 @@ async function dispatchRealtimeDeposit(log, provider) {
     processedTx.clear();
   }
   processedTx.add(log.transactionHash);
-
-  const head = await provider.getBlockNumber();
-  const bn = log.blockNumber != null ? Number(log.blockNumber) : NaN;
-  const txHash = log.transactionHash;
-  if (Number.isFinite(bn) && bn > head - CONFIRMATIONS) {
-    console.log("⏳ Waiting confirmations:", txHash);
-    processedTx.delete(log.transactionHash);
-    return;
-  }
 
   const to = `0x${String(log.topics[2]).slice(26).toLowerCase()}`;
   const user = userMap.get(to);

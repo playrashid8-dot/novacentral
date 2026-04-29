@@ -160,7 +160,7 @@ export default function Deposit() {
           <p className="mb-3 font-semibold text-white">Important</p>
           <ul className="space-y-2 text-sm text-gray-300">
             <li>Send only USDT (BEP20)</li>
-            <li>Minimum deposit: ${minDeposit} USDT</li>
+            <li>Minimum deposit: ${50} USDT</li>
             <li>Confirmation: 1–2 minutes</li>
             <li className="text-amber-200/95">Wrong network = permanent loss</li>
           </ul>
