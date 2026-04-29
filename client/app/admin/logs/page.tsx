@@ -28,6 +28,9 @@ export default function AdminLogsPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
+  const [filterAdminId, setFilterAdminId] = useState("");
+  const [filterActionType, setFilterActionType] = useState("");
+  const [filterUserId, setFilterUserId] = useState("");
   const [loading, setLoading] = useState(true);
   const [localRows, setLocalRows] = useState<any[]>([]);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -50,6 +53,9 @@ export default function AdminLogsPage() {
           page: String(page),
           limit: String(PAGE_SIZE),
           search: debounced.trim(),
+          adminId: filterAdminId.trim(),
+          actionType: filterActionType.trim(),
+          userId: filterUserId.trim(),
         });
         const payload = await adminFetch(`/admin/log-feed?${qs}`);
         const d = payload?.data;
@@ -62,7 +68,7 @@ export default function AdminLogsPage() {
         if (!silent) setLoading(false);
       }
     },
-    [tab, page, debounced]
+    [tab, page, debounced, filterAdminId, filterActionType, filterUserId]
   );
 
   useEffect(() => {
@@ -71,7 +77,7 @@ export default function AdminLogsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [tab, debounced]);
+  }, [tab, debounced, filterAdminId, filterActionType, filterUserId]);
 
   const subtitle = useMemo(
     () =>
@@ -100,7 +106,7 @@ export default function AdminLogsPage() {
         ))}
       </div>
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+      <div className="mb-4 flex flex-col gap-3">
         <input
           type="search"
           value={search}
@@ -108,6 +114,48 @@ export default function AdminLogsPage() {
           placeholder="Search username, action, tx…"
           className="min-w-[200px] flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none placeholder:text-gray-500 focus:border-purple-500"
         />
+        <div className="grid gap-3 sm:grid-cols-3">
+          <input
+            type="text"
+            value={filterAdminId}
+            onChange={(e) => setFilterAdminId(e.target.value)}
+            placeholder="Filter by admin user id"
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-xs text-white outline-none placeholder:text-gray-500 focus:border-purple-500"
+          />
+          <input
+            type="text"
+            value={filterUserId}
+            onChange={(e) => setFilterUserId(e.target.value)}
+            placeholder="Filter by target user id"
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-xs text-white outline-none placeholder:text-gray-500 focus:border-purple-500"
+          />
+          <select
+            value={filterActionType}
+            onChange={(e) => setFilterActionType(e.target.value)}
+            className="rounded-xl border border-white/10 bg-[#0b0b0f] px-4 py-2.5 text-xs text-white outline-none focus:border-purple-500"
+          >
+            <option value="">All action categories</option>
+            {tab === "admin" ? (
+              <>
+                <option value="admin">admin</option>
+                <option value="withdraw">withdraw</option>
+                <option value="deposit">deposit</option>
+                <option value="salary">salary</option>
+                <option value="user">user</option>
+                <option value="fraud">fraud</option>
+              </>
+            ) : tab === "withdraw" ? (
+              <>
+                <option value="review">review</option>
+                <option value="pending">pending</option>
+                <option value="claimable">claimable</option>
+                <option value="approved">approved</option>
+                <option value="paid">paid</option>
+                <option value="rejected">rejected</option>
+              </>
+            ) : null}
+          </select>
+        </div>
       </div>
 
       {loading ? (
@@ -119,11 +167,22 @@ export default function AdminLogsPage() {
           {items.map((row) => (
             <div key={row.id} className="px-4 py-3 text-sm">
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
-                <span>{formatDate(row.at)}</span>
+                <span>{formatDate(row.createdAt || row.at)}</span>
                 {row.status ? <span className="rounded-md bg-white/10 px-2 py-0.5">{row.status}</span> : null}
               </div>
               <p className="mt-1 font-medium text-white">{row.action}</p>
-              <p className="text-xs text-gray-400">User: {row.userLabel || "—"}</p>
+              <p className="text-xs text-gray-400">
+                User: {row.userLabel || "—"}
+                {row.userId ? <span className="ml-1 font-mono text-[10px] text-gray-600">· {String(row.userId)}</span> : null}
+              </p>
+              {tab === "admin" && row.adminLabel ? (
+                <p className="text-xs text-gray-500">Admin: {row.adminLabel}</p>
+              ) : null}
+              {row.meta && typeof row.meta === "object" && Object.keys(row.meta).length > 0 ? (
+                <pre className="mt-2 max-h-24 overflow-auto rounded-lg bg-black/40 p-2 text-[10px] text-gray-400">
+                  {JSON.stringify(row.meta)}
+                </pre>
+              ) : null}
               {row.txHash ? (
                 <p className="mt-1 truncate font-mono text-[10px] text-gray-500">{row.txHash}</p>
               ) : null}

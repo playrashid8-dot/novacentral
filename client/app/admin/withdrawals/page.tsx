@@ -24,6 +24,7 @@ const statusMap: Record<string, string> = {
 /** Normalizes raw statuses for consistent admin labeling (backend uses paid/claimed, etc.). */
 const WITHDRAWAL_STATUS_LABEL: Record<string, string> = {
   ...statusMap,
+  review: "Under Review",
   claimable: "Claimable",
   paid: "Completed",
   claimed: "Completed",
@@ -36,6 +37,21 @@ function withdrawalStatusLabel(status: unknown): string {
   if (mapped) return mapped;
   const s = String(status ?? "").trim();
   return s ? s : "Unknown";
+}
+
+/** Server-computed heuristic; mirrors backend thresholds and console alerts. */
+function withdrawalRiskBadge(riskScore: unknown): { label: string; className: string } {
+  const n = Number(riskScore ?? 0);
+  if (!Number.isFinite(n)) {
+    return { label: "Safe", className: "bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/30" };
+  }
+  if (n >= 4) {
+    return { label: "🚨 HIGH RISK", className: "bg-red-500/20 text-red-100 ring-1 ring-red-500/40" };
+  }
+  if (n >= 2) {
+    return { label: "⚠️ Medium", className: "bg-amber-500/15 text-amber-100 ring-1 ring-amber-500/35" };
+  }
+  return { label: "Safe", className: "bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/30" };
 }
 
 export default function AdminWithdrawalsPage() {
@@ -102,7 +118,7 @@ export default function AdminWithdrawalsPage() {
     let completed = 0;
     for (const w of withdrawals) {
       const s = String(w.status || "").toLowerCase();
-      if (s === "pending" || s === "claimable") pending += 1;
+      if (s === "pending" || s === "claimable" || s === "review") pending += 1;
       else if (s === "approved") approved += 1;
       else if (s === "paid" || s === "claimed") completed += 1;
     }
@@ -130,14 +146,29 @@ export default function AdminWithdrawalsPage() {
     });
   }, [safeWithdrawals, debouncedSearch, statusFilter]);
 
+  /** Match server: priority (high first) → risk (desc) → createdAt (desc). */
+  const sortedFiltered = useMemo(() => {
+    const rank = (p: unknown) => (String(p ?? "normal") === "high" ? 0 : 1);
+    return [...filtered].sort((a, b) => {
+      const pr = rank(a.priority) - rank(b.priority);
+      if (pr !== 0) return pr;
+      const ra = Number(a.riskScore ?? 0);
+      const rb = Number(b.riskScore ?? 0);
+      if (rb !== ra) return rb - ra;
+      const ta = new Date(a.createdAt).getTime();
+      const tb = new Date(b.createdAt).getTime();
+      return tb - ta;
+    });
+  }, [filtered]);
+
   useEffect(() => {
     setPage(1);
   }, [debouncedSearch, statusFilter, listMode, withdrawals.length]);
 
-  const total = filtered.length;
+  const total = sortedFiltered.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
-  const slice = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const slice = sortedFiltered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   const execConfirmed = async () => {
     if (!confirm || confirmActionLoading) return;
@@ -263,6 +294,7 @@ export default function AdminWithdrawalsPage() {
             className="rounded-xl border border-white/10 bg-[#0b0b0f] px-4 py-3 text-sm text-white outline-none sm:w-44"
           >
             <option value="all">All statuses</option>
+            <option value="review">Under review</option>
             <option value="pending">Pending</option>
             <option value="claimable">Claimable</option>
             <option value="approved">Approved</option>
@@ -305,7 +337,7 @@ export default function AdminWithdrawalsPage() {
         <EmptyState text="No records found" />
       ) : (
         <Table
-          columns={["User", "Gross", "Net", "Wallet", "Status", "Time", "Actions"]}
+          columns={["User", "Gross", "Net", "Wallet", "Status", "Risk", "Time", "Actions"]}
           emptyText={listMode === "queue" ? "No rows in the pending queue" : "No withdrawals match filters"}
           footer={
             <AdminPagination
@@ -317,14 +349,15 @@ export default function AdminWithdrawalsPage() {
           }
         >
           {slice.map((withdrawal) => {
-            const canApprove = ["pending", "claimable"].includes(withdrawal.status);
+            const canApprove = ["pending", "claimable", "review"].includes(withdrawal.status);
             const canPay = withdrawal.status === "approved";
-            const canReject = ["pending", "claimable", "approved"].includes(withdrawal.status);
+            const canReject = ["pending", "claimable", "approved", "review"].includes(withdrawal.status);
             const approving = processingId === `approve:${withdrawal._id}`;
             const paying = processingId === `pay:${withdrawal._id}`;
             const rejecting = processingId === `reject:${withdrawal._id}`;
             const st = String(withdrawal.status || "").toLowerCase();
             const badgeCls = withdrawalStatusClasses(st);
+            const riskTier = withdrawalRiskBadge(withdrawal.riskScore);
 
             return (
               <tr key={withdrawal._id} className="hover:bg-white/[0.03]">
@@ -354,6 +387,21 @@ export default function AdminWithdrawalsPage() {
                   <span className={`inline-flex rounded-full px-3 py-1 text-xs ${badgeCls}`}>
                     {withdrawalStatusLabel(withdrawal.status)}
                   </span>
+                </td>
+                <td className="whitespace-nowrap px-4 py-4">
+                  <div className="flex flex-col gap-1">
+                    <span
+                      className={`inline-flex w-fit max-w-[180px] rounded-lg px-2.5 py-1 text-[11px] font-semibold leading-tight ${riskTier.className}`}
+                    >
+                      {riskTier.label}
+                    </span>
+                    {withdrawal.priority === "high" ? (
+                      <span className="text-[10px] font-medium text-fuchsia-200/95">Priority: high</span>
+                    ) : null}
+                    <span className="tabular-nums text-[10px] text-gray-500">
+                      Score: {Number(withdrawal.riskScore ?? 0)}
+                    </span>
+                  </div>
                 </td>
                 <td className="whitespace-nowrap px-4 py-4 text-xs text-gray-400">
                   {formatDate(withdrawal.createdAt)}

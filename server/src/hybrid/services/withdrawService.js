@@ -22,6 +22,8 @@ const getMonthKey = (value) => {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 };
 
+const MS_HOUR = 60 * 60 * 1000;
+
 export const requestHybridWithdrawal = async (
   userId,
   amount,
@@ -69,7 +71,7 @@ export const requestHybridWithdrawal = async (
 
       const user = await User.findById(userId)
         .select(
-          "depositBalance rewardBalance pendingWithdraw level monthlyWithdrawn monthStart lastWithdrawRequest"
+          "depositBalance rewardBalance pendingWithdraw level monthlyWithdrawn monthStart lastWithdrawRequest adminFraudFlag createdAt totalInvested"
         )
         .session(session);
 
@@ -111,6 +113,43 @@ export const requestHybridWithdrawal = async (
       const now = new Date();
       const availableAt = new Date(now.getTime() + WITHDRAW_DELAY_MS);
 
+      const hourAgo = new Date(Date.now() - MS_HOUR);
+      const priorHourCount = await HybridWithdrawal.countDocuments({
+        userId,
+        createdAt: { $gte: hourAgo },
+        status: { $nin: ["rejected"] },
+      }).session(session);
+      const rapidPattern = priorHourCount >= 3;
+      const isSuspicious = Boolean(user.adminFraudFlag) || rapidPattern;
+      const initialStatus = isSuspicious ? "review" : "pending";
+
+      let riskScore = 0;
+      if (priorHourCount > 3) riskScore += 2;
+      const depositsBaseline = Math.max(
+        Number(user.totalInvested || 0),
+        Number(user.depositBalance || 0)
+      );
+      if (depositsBaseline > 0 && numericAmount > depositsBaseline * 2) {
+        riskScore += 2;
+      } else if (depositsBaseline <= 0 && numericAmount > 0) {
+        riskScore += 2;
+      }
+      const createdAtUser = user.createdAt ? new Date(user.createdAt).getTime() : 0;
+      const newUser =
+        Number.isFinite(createdAtUser) && createdAtUser > 0
+          ? Date.now() - createdAtUser < 7 * 24 * 60 * 60 * 1000
+          : false;
+      if (newUser) riskScore += 1;
+
+      const priority = isSuspicious ? "high" : "normal";
+
+      if (riskScore >= 4) {
+        console.warn("🚨 HIGH RISK WITHDRAW", {
+          userId: String(userId),
+          amount: numericAmount,
+        });
+      }
+
       const [withdrawal] = await HybridWithdrawal.create(
         [
           {
@@ -125,6 +164,10 @@ export const requestHybridWithdrawal = async (
             requestedAt: now,
             monthKey: getMonthKey(now),
             idempotencyKey,
+            isSuspicious,
+            status: initialStatus,
+            priority,
+            riskScore,
           },
         ],
         { session }
@@ -266,6 +309,10 @@ export const claimHybridWithdrawal = async (userId, withdrawalId) => {
       };
       await session.commitTransaction();
       return result;
+    }
+
+    if (withdrawal.status === "review") {
+      throw new Error("Withdrawal is under fraud review — wait for admin clearance");
     }
 
     if (withdrawal.status !== "pending") {
@@ -438,8 +485,8 @@ export const adminApproveHybridWithdrawal = async (withdrawalId, adminId = null)
       throw new Error("Withdrawal not found");
     }
 
-    if (!["pending", "claimable"].includes(withdrawal.status)) {
-      throw new Error("Withdrawal is not awaiting approval");
+    if (withdrawal.status !== "pending" && withdrawal.status !== "review" && withdrawal.status !== "claimable") {
+      throw new Error("Already processed");
     }
 
     if (new Date(withdrawal.availableAt).getTime() > Date.now()) {
@@ -447,7 +494,7 @@ export const adminApproveHybridWithdrawal = async (withdrawalId, adminId = null)
     }
 
     const updated = await HybridWithdrawal.findOneAndUpdate(
-      { _id: withdrawalId, status: { $in: ["pending", "claimable"] } },
+      { _id: withdrawalId, status: { $in: ["review", "pending", "claimable"] } },
       {
         $set: {
           status: "approved",
@@ -646,8 +693,13 @@ export const adminRejectHybridWithdrawal = async (withdrawalId) => {
       throw new Error("Withdrawal not found");
     }
 
-    if (!["pending", "claimable", "approved"].includes(withdrawal.status)) {
-      throw new Error("Withdrawal cannot be rejected");
+    if (
+      withdrawal.status !== "pending" &&
+      withdrawal.status !== "review" &&
+      withdrawal.status !== "claimable" &&
+      withdrawal.status !== "approved"
+    ) {
+      throw new Error("Already processed");
     }
 
     const rewardBack = Number(withdrawal.sourceRewardAmount || 0);
@@ -663,7 +715,7 @@ export const adminRejectHybridWithdrawal = async (withdrawalId) => {
     }
 
     const updatedWithdrawal = await HybridWithdrawal.findOneAndUpdate(
-      { _id: withdrawalId, status: { $in: ["pending", "claimable", "approved"] } },
+      { _id: withdrawalId, status: { $in: ["review", "pending", "claimable", "approved"] } },
       { $set: { status: "rejected" } },
       { new: true, session }
     );

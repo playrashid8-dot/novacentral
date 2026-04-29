@@ -127,6 +127,9 @@ router.get("/log-feed", auth, isAdmin, async (req, res) => {
       page: req.query.page,
       limit: req.query.limit,
       search: req.query.search,
+      adminId: req.query.adminId,
+      userId: req.query.userId,
+      actionType: req.query.actionType,
     });
     return res.json({
       success: true,
@@ -170,6 +173,13 @@ router.post("/users/:id/fraud-flag", auth, isAdmin, async (req, res) => {
       return res.status(400).json({ success: false, msg: "Invalid user id", data: null });
     }
     const note = String(reason || "").trim().slice(0, 500);
+    if (!note) {
+      return res.status(400).json({
+        success: false,
+        msg: "Reason is required to flag user",
+        data: null,
+      });
+    }
     const user = await User.findByIdAndUpdate(
       id,
       { $set: { adminFraudFlag: true, adminFraudReason: note } },
@@ -198,8 +208,17 @@ router.post("/users/:id/fraud-flag", auth, isAdmin, async (req, res) => {
 router.post("/users/:id/fraud-unflag", auth, isAdmin, async (req, res) => {
   try {
     const { id } = req.params;
+    const { reason } = req.body || {};
     if (!id || !mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, msg: "Invalid user id", data: null });
+    }
+    const unflagReason = String(reason || "").trim();
+    if (!unflagReason) {
+      return res.status(400).json({
+        success: false,
+        msg: "Reason is required to clear fraud flag",
+        data: null,
+      });
     }
     const user = await User.findByIdAndUpdate(
       id,
@@ -214,7 +233,7 @@ router.post("/users/:id/fraud-unflag", auth, isAdmin, async (req, res) => {
       category: "fraud",
       action: "Fraud flag cleared",
       targetUserId: id,
-      meta: {},
+      meta: { reason: unflagReason.slice(0, 500) },
     });
     return res.json({
       success: true,
@@ -290,7 +309,7 @@ router.get("/withdrawals", auth, isAdmin, async (req, res) => {
   try {
     const withdrawals = await HybridWithdrawal.find()
       .populate("userId", "username email")
-      .sort({ createdAt: -1 });
+      .sort({ priority: 1, riskScore: -1, createdAt: -1 });
     res.json({
       success: true,
       msg: "Withdrawals fetched successfully",
@@ -305,10 +324,10 @@ router.get("/withdrawals", auth, isAdmin, async (req, res) => {
 router.get("/withdrawals/pending", auth, isAdmin, async (req, res) => {
   try {
     const withdrawals = await HybridWithdrawal.find({
-      status: { $in: ["pending", "claimable", "approved"] },
+      status: { $in: ["review", "pending", "claimable", "approved"] },
     })
       .populate("userId", "username email")
-      .sort({ createdAt: -1 });
+      .sort({ priority: 1, riskScore: -1, createdAt: -1 });
     res.json({
       success: true,
       msg: "Pending withdrawals fetched successfully",
@@ -439,6 +458,12 @@ router.post("/recover-deposits", auth, isAdmin, async (req, res) => {
     console.log(
       `📦 Recovery job queued — deposit jobs enqueued: ${result?.processed ?? 0}`
     );
+    await writeAdminAudit({
+      adminId: req.user._id,
+      category: "admin",
+      action: "Recovery scan triggered (recover-deposits)",
+      meta: { processed: result?.processed ?? 0 },
+    });
     return res.json({
       success: true,
       msg: "Recovery scan executed",
@@ -475,6 +500,12 @@ router.post("/rescan-deposits", auth, isAdmin, async (req, res) => {
     }
     console.log("🔎 Admin deep rescan range:", fromN, "→", toN);
     const result = await scanHybridDeposits(fromN, toN, { isManualRescan: true });
+    await writeAdminAudit({
+      adminId: req.user._id,
+      category: "admin",
+      action: "Deep rescan deposits",
+      meta: { fromBlock: fromN, toBlock: toN },
+    });
     return res.json({
       success: true,
       msg: "Deep rescan completed",
@@ -523,6 +554,12 @@ router.post("/recover-by-tx", auth, isAdmin, async (req, res) => {
     const toBlk = bn + 5;
     console.log("🔎 Deep scan range:", fromBlk, toBlk);
     const result = await scanHybridDeposits(fromBlk, toBlk, { isManualRescan: true });
+    await writeAdminAudit({
+      adminId: req.user._id,
+      category: "admin",
+      action: "Recover deposit by TX",
+      meta: { txHashNormalized: normalized.slice(0, 12) + "…" },
+    });
     return res.json({
       success: true,
       msg: "Recover by TX completed",

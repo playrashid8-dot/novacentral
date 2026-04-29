@@ -19,7 +19,7 @@ export default function AdminFraudPage() {
   const [signals, setSignals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [confirm, setConfirm] = useState<null | { kind: "block" | "flag"; row: any }>(null);
+  const [confirm, setConfirm] = useState<null | { kind: "block" | "flag" | "unflag"; row: any }>(null);
   const [flagReason, setFlagReason] = useState("");
   const [busyId, setBusyId] = useState("");
 
@@ -57,14 +57,25 @@ export default function AdminFraudPage() {
   const runConfirm = async () => {
     if (!confirm) return;
     const id = String(confirm.row.userId);
+    const trimmed = flagReason.trim();
+    if ((confirm.kind === "flag" || confirm.kind === "unflag") && !trimmed) {
+      showAdminToast("Reason is required", "error");
+      return;
+    }
     setBusyId(id);
     try {
       if (confirm.kind === "flag") {
         await adminFetch(`/admin/users/${id}/fraud-flag`, {
           method: "POST",
-          body: JSON.stringify({ reason: flagReason.trim() || "Fraud review" }),
+          body: JSON.stringify({ reason: trimmed }),
         });
         showAdminToast("User flagged", "success");
+      } else if (confirm.kind === "unflag") {
+        await adminFetch(`/admin/users/${id}/fraud-unflag`, {
+          method: "POST",
+          body: JSON.stringify({ reason: trimmed }),
+        });
+        showAdminToast("Flag removed", "success");
       } else {
         await adminFetch(`/admin/block/${id}`, {
           method: "POST",
@@ -118,7 +129,7 @@ export default function AdminFraudPage() {
                   </div>
                   {row.adminFraudFlag ? (
                     <span className="mt-1 inline-block rounded-md bg-red-500/20 px-2 py-0.5 text-[10px] text-red-200">
-                      Flagged
+                      🚨 Fraud Flag
                     </span>
                   ) : null}
                 </td>
@@ -149,6 +160,19 @@ export default function AdminFraudPage() {
                     >
                       Flag user
                     </button>
+                    {row.adminFraudFlag ? (
+                      <button
+                        type="button"
+                        disabled={Boolean(busyId)}
+                        onClick={() => {
+                          setFlagReason("");
+                          setConfirm({ kind: "unflag", row });
+                        }}
+                        className="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-2 text-xs font-medium text-emerald-100 hover:bg-emerald-500/25 disabled:opacity-50"
+                      >
+                        Remove flag
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       disabled={Boolean(busyId) || row.isBlocked}
@@ -167,26 +191,37 @@ export default function AdminFraudPage() {
 
       <ConfirmModal
         open={Boolean(confirm)}
-        title={confirm?.kind === "flag" ? "Flag user?" : "Block user?"}
+        title={
+          confirm?.kind === "flag"
+            ? "Flag user?"
+            : confirm?.kind === "unflag"
+              ? "Remove fraud flag?"
+              : "Block user?"
+        }
         message={
           confirm
             ? confirm.kind === "flag"
               ? `Flag ${getUserLabel({ username: confirm.row.username, email: confirm.row.email })} for fraud review?`
-              : `Block ${getUserLabel({ username: confirm.row.username, email: confirm.row.email })}? They will lose app access until unblocked.`
+              : confirm.kind === "unflag"
+                ? `Remove the fraud flag for ${getUserLabel({ username: confirm.row.username, email: confirm.row.email })}?`
+                : `Block ${getUserLabel({ username: confirm.row.username, email: confirm.row.email })}? They will lose app access until unblocked.`
             : ""
         }
-        confirmLabel={confirm?.kind === "flag" ? "Flag" : "Block"}
+        confirmLabel={confirm?.kind === "flag" ? "Flag" : confirm?.kind === "unflag" ? "Remove flag" : "Block"}
         cancelLabel="Cancel"
         danger={confirm?.kind === "block"}
+        confirmLoading={Boolean(busyId)}
         onCancel={() => {
-          setConfirm(null);
-          setFlagReason("");
+          if (!busyId) {
+            setConfirm(null);
+            setFlagReason("");
+          }
         }}
         onConfirm={runConfirm}
       >
-        {confirm?.kind === "flag" ? (
+        {confirm?.kind === "flag" || confirm?.kind === "unflag" ? (
           <label className="block text-xs text-gray-400">
-            Reason (optional)
+            Reason (required)
             <textarea
               value={flagReason}
               onChange={(e) => setFlagReason(e.target.value)}

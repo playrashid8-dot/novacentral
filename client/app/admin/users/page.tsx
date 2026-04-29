@@ -32,7 +32,10 @@ export default function AdminUsersPage() {
   );
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [confirmActionLoading, setConfirmActionLoading] = useState(false);
-  const [detail, setDetail] = useState<null | { user: any; directTeam: any[] }>(null);
+  const [fraudConfirm, setFraudConfirm] = useState<null | "flag" | "unflag">(null);
+  const [fraudReason, setFraudReason] = useState("");
+  const [fraudActionLoading, setFraudActionLoading] = useState(false);
+  const [detail, setDetail] = useState<null | { user: any; directTeam: any[]; stats?: any }>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [teamOnly, setTeamOnly] = useState<null | { user: any; directTeam: any[] }>(null);
 
@@ -103,7 +106,7 @@ export default function AdminUsersPage() {
     try {
       const payload = await adminFetch(`/admin/users/${id}/detail`);
       const d = payload?.data;
-      setDetail({ user: d?.user, directTeam: d?.directTeam || [] });
+      setDetail({ user: d?.user, directTeam: d?.directTeam || [], stats: d?.stats });
     } catch (e: any) {
       showSafeToast(e?.message || "Failed to load user");
     } finally {
@@ -124,6 +127,54 @@ export default function AdminUsersPage() {
       showSafeToast(e?.message || "Failed to load team");
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  const refreshUserInList = (id: string, patch: Record<string, unknown>) => {
+    setUsers((prev) =>
+      prev.map((u) => (String(u._id) === String(id) ? { ...u, ...patch } : u))
+    );
+  };
+
+  const runFraudAction = async () => {
+    if (!detail?.user?._id || !fraudConfirm || fraudActionLoading) return;
+    const id = String(detail.user._id);
+    const note = fraudReason.trim();
+    if (!note) {
+      showSafeToast("A reason is required");
+      showAdminToast("A reason is required", "error");
+      return;
+    }
+    try {
+      setFraudActionLoading(true);
+      setError("");
+      if (fraudConfirm === "flag") {
+        await adminFetch(`/admin/users/${id}/fraud-flag`, {
+          method: "POST",
+          body: JSON.stringify({ reason: note }),
+        });
+        showAdminToast("Fraud flag applied", "success");
+        refreshUserInList(id, { adminFraudFlag: true, adminFraudReason: note });
+      } else {
+        await adminFetch(`/admin/users/${id}/fraud-unflag`, {
+          method: "POST",
+          body: JSON.stringify({ reason: note }),
+        });
+        showAdminToast("Fraud flag removed", "success");
+        refreshUserInList(id, { adminFraudFlag: false, adminFraudReason: "" });
+      }
+      const payload = await adminFetch(`/admin/users/${id}/detail`);
+      const d = payload?.data;
+      setDetail({ user: d?.user, directTeam: d?.directTeam || [], stats: d?.stats });
+      setFraudConfirm(null);
+      setFraudReason("");
+    } catch (err: any) {
+      const msg = err?.message || "Request failed";
+      setError(msg);
+      showSafeToast(msg);
+      showAdminToast(msg, "error");
+    } finally {
+      setFraudActionLoading(false);
     }
   };
 
@@ -199,6 +250,7 @@ export default function AdminUsersPage() {
             "Balance",
             "Total deposit",
             "Total withdraw",
+            "Fraud",
             "Status",
             "Actions",
           ]}
@@ -230,6 +282,15 @@ export default function AdminUsersPage() {
                 </td>
                 <td className="whitespace-nowrap px-4 py-4 tabular-nums text-sky-200">
                   {formatCurrency(user.totalWithdraw ?? 0)}
+                </td>
+                <td className="whitespace-nowrap px-4 py-4">
+                  {user.adminFraudFlag ? (
+                    <span className="inline-flex rounded-md bg-red-500/20 px-2 py-1 text-[10px] font-medium text-red-200 ring-1 ring-red-500/30">
+                      🚨 Fraud Flag
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-600">—</span>
+                  )}
                 </td>
                 <td className="whitespace-nowrap px-4 py-4">
                   <span
@@ -309,6 +370,38 @@ export default function AdminUsersPage() {
         {null}
       </ConfirmModal>
 
+      <ConfirmModal
+        open={Boolean(fraudConfirm)}
+        title={fraudConfirm === "flag" ? "Flag user?" : "Remove fraud flag?"}
+        message={
+          fraudConfirm === "flag"
+            ? `Flag ${detail?.user ? getUserLabel(detail.user) : "this user"} for fraud review. A reason will be stored in the audit log.`
+            : `Clear the fraud flag for ${detail?.user ? getUserLabel(detail.user) : "this user"}?`
+        }
+        confirmLabel={fraudConfirm === "flag" ? "Flag user" : "Remove flag"}
+        cancelLabel="Cancel"
+        danger={fraudConfirm === "flag"}
+        confirmLoading={fraudActionLoading}
+        onCancel={() => {
+          if (!fraudActionLoading) {
+            setFraudConfirm(null);
+            setFraudReason("");
+          }
+        }}
+        onConfirm={runFraudAction}
+      >
+        <label className="block text-xs text-gray-400">
+          Reason (required)
+          <textarea
+            value={fraudReason}
+            onChange={(e) => setFraudReason(e.target.value)}
+            rows={3}
+            className="mt-2 w-full rounded-lg border border-white/15 bg-black/50 px-3 py-2 text-sm text-white placeholder:text-gray-600"
+            placeholder="Stored with the audit trail…"
+          />
+        </label>
+      </ConfirmModal>
+
       {detailLoading ? (
         <div className="fixed bottom-4 right-4 z-50 rounded-xl bg-black/80 px-4 py-2 text-sm text-white">
           Loading…
@@ -326,6 +419,16 @@ export default function AdminUsersPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-lg font-semibold text-white">User details</h3>
+            {detail.user?.adminFraudFlag ? (
+              <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-100">
+                🚨 Fraud Flag
+                {detail.user?.adminFraudReason ? (
+                  <span className="mt-1 block font-normal text-red-200/90">{detail.user.adminFraudReason}</span>
+                ) : null}
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-gray-500">No active fraud flag</p>
+            )}
             <dl className="mt-4 space-y-2 text-sm">
               {[
                 ["Username", detail.user?.username],
@@ -333,7 +436,11 @@ export default function AdminUsersPage() {
                 ["Balance", formatCurrency(detail.user?.balance)],
                 ["Deposit balance", formatCurrency(detail.user?.depositBalance)],
                 ["Total invested", formatCurrency(detail.user?.totalInvested)],
-                ["Total withdraw", formatCurrency(detail.user?.totalWithdraw)],
+                ["Total withdraw (lifetime)", formatCurrency(detail.user?.totalWithdraw)],
+                ["Total deposits (hybrid credited)", formatCurrency(detail.stats?.totalDeposits ?? 0)],
+                ["Total withdraw paid (hybrid)", formatCurrency(detail.stats?.totalWithdrawPaid ?? 0)],
+                ["Salary earned (claimed)", formatCurrency(detail.stats?.salaryEarned ?? 0)],
+                ["Referral earnings", formatCurrency(detail.stats?.referralEarnings ?? detail.user?.referralEarnings)],
                 ["VIP", String(detail.user?.vipLevel ?? 0)],
                 ["Created", formatDate(detail.user?.createdAt)],
                 ["Blocked", detail.user?.isBlocked ? "Yes" : "No"],
@@ -344,6 +451,33 @@ export default function AdminUsersPage() {
                 </div>
               ))}
             </dl>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+              {!detail.user?.adminFraudFlag ? (
+                <button
+                  type="button"
+                  disabled={Boolean(processingId) || fraudActionLoading || confirmActionLoading}
+                  onClick={() => {
+                    setFraudReason("");
+                    setFraudConfirm("flag");
+                  }}
+                  className="rounded-lg border border-amber-500/40 bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-100 hover:bg-amber-500/25 disabled:opacity-50"
+                >
+                  Flag User
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={Boolean(processingId) || fraudActionLoading || confirmActionLoading}
+                  onClick={() => {
+                    setFraudReason("");
+                    setFraudConfirm("unflag");
+                  }}
+                  className="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-500/25 disabled:opacity-50"
+                >
+                  Remove Flag
+                </button>
+              )}
+            </div>
             <button
               type="button"
               className="mt-6 w-full rounded-xl border border-white/15 py-2 text-sm text-gray-300 hover:bg-white/10"

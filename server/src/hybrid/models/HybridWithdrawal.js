@@ -32,8 +32,28 @@ const hybridWithdrawalSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "claimable", "claimed", "approved", "paid", "rejected"],
+      enum: ["review", "pending", "claimable", "claimed", "approved", "paid", "rejected"],
       default: "pending",
+      index: true,
+    },
+    /** When true, status should be "review" — admin visibility / queue only; does not change amounts. */
+    isSuspicious: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    /** Fraud queue ordering: "high" when suspicious; otherwise "normal". */
+    priority: {
+      type: String,
+      enum: ["high", "normal"],
+      default: "normal",
+      index: true,
+    },
+    /** Heuristic 0+; higher = more concerning. Set at request time only. */
+    riskScore: {
+      type: Number,
+      default: 0,
+      min: 0,
       index: true,
     },
     txHash: {
@@ -110,6 +130,7 @@ const hybridWithdrawalSchema = new mongoose.Schema(
 
 hybridWithdrawalSchema.index({ userId: 1, createdAt: -1 });
 hybridWithdrawalSchema.index({ status: 1, createdAt: -1 });
+hybridWithdrawalSchema.index({ priority: 1, riskScore: -1, createdAt: -1 });
 hybridWithdrawalSchema.index(
   { userId: 1, idempotencyKey: 1 },
   {

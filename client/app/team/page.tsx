@@ -2,16 +2,35 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import useSWR from "swr";
 import { motion } from "framer-motion";
-import API, { getApiErrorMessage, normalize } from "../../lib/api";
-import { logout } from "../../lib/auth";
-import { fetchCurrentUser } from "../../lib/session";
+import API, { normalize } from "../../lib/api";
+import {
+  DASHBOARD_SUMMARY_SWR_KEY,
+  USER_ME_SWR_KEY,
+  fetchDashboardSummarySWR,
+  fetchUserMeSWR,
+  hybridDashboardSWRConfig,
+} from "../../lib/swr-fetch";
 import AppToast from "../../components/AppToast";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import PageWrapper from "../../components/PageWrapper";
 import LiveRefreshIndicator from "../../components/LiveRefreshIndicator";
 
 const CARD = "rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl";
+
+function StatsSectionSkeleton({ card }: { card: string }) {
+  return (
+    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-3" aria-busy aria-label="Loading team stats">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className={`${card} px-3 py-3 text-center sm:py-4`}>
+          <div className="mx-auto h-2 w-20 animate-pulse rounded bg-white/10" />
+          <div className="mx-auto mt-2 h-6 w-12 animate-pulse rounded bg-white/10" />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 type ReferralStatsPayload = {
     directCount?: number;
@@ -51,18 +70,12 @@ function isAfterClaim(joinedIso: string | undefined, claimedIso: string | null |
 }
 
 export default function TeamPage() {
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState("");
-  const [stats, setStats] = useState<ReferralStatsPayload | null>(null);
-  const [referralStatsReady, setReferralStatsReady] = useState(false);
-  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [members, setMembers] = useState<TeamMemberRow[]>([]);
-  const [membersReady, setMembersReady] = useState(false);
-  const [loadingMembers, setLoadingMembers] = useState(true);
   const [membersPage, setMembersPage] = useState(1);
   const [membersHasMore, setMembersHasMore] = useState(false);
   const [loadingMoreMembers, setLoadingMoreMembers] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [lastSalaryClaimAt, setLastSalaryClaimAt] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -70,61 +83,38 @@ export default function TeamPage() {
     setTimeout(() => setToast(""), 2500);
   };
 
-  const load = useCallback(async (silent: boolean) => {
-    try {
-      if (!silent) {
-        setLoading(true);
-        setLoadingMembers(true);
-      }
-      const data = await fetchCurrentUser();
-      if (!data) throw new Error("No user data");
-      setUser(data);
-      if (!silent) setLoading(false);
+  const { data: user, isLoading: loadingPage } = useSWR(USER_ME_SWR_KEY, fetchUserMeSWR, hybridDashboardSWRConfig);
 
-      const [res, teamRes, salRes] = await Promise.all([
-        API.get("/user/referral-stats").catch(() => null),
-        API.get("/user/team-members?page=1").catch(() => null),
-        API.get("/user/salary-progress").catch(() => null),
-      ]);
-      if (res?.data) {
-        const response = normalize(res.data);
-        const payload =
-          response.data && typeof response.data === "object" && Object.keys(response.data).length
-            ? response.data
-            : null;
-        setStats(payload as ReferralStatsPayload);
-      } else {
-        setStats(null);
-      }
-      if (teamRes?.data && normalize(teamRes.data).success) {
-        const teamEnvelope = normalize(teamRes.data);
-        const normalized = normalizeTeamPayload(teamEnvelope.data);
-        setMembers(normalized.members);
-        setMembersPage(1);
-        setMembersHasMore(normalized.hasMore);
-      } else {
-        setMembers([]);
-        setMembersPage(1);
-        setMembersHasMore(false);
-      }
-      if (salRes?.data && normalize(salRes.data).success) {
-        const sal = normalize(salRes.data).data as { lastClaimedAt?: string | null } | undefined;
-        const at = sal?.lastClaimedAt;
-        setLastSalaryClaimAt(at != null && String(at).trim() ? String(at) : null);
-      } else {
-        setLastSalaryClaimAt(null);
-      }
-      setLastUpdatedAt(Date.now());
-    } catch (err: any) {
-      if (!silent) showToast(getApiErrorMessage(err, "Session expired 🔒"));
-      logout();
-    } finally {
-      setReferralStatsReady(true);
-      setMembersReady(true);
-      setLoadingMembers(false);
-      if (!silent) setLoading(false);
-    }
-  }, []);
+  const { data: summary, isLoading: loadingSummaryBulk, isValidating: summaryValidating } = useSWR(
+    DASHBOARD_SUMMARY_SWR_KEY,
+    fetchDashboardSummarySWR,
+    hybridDashboardSWRConfig,
+  );
+
+  const loadingStats = loadingSummaryBulk && !summary;
+  const loadingMembers = loadingSummaryBulk && !summary;
+
+  const stats = summary?.referralStats ?? null;
+  const referralStatsReady = !loadingSummaryBulk;
+  const membersReady = !loadingSummaryBulk;
+
+  useEffect(() => {
+    if (!summary?.teamMembers) return;
+    setMembers(summary.teamMembers.members);
+    setMembersPage(summary.teamMembers.page ?? 1);
+    setMembersHasMore(Boolean(summary.teamMembers.hasMore));
+  }, [summary]);
+
+  useEffect(() => {
+    const at = summary?.salaryProgress?.lastClaimedAt;
+    setLastSalaryClaimAt(at != null && String(at).trim() ? String(at) : null);
+  }, [summary?.salaryProgress?.lastClaimedAt]);
+
+  useEffect(() => {
+    if (typeof document !== "undefined" && document.hidden) return;
+    if (!summary?.referralStats) return;
+    setLastUpdatedAt(Date.now());
+  }, [summary?.referralStats]);
 
   const loadMoreMembers = useCallback(async () => {
     if (!membersHasMore || loadingMoreMembers || loadingMembers) return;
@@ -144,32 +134,7 @@ export default function TeamPage() {
     } finally {
       setLoadingMoreMembers(false);
     }
-  }, [
-    loadingMembers,
-    loadingMoreMembers,
-    membersHasMore,
-    membersPage,
-    showToast,
-  ]);
-
-  useEffect(() => {
-    void load(false);
-    const onFocus = () => {
-      if (document.hidden) return;
-      void load(true);
-    };
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [load]);
-
-  useEffect(() => {
-    const tick = () => {
-      if (document.hidden) return;
-      void load(true);
-    };
-    const id = window.setInterval(tick, 15000);
-    return () => window.clearInterval(id);
-  }, [load]);
+  }, [loadingMembers, loadingMoreMembers, membersHasMore, membersPage, showToast]);
 
   const directCount = Number(stats?.directCount ?? 0);
   const teamCount = Number(stats?.teamCount ?? 0);
@@ -177,9 +142,11 @@ export default function TeamPage() {
 
   return (
     <ProtectedRoute>
-      <PageWrapper loading={loading} data={user?._id} useSkeletonLoading emptyText="No data available">
+      <PageWrapper loading={loadingPage && !user} data={user?._id} useSkeletonLoading={false} emptyText="No data available">
         <TeamContent
-          loading={loading}
+          loadingPage={loadingPage}
+          loadingStats={loadingStats}
+          summaryValidating={summaryValidating}
           directCount={directCount}
           teamCount={teamCount}
           referralIncome={referralIncome}
@@ -200,7 +167,9 @@ export default function TeamPage() {
 }
 
 function TeamContent({
-  loading,
+  loadingPage,
+  loadingStats,
+  summaryValidating,
   directCount,
   teamCount,
   referralIncome,
@@ -215,7 +184,9 @@ function TeamContent({
   loadingMoreMembers,
   onLoadMoreMembers,
 }: {
-  loading: boolean;
+  loadingPage: boolean;
+  loadingStats: boolean;
+  summaryValidating: boolean;
   directCount: number;
   teamCount: number;
   referralIncome: number;
@@ -234,7 +205,7 @@ function TeamContent({
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
   useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedSearch(search.trim()), 350);
+    const t = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
     return () => window.clearTimeout(t);
   }, [search]);
 
@@ -266,16 +237,24 @@ function TeamContent({
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-500">HybridEarn</p>
           <h1 className="text-lg font-bold tracking-tight text-white sm:text-2xl">Team</h1>
           <p className="mt-0.5 text-[11px] text-gray-400 sm:text-xs">Referral network & balances</p>
+          {loadingStats ? (
+            <p className="mt-2 text-[11px] text-gray-500">Loading stats…</p>
+          ) : summaryValidating ? (
+            <p className="mt-2 text-[11px] text-gray-500">Updating…</p>
+          ) : null}
         </div>
         <LiveRefreshIndicator lastUpdatedAt={lastUpdatedAt} className="shrink-0 sm:pt-1" />
       </motion.header>
 
       <motion.section
-        initial={{ opacity: 0, y: 12 }}
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.05 }}
+        transition={{ duration: 0.22, ease: "easeOut" }}
         className="mt-5 sm:mt-6"
       >
+        {loadingStats ? (
+          <StatsSectionSkeleton card={CARD} />
+        ) : (
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-3">
           <StatPill cardClassName={CARD} label="Direct team (A)" value={referralStatsReady ? directCount : "—"} accent="text-emerald-200" />
           <StatPill cardClassName={CARD} label="Total team" value={referralStatsReady ? teamCount : "—"} accent="text-sky-200" />
@@ -287,14 +266,15 @@ function TeamContent({
             isCurrency
           />
         </div>
+        )}
       </motion.section>
 
-      {!loading && (
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-4">
+      {!loadingPage && (
+      <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: "easeOut" }} className="mt-4">
         <Link href="/team/salary" className="block w-full">
           <button
             type="button"
-            className={`w-full rounded-2xl border border-emerald-500/30 bg-emerald-600/90 py-3 text-sm font-semibold text-white shadow-[0_0_25px_rgba(16,185,129,0.25)] transition duration-300 hover:scale-[1.02] hover:bg-emerald-500`}
+            className="w-full rounded-2xl border border-emerald-500/30 bg-emerald-600/90 py-3 text-sm font-semibold text-white transition duration-300 ease-out hover:scale-[1.01] hover:bg-emerald-500"
           >
             Team Salary
           </button>
@@ -303,10 +283,10 @@ function TeamContent({
       )}
 
       <motion.section
-        initial={{ opacity: 0, y: 14 }}
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.12 }}
-        className={`mt-5 p-3 transition duration-300 hover:scale-[1.005] sm:mt-6 sm:p-4 ${CARD}`}
+        transition={{ duration: 0.22 }}
+        className={`mt-5 p-3 transition duration-300 sm:mt-6 sm:p-4 ${CARD}`}
       >
         <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400">Members</p>

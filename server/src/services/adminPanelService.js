@@ -36,7 +36,7 @@ export async function buildAdminOverview() {
       { $group: { _id: null, total: { $sum: "$netAmount" }, count: { $sum: 1 } } },
     ]),
     HybridWithdrawal.countDocuments({
-      status: { $in: ["pending", "claimable", "approved"] },
+      status: { $in: ["review", "pending", "claimable", "approved"] },
     }),
     User.aggregate([
       { $unwind: { path: "$salaryHistory", preserveNullAndEmptyArrays: false } },
@@ -272,21 +272,42 @@ export async function salaryPayoutsPage({ page = 1, limit = 25, search = "" }) {
   };
 }
 
-export async function logFeed({ type, page = 1, limit = 25, search = "" }) {
+export async function logFeed({
+  type,
+  page = 1,
+  limit = 25,
+  search = "",
+  adminId: filterAdminId = "",
+  userId: filterUserId = "",
+  actionType: filterActionType = "",
+}) {
   const safeLimit = Math.min(Math.max(Number(limit) || 25, 1), 50);
   const safePage = Math.max(Number(page) || 1, 1);
   const skip = (safePage - 1) * safeLimit;
   const q = String(search || "").trim().toLowerCase();
 
   if (type === "admin") {
-    const filter = q
-      ? {
-          $or: [
-            { action: new RegExp(q, "i") },
-            { category: new RegExp(q, "i") },
-          ],
-        }
-      : {};
+    const clauses = [];
+
+    const adminOid = toOid(filterAdminId);
+    if (adminOid) clauses.push({ adminId: adminOid });
+
+    const userOid = toOid(filterUserId);
+    if (userOid) clauses.push({ targetUserId: userOid });
+
+    const cat = String(filterActionType || "").trim().toLowerCase();
+    const allowedCats = ["admin", "withdraw", "deposit", "salary", "user", "fraud"];
+    if (cat && allowedCats.includes(cat)) clauses.push({ category: cat });
+
+    if (q) {
+      clauses.push({
+        $or: [{ action: new RegExp(q, "i") }, { category: new RegExp(q, "i") }],
+      });
+    }
+
+    const filter =
+      clauses.length === 0 ? {} : clauses.length === 1 ? clauses[0] : { $and: clauses };
+
     const [items, total] = await Promise.all([
       AdminAuditLog.find(filter)
         .sort({ createdAt: -1 })
@@ -300,15 +321,19 @@ export async function logFeed({ type, page = 1, limit = 25, search = "" }) {
     return {
       items: items.map((a) => ({
         id: String(a._id),
+        createdAt: a.createdAt,
         at: a.createdAt,
         action: a.action,
         category: a.category,
+        adminId: a.adminId?._id ?? a.adminId ?? null,
+        userId: a.targetUserId?._id ?? a.targetUserId ?? null,
         userLabel:
           a.targetUserId?.username ||
           a.targetUserId?.email ||
           a.adminId?.username ||
           "—",
-        meta: a.meta,
+        adminLabel: a.adminId?.username || a.adminId?.email || "—",
+        meta: a.meta ?? null,
       })),
       total,
       page: safePage,
@@ -318,7 +343,10 @@ export async function logFeed({ type, page = 1, limit = 25, search = "" }) {
 
   if (type === "deposit") {
     const usersColl = User.collection.name;
-    const pipeline = [
+    const pipeline = [];
+    const userOidDeposit = toOid(filterUserId);
+    if (userOidDeposit) pipeline.push({ $match: { userId: userOidDeposit } });
+    pipeline.push(
       {
         $lookup: {
           from: usersColl,
@@ -327,8 +355,8 @@ export async function logFeed({ type, page = 1, limit = 25, search = "" }) {
           as: "userId",
         },
       },
-      { $unwind: { path: "$userId", preserveNullAndEmptyArrays: true } },
-    ];
+      { $unwind: { path: "$userId", preserveNullAndEmptyArrays: true } }
+    );
     if (q) {
       pipeline.push({
         $match: {
@@ -352,12 +380,15 @@ export async function logFeed({ type, page = 1, limit = 25, search = "" }) {
     return {
       items: rows.map((d) => ({
         id: String(d._id),
+        createdAt: d.createdAt,
         at: d.createdAt,
         action: `Deposit ${d.status}`,
+        userId: d.userId?._id ?? d.userId,
         userLabel: d.userId?.username || d.userId?.email || "—",
         amount: d.amount,
         txHash: d.txHash,
         status: d.status,
+        meta: { txHash: d.txHash, status: d.status, amount: d.amount },
       })),
       total,
       page: safePage,
@@ -367,7 +398,11 @@ export async function logFeed({ type, page = 1, limit = 25, search = "" }) {
 
   if (type === "withdraw") {
     const usersColl = User.collection.name;
-    const pipeline = [
+    const pipeline = [];
+    const userOidW = toOid(filterUserId);
+    if (userOidW) pipeline.push({ $match: { userId: userOidW } });
+
+    pipeline.push(
       {
         $lookup: {
           from: usersColl,
@@ -376,20 +411,30 @@ export async function logFeed({ type, page = 1, limit = 25, search = "" }) {
           as: "userId",
         },
       },
-      { $unwind: { path: "$userId", preserveNullAndEmptyArrays: true } },
-    ];
+      { $unwind: { path: "$userId", preserveNullAndEmptyArrays: true } }
+    );
+
+    const stFilter = String(filterActionType || "").trim().toLowerCase();
+    const allowedW = ["review", "pending", "claimable", "claimed", "approved", "paid", "rejected"];
+
+    const postMatches = [];
+
     if (q) {
-      pipeline.push({
-        $match: {
-          $or: [
-            { txHash: new RegExp(q, "i") },
-            { walletAddress: new RegExp(q, "i") },
-            { "userId.username": new RegExp(q, "i") },
-            { "userId.email": new RegExp(q, "i") },
-          ],
-        },
+      postMatches.push({
+        $or: [
+          { txHash: new RegExp(q, "i") },
+          { walletAddress: new RegExp(q, "i") },
+          { "userId.username": new RegExp(q, "i") },
+          { "userId.email": new RegExp(q, "i") },
+        ],
       });
     }
+
+    if (stFilter && allowedW.includes(stFilter)) postMatches.push({ status: stFilter });
+
+    if (postMatches.length === 1) pipeline.push({ $match: postMatches[0] });
+    else if (postMatches.length > 1) pipeline.push({ $match: { $and: postMatches } });
+
     pipeline.push({ $sort: { createdAt: -1 } });
     const countPipeline = [...pipeline, { $count: "total" }];
     pipeline.push({ $skip: skip }, { $limit: safeLimit });
@@ -402,12 +447,15 @@ export async function logFeed({ type, page = 1, limit = 25, search = "" }) {
     return {
       items: rows.map((w) => ({
         id: String(w._id),
+        createdAt: w.createdAt,
         at: w.createdAt,
         action: `Withdraw ${w.status}`,
+        userId: w.userId?._id ?? w.userId,
         userLabel: w.userId?.username || w.userId?.email || "—",
         amount: w.netAmount,
         status: w.status,
         txHash: w.txHash,
+        meta: { status: w.status, netAmount: w.netAmount, txHash: w.txHash },
       })),
       total,
       page: safePage,
@@ -426,8 +474,12 @@ export async function logFeed({ type, page = 1, limit = 25, search = "" }) {
             ],
           };
 
+    const salaryUserOid = toOid(filterUserId);
+    const baseMatch = { ...userQuery, salaryHistory: { $exists: true, $ne: [] } };
+    if (salaryUserOid) baseMatch._id = salaryUserOid;
+
     const pipeline = [
-      { $match: { ...userQuery, salaryHistory: { $exists: true, $ne: [] } } },
+      { $match: baseMatch },
       { $unwind: "$salaryHistory" },
       { $sort: { "salaryHistory.claimedAt": -1 } },
     ];
@@ -456,11 +508,14 @@ export async function logFeed({ type, page = 1, limit = 25, search = "" }) {
     return {
       items: rows.map((r) => ({
         id: `${r.userId}:${r.at}:${r.stage}`,
+        createdAt: r.at,
         at: r.at,
         action: `Salary stage ${r.stage}`,
+        userId: r.userId,
         userLabel: r.username || r.email || "—",
         amount: r.amount,
         stage: r.stage,
+        meta: { stage: r.stage, amount: r.amount },
       })),
       total,
       page: safePage,
@@ -483,5 +538,30 @@ export async function getUserAdminDetail(userId) {
     .sort({ createdAt: -1 })
     .limit(100)
     .lean();
-  return { user, directTeam, directCount: directTeam.length };
+
+  const [depAgg, wdAgg] = await Promise.all([
+    HybridDeposit.aggregate([
+      { $match: { userId: id, status: { $in: ["credited", "swept"] } } },
+      { $group: { _id: null, total: { $sum: "$amount" } } },
+    ]),
+    HybridWithdrawal.aggregate([
+      { $match: { userId: id, status: "paid" } },
+      { $group: { _id: null, total: { $sum: "$netAmount" } } },
+    ]),
+  ]);
+
+  const salaryEarned = Array.isArray(user.salaryHistory)
+    ? user.salaryHistory.reduce((acc, h) => acc + Number(h?.amount || 0), 0)
+    : 0;
+
+  const stats = {
+    totalDeposits: Number(depAgg[0]?.total ?? 0),
+    totalWithdrawPaid: Number(wdAgg[0]?.total ?? 0),
+    salaryEarned,
+    referralEarnings: Number(user.referralEarnings || 0),
+    fraudFlag: !!user.adminFraudFlag,
+    fraudReason: String(user.adminFraudReason || "").trim(),
+  };
+
+  return { user, directTeam, directCount: directTeam.length, stats };
 }

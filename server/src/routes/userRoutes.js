@@ -7,6 +7,7 @@ import HybridWithdrawal from "../hybrid/models/HybridWithdrawal.js";
 import { getCurrentRoiRate } from "../hybrid/services/roiService.js";
 import { requestWithdraw } from "../hybrid/controllers/withdrawController.js";
 import { getSalaryProgress } from "../hybrid/controllers/salaryController.js";
+import { buildSalaryProgressPayload } from "../hybrid/services/salaryService.js";
 
 const sumPaidWithdrawalsGross = async (userId) => {
   const [row] = await HybridWithdrawal.aggregate([
@@ -17,6 +18,116 @@ const sumPaidWithdrawalsGross = async (userId) => {
 };
 
 const router = express.Router();
+
+/** Same shape as GET /referral-stats `data` (shared with /dashboard-summary). */
+async function loadReferralStatsPayload(userId) {
+  const user = await User.findById(userId).select(
+    "referralCode referralEarnings directCount teamCount teamVolume"
+  );
+
+  if (!user) return null;
+
+  return {
+    referralCode: user.referralCode,
+    referralEarnings: user.referralEarnings || 0,
+    directCount: user.directCount || 0,
+    teamCount: user.teamCount || 0,
+    teamVolume: user.teamVolume || 0,
+  };
+}
+
+/** Same shape as GET /team-members `data` (shared with /dashboard-summary). */
+async function loadTeamMembersPayload(userId, queryPage, queryLimit) {
+  const viewer = await User.findById(userId).select("isBlocked");
+  if (!viewer) {
+    return { _error: "not_found" };
+  }
+  if (viewer.isBlocked) {
+    return { _error: "blocked" };
+  }
+
+  const page = Math.max(1, Number.parseInt(String(queryPage || "1"), 10) || 1);
+  const limit = Math.max(1, Math.min(Number(queryLimit) || 50, 50));
+  const skip = (page - 1) * limit;
+
+  const selectFields = "username createdAt depositBalance rewardBalance referredBy";
+  const oid = userId instanceof mongoose.Types.ObjectId ? userId : new mongoose.Types.ObjectId(userId);
+
+  const levelAIdsRaw = await User.find({ referredBy: oid }).select("_id").lean();
+  const levelAIds = levelAIdsRaw.map((u) => u._id);
+
+  let levelBIds = [];
+  if (levelAIds.length > 0) {
+    levelBIds = (
+      await User.find({ referredBy: { $in: levelAIds } }).select("_id").lean()
+    ).map((u) => u._id);
+  }
+
+  const tierOr = [{ referredBy: oid }];
+  if (levelAIds.length) tierOr.push({ referredBy: { $in: levelAIds } });
+  if (levelBIds.length) tierOr.push({ referredBy: { $in: levelBIds } });
+
+  const listFilter = tierOr.length === 1 ? tierOr[0] : { $or: tierOr };
+
+  const total = tierOr.length === 0 ? 0 : await User.countDocuments(listFilter);
+
+  let tierRows = [];
+  if (tierOr.length > 0) {
+    tierRows = await User.find(listFilter)
+      .select(selectFields)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+  }
+
+  const setA = new Set(levelAIds.map((id) => String(id)));
+
+  const tierLabel = (referrerId) => {
+    if (!referrerId) return "C";
+    const r = referrerId instanceof mongoose.Types.ObjectId ? referrerId : new mongoose.Types.ObjectId(referrerId);
+    const rs = String(r);
+    const uidStr = String(oid);
+    if (rs === uidStr) return "A";
+    if (setA.has(rs)) return "B";
+    return "C";
+  };
+
+  const members = tierRows.map((u) => ({
+    id: String(u._id),
+    username: u.username,
+    level: tierLabel(u.referredBy),
+    joinedAt: u.createdAt,
+    balance: Number((u.depositBalance || 0) + (u.rewardBalance || 0)),
+  }));
+
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+
+  return {
+    members,
+    page,
+    limit,
+    total,
+    totalPages,
+    hasMore: page < totalPages,
+  };
+}
+
+function mapSalaryProgressForClient(data) {
+  if (!data) return null;
+  return {
+    stage: data.stage,
+    direct: data.direct,
+    team: data.team,
+    claimableStage: data.claimableStage,
+    lastClaimedStage: data.lastClaimedStage,
+    lastClaimedAt: data.lastClaimedAt,
+    salaryComplete: data.salaryComplete,
+    claimedSalaryStages: data.claimedSalaryStages,
+    rules: data.rules,
+    salaryHistory: data.salaryHistory ?? [],
+  };
+}
 
 /* ==============================
    👤 GET CURRENT USER
@@ -212,73 +323,14 @@ router.get("/dashboard", auth, async (req, res) => {
 router.get("/team-members", auth, async (req, res) => {
   try {
     const userId = req.user._id;
-
-    const viewer = await User.findById(userId).select("isBlocked");
-    if (!viewer) {
+    const payload = await loadTeamMembersPayload(userId, req.query.page, req.query.limit);
+    if (payload?._error === "not_found") {
       return res.status(404).json({ success: false, msg: "User not found", data: null });
     }
-    if (viewer.isBlocked) {
+    if (payload?._error === "blocked") {
       return res.status(403).json({ success: false, msg: "Account blocked", data: null });
     }
-
-    const page = Math.max(1, Number.parseInt(String(req.query.page || "1"), 10) || 1);
-    const limit = Math.max(1, Math.min(Number(req.query.limit) || 50, 50));
-    const skip = (page - 1) * limit;
-
-    const selectFields = "username createdAt depositBalance rewardBalance referredBy";
-    const oid = userId instanceof mongoose.Types.ObjectId ? userId : new mongoose.Types.ObjectId(userId);
-
-    const levelAIdsRaw = await User.find({ referredBy: oid }).select("_id").lean();
-    const levelAIds = levelAIdsRaw.map((u) => u._id);
-
-    let levelBIds = [];
-    if (levelAIds.length > 0) {
-      levelBIds = (
-        await User.find({ referredBy: { $in: levelAIds } }).select("_id").lean()
-      ).map((u) => u._id);
-    }
-
-    const tierOr = [{ referredBy: oid }];
-    if (levelAIds.length) tierOr.push({ referredBy: { $in: levelAIds } });
-    if (levelBIds.length) tierOr.push({ referredBy: { $in: levelBIds } });
-
-    const listFilter =
-      tierOr.length === 1 ? tierOr[0] : { $or: tierOr };
-
-    const total =
-      tierOr.length === 0 ? 0 : await User.countDocuments(listFilter);
-
-    let tierRows = [];
-    if (tierOr.length > 0) {
-      tierRows = await User.find(listFilter)
-        .select(selectFields)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean();
-    }
-
-    const setA = new Set(levelAIds.map((id) => String(id)));
-
-    const tierLabel = (referrerId) => {
-      if (!referrerId) return "C";
-      const r = referrerId instanceof mongoose.Types.ObjectId ? referrerId : new mongoose.Types.ObjectId(referrerId);
-      const rs = String(r);
-      const uidStr = String(oid);
-      if (rs === uidStr) return "A";
-      if (setA.has(rs)) return "B";
-      return "C";
-    };
-
-    const members = tierRows.map((u) => ({
-      id: String(u._id),
-      username: u.username,
-      level: tierLabel(u.referredBy),
-      joinedAt: u.createdAt,
-      balance: Number((u.depositBalance || 0) + (u.rewardBalance || 0)),
-    }));
-
-    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const { members, page, limit, total, totalPages, hasMore } = payload;
 
     return res.json({
       success: true,
@@ -289,7 +341,7 @@ router.get("/team-members", auth, async (req, res) => {
         limit,
         total,
         totalPages,
-        hasMore: page < totalPages,
+        hasMore,
       },
     });
   } catch (err) {
@@ -303,21 +355,11 @@ router.get("/team-members", auth, async (req, res) => {
 ============================== */
 router.get("/referral-stats", auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select(
-      "referralCode referralEarnings directCount teamCount teamVolume"
-    );
+    const stats = await loadReferralStatsPayload(req.user._id);
 
-    if (!user) {
+    if (!stats) {
       return res.status(404).json({ success: false, msg: "User not found", data: null });
     }
-
-    const stats = {
-      referralCode: user.referralCode,
-      referralEarnings: user.referralEarnings || 0,
-      directCount: user.directCount || 0,
-      teamCount: user.teamCount || 0,
-      teamVolume: user.teamVolume || 0,
-    };
 
     res.json({
       success: true,
@@ -328,6 +370,58 @@ router.get("/referral-stats", auth, async (req, res) => {
   } catch (err) {
     console.error("GET /referral-stats ERROR:", err.message);
     res.status(500).json({ success: false, msg: "Server error", data: null });
+  }
+});
+
+router.get("/dashboard-summary", auth, async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const [referralStats, teamPayload, salPayload] = await Promise.all([
+      loadReferralStatsPayload(userId),
+      loadTeamMembersPayload(userId, 1, 50),
+      buildSalaryProgressPayload(userId),
+    ]);
+
+    if (!referralStats) {
+      return res.status(404).json({ success: false, msg: "User not found", data: null });
+    }
+
+    if (teamPayload?._error === "not_found") {
+      return res.status(404).json({ success: false, msg: "User not found", data: null });
+    }
+    if (teamPayload?._error === "blocked") {
+      return res.status(403).json({ success: false, msg: "Account blocked", data: null });
+    }
+
+    if (!salPayload) {
+      return res.status(404).json({ success: false, msg: "User not found", data: null });
+    }
+
+    const { members, page, limit, total, totalPages, hasMore } = teamPayload;
+    const teamMembersData = {
+      members,
+      page,
+      limit,
+      total,
+      totalPages,
+      hasMore,
+    };
+
+    const salaryProgress = mapSalaryProgressForClient(salPayload);
+
+    return res.json({
+      success: true,
+      msg: "Dashboard summary loaded",
+      data: {
+        referralStats,
+        teamMembers: teamMembersData,
+        salaryProgress,
+      },
+    });
+  } catch (err) {
+    console.error("GET /dashboard-summary ERROR:", err.message);
+    return res.status(500).json({ success: false, msg: "Server error", data: null });
   }
 });
 
