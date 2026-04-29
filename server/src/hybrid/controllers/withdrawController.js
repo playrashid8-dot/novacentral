@@ -13,6 +13,12 @@ export const requestWithdraw = async (req, res) => {
   try {
     const { amount, walletAddress, password } = req.body;
 
+    console.log("📥 Withdraw request:", {
+      amount,
+      walletAddress: walletAddress != null ? String(walletAddress).trim() : "",
+      password: password != null && String(password).length ? "[redacted]" : "",
+    });
+
     const passwordStr = password != null ? String(password) : "";
     if (!passwordStr.trim()) {
       return sendError(res, 400, "Password required", null);
@@ -59,7 +65,7 @@ export const requestWithdraw = async (req, res) => {
       withdrawalId: result?.withdrawal?._id ? String(result.withdrawal._id) : null,
     });
 
-    return sendSuccess(res, "Withdrawal requested successfully", result);
+    return sendSuccess(res, "Withdrawal request submitted", result);
   } catch (error) {
     return sendError(res, 400, error.message || "Failed to request withdrawal");
   }

@@ -265,3 +265,19 @@ input:disabled {
   align-items: center;
   justify-content: center;
 }
+
+/* Deposit detected — subtle credit highlight */
+@keyframes deposit-detected {
+  0% {
+    background-color: rgba(16, 185, 129, 0.22);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.45);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: 0 0 0 12px transparent;
+  }
+}
+
+.deposit-row-highlight {
+  animation: deposit-detected 1.25s ease-out;
+}

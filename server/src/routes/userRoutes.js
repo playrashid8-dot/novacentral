@@ -4,6 +4,7 @@ import auth from "../middleware/auth.js";
 import User from "../models/User.js";
 import HybridWithdrawal from "../hybrid/models/HybridWithdrawal.js";
 import { getCurrentRoiRate } from "../hybrid/services/roiService.js";
+import { requestWithdraw } from "../hybrid/controllers/withdrawController.js";
 
 const sumPaidWithdrawalsGross = async (userId) => {
   const [row] = await HybridWithdrawal.aggregate([
@@ -235,5 +236,10 @@ router.get("/referral-stats", auth, async (req, res) => {
     res.status(500).json({ success: false, msg: "Server error", data: null });
   }
 });
+
+/* ==============================
+   💸 HYBRID WITHDRAW (same handler as POST /api/withdraw/request)
+============================== */
+router.post("/withdraw", auth, requestWithdraw);
 
 export default router;

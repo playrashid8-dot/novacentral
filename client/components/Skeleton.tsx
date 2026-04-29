@@ -6,7 +6,7 @@ import SkeletonCard from "./SkeletonCard";
 export function SkeletonLine({ className = "" }: { className?: string }) {
   return (
     <div
-      className={`animate-pulse rounded-lg bg-white/[0.08] ${className}`}
+      className={`animate-pulse rounded-lg bg-white/10 ${className}`}
       aria-hidden
     />
   );

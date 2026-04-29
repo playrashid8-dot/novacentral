@@ -5,8 +5,12 @@ import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import AppToast from "../../components/AppToast";
+import EmptyState from "../../components/EmptyState";
 import CountdownTimer from "../../components/CountdownTimer";
+import WithdrawPageSkeleton from "../../components/WithdrawPageSkeleton";
+import LiveRefreshIndicator from "../../components/LiveRefreshIndicator";
 import { getApiErrorMessage, suppressDuplicateCatchToast } from "../../lib/api";
+import { estimateWithdrawNetUsd, inferWithdrawFeeRate } from "../../lib/withdrawFeeEstimate";
 import { fetchHybridSummary, fetchHybridWithdrawals, requestHybridWithdraw } from "../../lib/hybrid";
 import { maskAddress, isValidEvmAddress42 } from "../../lib/helpers";
 import { getWithdrawalBadgeVariant, getWithdrawalStatusLabel } from "../../lib/withdrawUi";
@@ -16,9 +20,9 @@ import Input from "../../components/ui/Input";
 import Badge from "../../components/ui/Badge";
 import Modal from "../../components/ui/Modal";
 import VipBadge from "../../components/ui/VipBadge";
-import Loader from "../../components/ui/Loader";
 
 const activePendingStatuses = ["pending", "claimable", "approved"];
+const BSC_TX_PREFIX = "https://bscscan.com/tx/";
 
 export default function WithdrawPage() {
   const router = useRouter();
@@ -28,15 +32,23 @@ export default function WithdrawPage() {
   const [withdrawPassword, setWithdrawPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [submitError, setSubmitError] = useState("");
   const [toast, setToast] = useState("");
+  const [toastTone, setToastTone] = useState<"neutral" | "success" | "error">("neutral");
   const [hybrid, setHybrid] = useState<any>(null);
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [detail, setDetail] = useState<any | null>(null);
+  const [lastFetchAt, setLastFetchAt] = useState<number | null>(null);
+  const [successBanner, setSuccessBanner] = useState<{ net: number; gross: number } | null>(null);
 
-  const showToast = (msg: string) => {
+  const showToast = (msg: string, tone: "neutral" | "success" | "error" = "neutral") => {
     setToast(msg);
-    setTimeout(() => setToast(""), 2800);
+    setToastTone(tone);
+    setTimeout(() => {
+      setToast("");
+      setToastTone("neutral");
+    }, 2800);
   };
 
   const spendableHybridBalance =
@@ -65,6 +77,7 @@ export default function WithdrawPage() {
       ]);
       setHybrid(hybridData);
       setWithdrawals(withdrawalData || []);
+      setLastFetchAt(Date.now());
     } catch (e: any) {
       if (!silent) setLoadError(getApiErrorMessage(e, "Could not load withdrawal data"));
     } finally {
@@ -94,49 +107,77 @@ export default function WithdrawPage() {
     ? new Date(timerSource.availableAt).getTime()
     : 0;
 
+  const feeRateDisplay = useMemo(() => inferWithdrawFeeRate(withdrawals) * 100, [withdrawals]);
+
+  const netPreview = useMemo(
+    () => estimateWithdrawNetUsd(Number(amount || 0), withdrawals),
+    [amount, withdrawals],
+  );
+
   const withdraw = async () => {
     if (loading) return;
+    setSubmitError("");
 
     const amt = Number(amount || 0);
 
     if (withdrawMin == null) {
-      return showToast("Loading withdrawal rules…");
+      return showToast("Loading withdrawal rules…", "neutral");
     }
 
     if (!Number.isFinite(amt) || amt < withdrawMin) {
-      return showToast(`Minimum withdrawal is $${withdrawMin}`);
+      return showToast(`Minimum withdrawal is $${withdrawMin}`, "error");
     }
 
     if (amt > spendableHybridBalance) {
-      return showToast("Insufficient Hybrid balance");
+      return showToast("Insufficient Hybrid balance", "error");
     }
 
     if (!isValidEvmAddress42(walletAddress.trim())) {
-      return showToast("Enter a valid wallet: 0x + 40 hex characters (42 total)");
+      return showToast("Enter a valid wallet: 0x + 40 hex characters (42 total)", "error");
     }
 
     if (!withdrawPassword.trim()) {
-      return showToast("Enter password");
+      return showToast("Enter password", "error");
     }
 
     try {
       setLoading(true);
-      await requestHybridWithdraw(
-        {
-          amount: amt,
-          walletAddress: walletAddress.trim(),
-          password: withdrawPassword,
-        },
-        globalThis.crypto?.randomUUID?.()
+      const payload = {
+        amount: amt,
+        walletAddress: walletAddress.trim(),
+        password: withdrawPassword,
+      };
+      console.log("📤 Withdraw payload:", {
+        ...payload,
+        password: payload.password ? "[redacted]" : "",
+      });
+
+      const result: any = await requestHybridWithdraw(
+        payload,
+        globalThis.crypto?.randomUUID?.(),
       );
 
-      showToast("Withdrawal submitted successfully");
+      const nw = Number(result?.withdrawal?.netAmount ?? netPreview);
+      const gr = Number(result?.withdrawal?.grossAmount ?? amt);
+      setSuccessBanner({
+        net: Number.isFinite(nw) ? nw : netPreview,
+        gross: Number.isFinite(gr) ? gr : amt,
+      });
+      window.setTimeout(() => setSuccessBanner(null), 12000);
+
+      showToast("Withdrawal request submitted", "success");
       setAmount("");
       setWithdrawPassword("");
       await loadHybrid(true);
     } catch (err: any) {
+      console.error("❌ Withdraw API error:", err);
+      let msg = getApiErrorMessage(err, "Request failed");
+      if (!err?.response && msg === "Network error") {
+        msg = "Network error, try again";
+      }
+      setSubmitError(msg);
       if (!suppressDuplicateCatchToast(err)) {
-        showToast(getApiErrorMessage(err, "Request failed"));
+        showToast(msg, "error");
       }
     } finally {
       setLoading(false);
@@ -152,6 +193,7 @@ export default function WithdrawPage() {
     const net = Number(detail.netAmount ?? 0);
     const label = getWithdrawalStatusLabel(detail.status);
     const variant = getWithdrawalBadgeVariant(detail.status);
+    const hash = detail.txHash ? String(detail.txHash) : "";
 
     return (
       <div className="space-y-4 text-sm">
@@ -159,6 +201,9 @@ export default function WithdrawPage() {
           <span className="text-gray-400">Status</span>
           <Badge variant={variant}>{label}</Badge>
         </div>
+
+        <WithdrawalTimeline status={detail.status} />
+
         <Row label="Amount (gross)" value={`${gross.toFixed(2)} USDT`} />
         <Row label="Fee" value={`${fee.toFixed(2)} USDT`} />
         <Row label="You receive (net)" value={`${net.toFixed(2)} USDT`} highlight />
@@ -167,11 +212,16 @@ export default function WithdrawPage() {
           value={detail.walletAddress ? String(detail.walletAddress) : "—"}
           mono
         />
-        {detail.txHash ? (
-          <Row label="TX hash" value={String(detail.txHash)} mono />
-        ) : (
-          <p className="text-xs text-gray-500">TX hash appears after payout is recorded.</p>
-        )}
+        <div className="rounded-xl border border-white/[0.06] bg-black/25 px-3 py-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+            Transaction
+          </p>
+          {hash ? (
+            <HashActions txHash={hash} />
+          ) : (
+            <p className="mt-2 text-xs text-gray-500">TX hash appears after payout is recorded.</p>
+          )}
+        </div>
       </div>
     );
   }, [detail]);
@@ -179,7 +229,7 @@ export default function WithdrawPage() {
   if (dataLoading) {
     return (
       <ProtectedRoute>
-        <Loader label="Loading withdraw…" />
+        <WithdrawPageSkeleton />
       </ProtectedRoute>
     );
   }
@@ -187,7 +237,7 @@ export default function WithdrawPage() {
   return (
     <ProtectedRoute>
       <div className="relative w-full max-w-lg pb-4 text-white">
-        <AppToast message={toast} />
+        <AppToast message={toast} tone={toastTone} />
 
         <div className="relative z-10 mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -198,23 +248,55 @@ export default function WithdrawPage() {
               Withdraw
             </h1>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <VipBadge level={vipLevel} />
+              <VipBadge level={vipLevel} showGlow={vipLevel >= 1} />
               <span className="text-[11px] text-gray-500">BEP20 · USDT</span>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => router.push("/dashboard")}
-            className="rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-semibold text-gray-200 shadow-soft transition hover:border-emerald-500/30 hover:bg-emerald-500/10"
-          >
-            Back
-          </button>
+          <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
+            <LiveRefreshIndicator lastUpdatedAt={lastFetchAt} />
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard")}
+              className="min-h-[44px] rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-semibold text-gray-200 shadow-soft transition hover:border-emerald-500/30 hover:bg-emerald-500/10 active:scale-[0.98]"
+            >
+              Back
+            </button>
+          </div>
         </div>
 
         {loadError ? (
           <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
             {loadError}
           </div>
+        ) : null}
+
+        {submitError ? (
+          <div
+            role="alert"
+            className="mb-4 rounded-2xl border border-red-500/35 bg-red-500/[0.14] px-4 py-3 text-sm font-medium text-red-50 shadow-[0_8px_32px_rgba(220,38,38,0.12)] ring-1 ring-red-400/25"
+          >
+            {submitError}
+          </div>
+        ) : null}
+
+        {successBanner ? (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-4 rounded-2xl border border-emerald-500/35 bg-emerald-500/[0.12] px-4 py-3 text-sm text-emerald-50 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.25)] ring-1 ring-emerald-400/25"
+          >
+            <p className="font-bold text-emerald-100">
+              Withdrawal queued — est. you receive{" "}
+              <span className="tabular-nums">${successBanner.net.toFixed(2)} USDT</span>
+              <span className="font-normal text-emerald-200/90">
+                {" "}
+                (from ${successBanner.gross.toFixed(2)} gross)
+              </span>
+            </p>
+            <p className="mt-1 text-xs text-emerald-200/85">
+              Funds move through review and payout. Track progress below.
+            </p>
+          </motion.div>
         ) : null}
 
         <motion.div
@@ -256,7 +338,7 @@ export default function WithdrawPage() {
                 <h2 className="text-base font-bold text-white">Submit withdrawal</h2>
                 <p className="mt-1 text-xs text-gray-500">Password confirms this device session.</p>
               </div>
-              <VipBadge level={vipLevel} />
+              <VipBadge level={vipLevel} showGlow={vipLevel >= 1} />
             </div>
 
             <div className="space-y-4">
@@ -269,13 +351,25 @@ export default function WithdrawPage() {
                 disabled={loading}
                 onChange={(e: ChangeEvent<HTMLInputElement>) => setAmount(e.target.value)}
               />
+              <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.08] px-4 py-3 text-sm shadow-inner ring-1 ring-emerald-500/15">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-200/90">
+                  You will receive (est.)
+                </p>
+                <p className="mt-1 text-lg font-black tabular-nums text-emerald-100">
+                  {Number(amount || 0) > 0 ? `${netPreview.toFixed(2)} USDT` : "—"}
+                </p>
+                <p className="mt-1 text-[11px] text-emerald-200/75">
+                  Est. <span className="tabular-nums">{feeRateDisplay.toFixed(2)}</span>% fee inferred from
+                  your history — final net is confirmed on payout.
+                </p>
+              </div>
               <Input
                 label="Wallet address"
                 autoComplete="off"
                 placeholder="0x…"
                 value={walletAddress}
                 disabled={loading}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWalletAddress(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setWalletAddress(e.target.value)}
                 hint="BEP20 USDT — 0x + 40 hex characters."
               />
               <Input
@@ -296,7 +390,7 @@ export default function WithdrawPage() {
               disabled={loading || withdrawMin == null}
               onClick={() => void withdraw()}
             >
-              Submit withdrawal
+              {loading ? "Processing request…" : "Submit withdrawal"}
             </Button>
           </Card>
         </motion.div>
@@ -304,13 +398,19 @@ export default function WithdrawPage() {
         <div className="mt-6">
           <div className="mb-3 flex items-center justify-between gap-2">
             <h3 className="text-sm font-bold text-white">Withdrawal history</h3>
-            <span className="text-[10px] text-gray-500">Auto-refresh ~16s</span>
+            <span className="text-[10px] text-gray-500">Auto-refresh · syncs regularly</span>
           </div>
 
           {withdrawals.length === 0 ? (
-            <Card>
-              <p className="py-10 text-center text-sm text-gray-500">No withdrawals yet.</p>
-            </Card>
+            <EmptyState
+              title="No withdrawals yet"
+              text="Withdraw to your wallet when your balance qualifies. Estimated fees show before you submit."
+              className="bg-card shadow-soft backdrop-blur-xl"
+              action={{
+                label: "View balance → Deposit",
+                onClick: () => router.push("/deposit"),
+              }}
+            />
           ) : (
             <div className="space-y-3">
               {withdrawals.map((w) => {
@@ -318,27 +418,29 @@ export default function WithdrawPage() {
                 const net = Number(w.netAmount ?? 0);
                 const addr = w.walletAddress ? maskAddress(String(w.walletAddress)) : "—";
                 return (
-                  <Card key={w._id} className="!p-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0 space-y-1">
-                        <p className="text-lg font-bold tabular-nums text-white">${net.toFixed(2)}</p>
-                        <p className="truncate font-mono text-[11px] text-gray-500">{addr}</p>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant={variant}>{getWithdrawalStatusLabel(w.status)}</Badge>
-                          <span className="text-[10px] text-gray-500">
-                            {w.createdAt ? new Date(w.createdAt).toLocaleString() : ""}
-                          </span>
+                  <motion.div key={w._id} layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
+                    <Card className="!p-4 transition hover:border-white/[0.12]">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0 space-y-1">
+                          <p className="text-lg font-bold tabular-nums text-white">${net.toFixed(2)}</p>
+                          <p className="truncate font-mono text-[11px] text-gray-500">{addr}</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant={variant}>{getWithdrawalStatusLabel(w.status)}</Badge>
+                            <span className="text-[10px] text-gray-500">
+                              {w.createdAt ? new Date(w.createdAt).toLocaleString() : ""}
+                            </span>
+                          </div>
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => setDetail(w)}
+                          className="min-h-[44px] rounded-2xl border border-blue-500/35 bg-blue-500/10 px-4 py-3 text-xs font-semibold text-blue-100 transition hover:bg-blue-500/20 active:scale-[0.98]"
+                        >
+                          View
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setDetail(w)}
-                        className="rounded-2xl border border-blue-500/35 bg-blue-500/10 px-4 py-3 text-xs font-semibold text-blue-100 transition hover:bg-blue-500/20"
-                      >
-                        View
-                      </button>
-                    </div>
-                  </Card>
+                    </Card>
+                  </motion.div>
                 );
               })}
             </div>
@@ -350,9 +452,7 @@ export default function WithdrawPage() {
           <ul className="mt-3 space-y-2 text-xs text-gray-400">
             <li>
               Minimum:{" "}
-              {withdrawMin != null
-                ? `$${withdrawMin} USDT (net is after platform fee)`
-                : "…"}
+              {withdrawMin != null ? `$${withdrawMin} USDT (net is after platform fee)` : "…"}
             </li>
             <li>Review and on-chain payout are handled after the lock window.</li>
             <li>
@@ -376,6 +476,102 @@ export default function WithdrawPage() {
         </Modal>
       </div>
     </ProtectedRoute>
+  );
+}
+
+function WithdrawalTimeline({ status }: { status?: string }) {
+  const s = String(status || "").toLowerCase();
+  const rejected = s === "rejected";
+  const terminalOk = s === "paid" || s === "claimed";
+  const processing = ["pending", "claimable", "approved"].includes(s);
+
+  const pill = (kind: "done" | "active" | "idle" | "bad") => {
+    if (kind === "done") {
+      return "border-emerald-500/55 bg-emerald-500/[0.12] shadow-[inset_0_0_0_1px_rgba(16,185,129,0.25)] text-emerald-100";
+    }
+    if (kind === "active") {
+      return "border-amber-400/45 bg-amber-500/10 shadow-[inset_0_0_0_1px_rgba(245,158,11,0.25)] text-amber-100";
+    }
+    if (kind === "bad") {
+      return "border-red-400/40 bg-red-500/[0.08] text-red-200";
+    }
+    return "border-white/[0.08] bg-black/22 text-gray-500";
+  };
+
+  const midKind = rejected ? ("bad" as const) : terminalOk ? ("done" as const) : processing ? "active" : "idle";
+
+  const endKind = rejected ? ("bad" as const) : terminalOk ? ("done" as const) : "idle";
+
+  return (
+    <div className="rounded-2xl border border-white/[0.08] bg-black/25 px-4 py-3 ring-1 ring-white/[0.04]">
+      <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-500">Progress</p>
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div
+          className={`rounded-xl border px-2 py-2.5 text-[11px] font-semibold transition ${pill("done")}`}
+        >
+          <p className="text-[9px] font-bold uppercase tracking-wide text-current/85">1</p>
+          <p>Requested</p>
+        </div>
+        <div className={`rounded-xl border px-2 py-2.5 text-[11px] font-semibold transition ${pill(midKind)}`}>
+          <p className="text-[9px] font-bold uppercase tracking-wide text-current/85">2</p>
+          <p>{rejected ? "Rejected" : "Processing"}</p>
+          {processing && !rejected ? (
+            <span className="mt-2 inline-block h-1 w-full animate-pulse rounded-full bg-amber-400/50" />
+          ) : null}
+        </div>
+        <div className={`rounded-xl border px-2 py-2.5 text-[11px] font-semibold transition ${pill(endKind)}`}>
+          <p className="text-[9px] font-bold uppercase tracking-wide text-current/85">3</p>
+          <p>{terminalOk ? "Paid" : rejected ? "Not paid" : "Settlement"}</p>
+        </div>
+      </div>
+      {rejected ? (
+        <p className="mt-2 text-center text-[11px] text-red-300/95">
+          Platform did not disburse this payout.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function HashActions({ txHash }: { txHash: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(txHash);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const normalized = txHash.trim();
+  const bscUrl = /^0x[a-fA-F0-9]{64}$/.test(normalized)
+    ? `${BSC_TX_PREFIX}${normalized}`
+    : `${BSC_TX_PREFIX}${encodeURIComponent(normalized)}`;
+
+  return (
+    <div className="mt-3 space-y-3">
+      <p className="break-all font-mono text-xs leading-relaxed text-gray-100">{txHash}</p>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <button
+          type="button"
+          onClick={() => void copy()}
+          className="inline-flex min-h-[42px] flex-1 items-center justify-center rounded-xl border border-white/15 bg-white/[0.07] px-3 py-2.5 text-xs font-bold text-gray-100 transition hover:border-emerald-500/40 hover:bg-emerald-500/10 active:scale-[0.98]"
+        >
+          {copied ? "Copied" : "Copy TX hash"}
+        </button>
+        <a
+          href={bscUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex min-h-[42px] flex-1 items-center justify-center rounded-xl border border-emerald-500/35 bg-emerald-500/15 px-3 py-2.5 text-xs font-bold text-emerald-100 transition hover:bg-emerald-500/25"
+        >
+          Open in BscScan
+        </a>
+      </div>
+    </div>
   );
 }
 

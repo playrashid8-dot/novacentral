@@ -51,7 +51,7 @@ export const claimHybridStake = async (stakeId) => {
 
 export const requestHybridWithdraw = async (payload, idempotencyKey) => {
   const res = await API.post(
-    "/withdraw/request",
+    "/user/withdraw",
     {
       amount: payload.amount,
       walletAddress: payload.walletAddress,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import QRCode from "react-qr-code";
@@ -19,6 +19,15 @@ import { STATUS } from "../../lib/constants";
 /** Matches server HYBRID_DEPOSIT_CONFIRMATIONS_REQUIRED (UI display only). */
 const DEPOSIT_CONFIRMATIONS_REQUIRED = 3;
 
+function isDepositDone(d: any): boolean {
+  const conf = Number(d?.confirmations ?? 0);
+  const failed =
+    d?.confirmationStatus === STATUS.FAILED ||
+    String(d?.status || "").toLowerCase() === STATUS.FAILED ||
+    String(d?.status || "").toLowerCase().includes("fail");
+  return !failed && conf >= DEPOSIT_CONFIRMATIONS_REQUIRED;
+}
+
 export default function Deposit() {
   const router = useRouter();
 
@@ -28,6 +37,8 @@ export default function Deposit() {
   const [user, setUser]: any = useState(null);
   const [hybrid, setHybrid]: any = useState(null);
   const [walletLoading, setWalletLoading] = useState(true);
+  const prevDoneMap = useRef<Map<string, boolean>>(new Map());
+  const [flashId, setFlashId] = useState<string | null>(null);
 
   const wallet = hybrid?.walletAddress || user?.walletAddress || "";
   const vipLevel = Number(hybrid?.level ?? 0);
@@ -70,6 +81,22 @@ export default function Deposit() {
     };
   }, []);
 
+  useEffect(() => {
+    const list = hybrid?.deposits || [];
+    for (const deposit of list) {
+      const id = String(deposit?._id ?? "");
+      if (!id) continue;
+      const done = isDepositDone(deposit);
+      const prev = prevDoneMap.current.get(id);
+      if (done && prev === false) {
+        setFlashId(id);
+        window.setTimeout(() => setFlashId((cur) => (cur === id ? null : cur)), 1600);
+      }
+      prevDoneMap.current.set(id, done);
+    }
+  }, [hybrid?.deposits]);
+
+
   // 📋 COPY
   const copyWallet = async () => {
     if (!wallet) return;
@@ -95,7 +122,7 @@ export default function Deposit() {
             <h1 className="bg-gradient-to-r from-white via-emerald-100 to-blue-300 bg-clip-text text-2xl font-black text-transparent sm:text-3xl">
               Deposit
             </h1>
-            <VipBadge level={vipLevel} />
+            <VipBadge level={vipLevel} showGlow={vipLevel >= 1} />
           </div>
         </div>
 
@@ -137,7 +164,7 @@ export default function Deposit() {
           ) : (
             <div className="mx-auto mb-5">
               {walletLoading ? (
-                <SkeletonCard className="mx-auto h-[196px] max-w-[220px] mb-0 rounded-2xl bg-gray-800/60" />
+                <SkeletonCard className="mx-auto mb-0 h-[196px] max-w-[220px] rounded-2xl bg-white/10" />
               ) : (
                 <div className="mx-auto flex h-[196px] max-w-[220px] items-center justify-center rounded-2xl border border-dashed border-white/15 bg-black/40 text-xs text-gray-500">
                   No wallet yet
@@ -216,7 +243,20 @@ export default function Deposit() {
         <p className="mb-3 text-sm font-bold text-white">Deposit history</p>
         <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-card shadow-soft backdrop-blur-xl">
           <div className="overflow-x-auto">
-            {!!hybrid?.deposits?.length ? (
+            {walletLoading && !hybrid ? (
+              <div className="space-y-0 px-2 py-4">
+                {[1, 2, 3, 4].map((i) => (
+                  <div
+                    key={i}
+                    className="flex gap-3 border-b border-white/[0.04] py-3 last:border-0"
+                  >
+                    <div className="h-4 w-16 animate-pulse rounded bg-white/10" />
+                    <div className="h-4 flex-1 animate-pulse rounded bg-white/10" />
+                    <div className="h-4 w-20 animate-pulse rounded bg-white/10" />
+                  </div>
+                ))}
+              </div>
+            ) : !!hybrid?.deposits?.length ? (
               <table className="w-full min-w-[320px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-white/[0.06] text-[10px] font-semibold uppercase tracking-wide text-gray-500">
@@ -232,11 +272,16 @@ export default function Deposit() {
                       deposit?.confirmationStatus === STATUS.FAILED ||
                       String(deposit?.status || "").toLowerCase() === STATUS.FAILED ||
                       String(deposit?.status || "").toLowerCase().includes("fail");
-                    const done = !failed && conf >= DEPOSIT_CONFIRMATIONS_REQUIRED;
+                    const done = isDepositDone(deposit);
                     const pending = !failed && !done;
+                    const rowClass =
+                      String(deposit._id) === flashId ? "deposit-row-highlight " : "";
 
                     return (
-                      <tr key={deposit._id} className="border-b border-white/[0.04] last:border-0 transition hover:bg-white/[0.02]">
+                      <tr
+                        key={deposit._id}
+                        className={`border-b border-white/[0.04] last:border-0 transition hover:bg-white/[0.02] ${rowClass}`}
+                      >
                         <td className="px-4 py-3 font-semibold text-white tabular-nums">
                           ${Number(deposit.amount ?? 0).toFixed(2)}
                         </td>

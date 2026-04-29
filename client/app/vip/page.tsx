@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { fetchHybridSummary } from "../../lib/hybrid";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import EmptyState from "../../components/EmptyState";
-import Loader from "../../components/Loader";
+import PageSkeleton from "../../components/Skeleton";
 
 type LevelRule = {
   level: number;
@@ -33,7 +33,7 @@ export default function VIP() {
   if (loading) {
     return (
       <ProtectedRoute>
-        <Loader />
+        <PageSkeleton />
       </ProtectedRoute>
     );
   }
@@ -89,7 +89,7 @@ export default function VIP() {
       </div>
 
       {/* CURRENT STATUS */}
-      <div className="bg-gradient-to-br from-purple-500/20 via-indigo-500/10 to-blue-500/10 p-5 rounded-3xl border border-purple-300/30 text-center mb-6 backdrop-blur-2xl shadow-[0_0_50px_rgba(124,58,237,0.32)]">
+      <div className={`bg-gradient-to-br from-purple-500/20 via-indigo-500/10 to-blue-500/10 p-5 rounded-3xl border border-purple-300/30 text-center mb-6 backdrop-blur-2xl shadow-[0_0_50px_rgba(124,58,237,0.32)] ${currentLevel > 0 ? "vip-pulse ring-1 ring-purple-400/25" : ""}`}>
         <p className="text-xs text-gray-400 uppercase tracking-[0.22em]">Your VIP Level</p>
         <h2 className="text-3xl font-black text-white mt-2 text-glow">
           {currentLevel > 0 ? `VIP ${currentLevel}` : "Not ranked"}
