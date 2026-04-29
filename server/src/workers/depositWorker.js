@@ -1,8 +1,6 @@
+import "dotenv/config";
 import { Worker } from "bullmq";
-import dotenv from "dotenv";
 import { Interface } from "ethers";
-
-dotenv.config();
 
 import connectDB from "../config/db.js";
 import HybridDeposit from "../hybrid/models/HybridDeposit.js";

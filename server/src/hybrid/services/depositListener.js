@@ -9,6 +9,11 @@ import {
 } from "../../queues/depositQueue.js";
 import { BSC_USDT_ABI, HYBRID_TOKEN, MIN_HYBRID_DEPOSIT } from "../utils/constants.js";
 import { getProvider, getRpcUrls, withProviderRetry } from "../utils/provider.js";
+import {
+  describeHybridEarnDisabledReason,
+  isHybridEarnEnabled,
+  warnIfHybridEarnEnvInvalid,
+} from "../utils/hybridEarnEnv.js";
 
 /** Canonical Transfer event topic — avoids mismatched hard-coded hashes */
 const TRANSFER_TOPIC = id("Transfer(address,address,uint256)");
@@ -24,8 +29,6 @@ export const CONFIRMATIONS = 3;
 const BSC_MAINNET_USDT = "0x55d398326f99059ff775485246999027b3197955";
 
 let isScanning = false;
-
-const isEnabled = (value) => String(value).toLowerCase() === "true";
 
 const decodeTopicAddress = (topic = "") =>
   `0x${String(topic).slice(-40).toLowerCase()}`;
@@ -358,12 +361,25 @@ export const scanHybridDeposits = async (
   toBlockOverride = null,
   options = null
 ) => {
-  if (
-    !isEnabled(process.env.HYBRID_EARN_ENABLED) ||
-    getRpcUrls().length === 0 ||
-    !process.env.HYBRID_USDT_CONTRACT
-  ) {
-    console.log("Deposit listener skipped: missing config or disabled");
+  warnIfHybridEarnEnvInvalid();
+
+  if (!isHybridEarnEnabled()) {
+    console.error("❌ Listener disabled:", describeHybridEarnDisabledReason());
+    return { skipped: true };
+  }
+
+  const rpcUrls = getRpcUrls();
+  if (rpcUrls.length === 0) {
+    console.error(
+      "❌ Listener skipped:",
+      "No RPC URLs loaded — set HYBRID_BSC_RPC_URL or BSC_RPC_URL (optional: HYBRID_BSC_RPC_FALLBACK, HYBRID_BSC_RPC_BACKUP)"
+    );
+    return { skipped: true };
+  }
+
+  const contractTrimmed = String(process.env.HYBRID_USDT_CONTRACT ?? "").trim();
+  if (!contractTrimmed) {
+    console.error("❌ Listener skipped:", "HYBRID_USDT_CONTRACT is missing");
     return { skipped: true };
   }
 

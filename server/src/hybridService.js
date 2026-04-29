@@ -2,13 +2,11 @@
  * Dedicated process for WebSocket + hybrid engine (polling/sweep/recovery).
  * Run a single replica in production. API traffic should use NOVA_SERVICE=api replicas.
  */
+import "dotenv/config";
 import express from "express";
-import dotenv from "dotenv";
 import connectDB from "./config/db.js";
 import { runHybridStartupRecovery, startHybridEngine } from "./hybrid/engine/index.js";
 import { startRealtimeListener } from "./hybrid/listeners/realtimeListener.js";
-
-dotenv.config();
 
 await connectDB();
 

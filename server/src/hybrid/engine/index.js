@@ -8,8 +8,14 @@ import {
   getRpcFallbackUsed,
   getRpcUrls,
 } from "../utils/provider.js";
+import {
+  describeHybridEarnDisabledReason,
+  isHybridEarnEnabled,
+  warnIfHybridEarnEnvInvalid,
+} from "../utils/hybridEarnEnv.js";
 import { depositQueue } from "../../queues/depositQueue.js";
 import { isHybridRealtimeListenerStarted } from "../listeners/realtimeListener.js";
+import { userMap } from "../services/userMap.js";
 import hybridConfig from "../../config/hybridConfig.js";
 import { Wallet, parseEther, formatEther } from "ethers";
 
@@ -19,9 +25,9 @@ let claimableTimer = null;
 let healthTimer = null;
 let sweepRunning = false;
 
-const isEnabled = (value) => String(value).toLowerCase() === "true";
-
 const logHybridBootstrapStatus = async () => {
+  warnIfHybridEarnEnvInvalid();
+
   const backupScanOk = hybridTimer != null;
   const realtimeOk = isHybridRealtimeListenerStarted();
   const rpcOk = await checkRpcHealth();
@@ -59,9 +65,9 @@ const logHybridBootstrapStatus = async () => {
   }
 
   const sweepReady = canSweepHybridFunds() && gasOk;
-  const depositDetectOk =
-    rpcOk && contractOk && isEnabled(process.env.HYBRID_EARN_ENABLED);
-  const creditOk = isEnabled(process.env.HYBRID_EARN_ENABLED);
+  const earnOn = isHybridEarnEnabled();
+  const depositDetectOk = rpcOk && contractOk && earnOn;
+  const creditOk = earnOn;
   const wsConfigured = Boolean(
     String(process.env.HYBRID_BSC_WS_URL || process.env.BSC_WS_URL || "").trim()
   );
@@ -107,6 +113,15 @@ const logHybridBootstrapStatus = async () => {
     duplicateProtectionOk &&
     contractOk;
 
+  console.log("🔥 FINAL STATUS:");
+  console.log(`RPC Connected: ${rpcOk ? "✅" : "❌"}`);
+  console.log(`Listener Active: ${realtimeOk ? "✅" : "❌"}`);
+  console.log(`Users Loaded: ${userMap.size}`);
+  console.log(`Deposit Detection: ${depositDetectOk ? "✅" : "❌"}`);
+  console.log(`Queue Triggered: ${queueOk ? "✅" : "❌"}`);
+  console.log(
+    `Worker Processing: ${queueOk ? "✅ (BullMQ OK — confirm deposit worker)" : "❌"}`
+  );
   console.log(`System Ready: ${systemReady ? "✅" : "❌"}`);
 };
 
@@ -138,10 +153,22 @@ const runSweepEngine = async () => {
  * Called once after DB connects so restarts cannot miss credited blocks.
  */
 export async function runHybridStartupRecovery() {
-  if (!isEnabled(process.env.HYBRID_EARN_ENABLED)) {
+  if (!isHybridEarnEnabled()) {
+    console.warn(
+      "HYBRID startup recovery skipped:",
+      describeHybridEarnDisabledReason()
+    );
     return;
   }
-  if (getRpcUrls().length === 0 || !String(process.env.HYBRID_USDT_CONTRACT || "").trim()) {
+  if (getRpcUrls().length === 0) {
+    console.warn(
+      "HYBRID startup recovery skipped:",
+      "no RPC URLs — set HYBRID_BSC_RPC_URL or BSC_RPC_URL"
+    );
+    return;
+  }
+  if (!String(process.env.HYBRID_USDT_CONTRACT || "").trim()) {
+    console.warn("HYBRID startup recovery skipped:", "HYBRID_USDT_CONTRACT missing");
     return;
   }
   try {
@@ -153,8 +180,11 @@ export async function runHybridStartupRecovery() {
 }
 
 export const startDepositListener = () => {
-  if (!isEnabled(process.env.HYBRID_EARN_ENABLED)) {
-    console.log("HYBRID engine disabled");
+  if (!isHybridEarnEnabled()) {
+    console.error(
+      "❌ HYBRID engine not started:",
+      describeHybridEarnDisabledReason()
+    );
     return;
   }
 

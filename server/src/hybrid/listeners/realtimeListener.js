@@ -8,7 +8,6 @@ import {
 import { CONFIRMATIONS } from "../services/depositListener.js";
 import {
   enqueueDepositJob,
-  DEPOSIT_JOB_OPTIONS,
   toSerializableTransferLog,
 } from "../../queues/depositQueue.js";
 import {
@@ -17,6 +16,12 @@ import {
   waitForDepositWalletsInMap,
   startUserMapPeriodicRefresh,
 } from "../services/userMap.js";
+
+import {
+  describeHybridEarnDisabledReason,
+  isHybridEarnEnabled,
+  warnIfHybridEarnEnvInvalid,
+} from "../utils/hybridEarnEnv.js";
 
 const TRANSFER_TOPIC = id("Transfer(address,address,uint256)");
 
@@ -166,7 +171,13 @@ export async function startRealtimeListener() {
     return;
   }
 
-  if (String(process.env.HYBRID_EARN_ENABLED || "").toLowerCase() !== "true") {
+  warnIfHybridEarnEnvInvalid();
+
+  if (!isHybridEarnEnabled()) {
+    console.warn(
+      "⚠️ Realtime listener skipped:",
+      describeHybridEarnDisabledReason()
+    );
     return;
   }
 

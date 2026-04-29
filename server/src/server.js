@@ -1,5 +1,5 @@
+import "dotenv/config";
 import express from "express";
-import dotenv from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import csrf from "csurf";
@@ -22,9 +22,6 @@ import historyRoutes from "./routes/historyRoutes.js";
 import { roiRoutes, salaryRoutes, stakingRoutes, withdrawRoutes, hybridDepositRoutes } from "./hybrid/routes/index.js";
 import { startHybridEngine, runHybridStartupRecovery } from "./hybrid/engine/index.js";
 import { startRealtimeListener } from "./hybrid/listeners/realtimeListener.js";
-
-// 🔧 CONFIG
-dotenv.config();
 
 if (!process.env.JWT_SECRET) {
   throw new Error("JWT_SECRET missing");
