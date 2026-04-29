@@ -29,6 +29,7 @@ if (!process.env.JWT_SECRET) {
 }
 
 const app = express();
+const PORT = process.env.PORT || 5000;
 
 const isProd =
   process.env.NODE_ENV === "production" ||
@@ -117,11 +118,11 @@ const novaService = (process.env.NOVA_SERVICE ?? "all").trim().toLowerCase();
 const hybridStackEnabled = novaService !== "api" && novaService !== "hybrid";
 
 process.on("uncaughtException", (err) => {
-  console.log("❌ CRASH:", err?.message || String(err));
+  console.error("CRASH:", err);
 });
 
 process.on("unhandledRejection", (err) => {
-  console.log("❌ PROMISE ERROR:", err);
+  console.error("REJECTION:", err);
 });
 
 /* ==============================
@@ -262,8 +263,6 @@ app.use((err, req, res, next) => {
 /* ==============================
    🚀 START SERVER
 ============================== */
-const PORT = process.env.PORT || 5000;
-
 if (hybridStackEnabled) {
   await startRealtimeListener();
   await runHybridStartupRecovery({ blocks: 1000 });
@@ -271,8 +270,7 @@ if (hybridStackEnabled) {
 }
 
 app.listen(PORT, () => {
-  console.log("💚 System alive:", process.pid);
-  console.log(`🔥 Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
   if (!hybridStackEnabled) {
     console.log(`📦 NOVA_SERVICE=${novaService} — hybrid stack disabled here (listener runs in src/hybridService.js)`);
   }

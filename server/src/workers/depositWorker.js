@@ -119,44 +119,43 @@ async function handleDeposit(serializedLog) {
 
 await connectDB();
 
-if (!redis) {
-  console.warn("⚠️ REDIS_URL not set — deposit worker cannot start");
-  process.exit(1);
-}
-
 setInterval(() => {
   if (process.env.NODE_ENV !== "production") {
     console.log("💚 Hybrid system alive");
   }
 }, 60000);
 
-const worker = new Worker(
-  "depositQueue",
-  async (job) => {
-    const { log } = job.data;
-    return handleDeposit(log);
-  },
-  {
-    connection: redis,
-    concurrency: 5,
-    limiter: DEPOSIT_QUEUE_LIMITER,
-  },
-);
+if (!redis) {
+  console.warn("⚠️ REDIS_URL not set — deposit worker cannot start");
+} else {
+  const worker = new Worker(
+    "depositQueue",
+    async (job) => {
+      const { log } = job.data;
+      return handleDeposit(log);
+    },
+    {
+      connection: redis,
+      concurrency: 5,
+      limiter: DEPOSIT_QUEUE_LIMITER,
+    },
+  );
 
-worker.on("completed", (job, result) => {
-  const tx = String(job?.data?.log?.transactionHash || "").trim();
-  if (!tx) return;
-  const processedDelta = Number(result?.processedDelta);
-  if (process.env.NODE_ENV !== "production") {
-    if (Number.isFinite(processedDelta) && processedDelta > 0) {
-      console.log("✅ Deposit processed:", tx);
-    } else {
-      console.log("⚠️ Skipped (duplicate or invalid):", tx);
+  worker.on("completed", (job, result) => {
+    const tx = String(job?.data?.log?.transactionHash || "").trim();
+    if (!tx) return;
+    const processedDelta = Number(result?.processedDelta);
+    if (process.env.NODE_ENV !== "production") {
+      if (Number.isFinite(processedDelta) && processedDelta > 0) {
+        console.log("✅ Deposit processed:", tx);
+      } else {
+        console.log("⚠️ Skipped (duplicate or invalid):", tx);
+      }
     }
-  }
-});
+  });
 
-worker.on("failed", (job, err) => {
-  const tx = job?.data?.log?.transactionHash || job?.id;
-  console.error("❌ Worker error (job failed):", tx, err?.message || String(err));
-});
+  worker.on("failed", (job, err) => {
+    const tx = job?.data?.log?.transactionHash || job?.id;
+    console.error("❌ Worker error (job failed):", tx, err?.message || String(err));
+  });
+}
