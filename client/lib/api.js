@@ -117,9 +117,13 @@ API.interceptors.response.use(
   (res) => res,
 
   async (error) => {
+    const cfgEarly = error.config || {};
+    const reqUrlEarly = String(cfgEarly.url || "");
+    const skipWithdrawUiToast = reqUrlEarly.includes("/user/withdraw");
+
     if (!error.response) {
       console.error("❌ Network Error:", error.message);
-      if (typeof window !== "undefined") {
+      if (typeof window !== "undefined" && !skipWithdrawUiToast) {
         const networkMsg =
           error.code === "ECONNABORTED"
             ? "Request timed out — try again"
@@ -184,7 +188,8 @@ API.interceptors.response.use(
       error.message ||
       "Something went wrong";
 
-    if (typeof window !== "undefined") {
+    const reqUrl = String(cfg.url || "");
+    if (typeof window !== "undefined" && !reqUrl.includes("/user/withdraw")) {
       showSafeToast(apiMsg);
     }
 
@@ -213,6 +218,7 @@ export const getApiErrorMessage = (error, fallback = "Something went wrong ❌")
 export function suppressDuplicateCatchToast(error) {
   if (!error?.config) return false;
   const url = String(error.config.url || "");
+  if (url.includes("/user/withdraw")) return false;
   if (url.includes("csrf-token")) return false;
   const status = error.response?.status;
   if (status === 401) return false;

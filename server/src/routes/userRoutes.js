@@ -238,7 +238,7 @@ router.get("/referral-stats", auth, async (req, res) => {
 });
 
 /* ==============================
-   💸 HYBRID WITHDRAW (same handler as POST /api/withdraw/request)
+   💸 HYBRID WITHDRAW — POST /api/user/withdraw only
 ============================== */
 router.post("/withdraw", auth, requestWithdraw);
 

@@ -58,6 +58,13 @@ export const requestWithdraw = async (req, res) => {
     );
 
     const w = result?.withdrawal?.walletAddress || "";
+    console.log("📥 Withdraw response:", {
+      withdrawalId: result?.withdrawal?._id ? String(result.withdrawal._id) : null,
+      grossAmount: Number(result?.withdrawal?.grossAmount ?? amount),
+      netAmount: result?.withdrawal?.netAmount != null ? Number(result.withdrawal.netAmount) : null,
+      status: result?.withdrawal?.status,
+      walletAddress: w,
+    });
     console.info("[withdraw.request]", {
       userId: String(req.user._id),
       grossAmount: Number(result?.withdrawal?.grossAmount ?? amount),

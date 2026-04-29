@@ -1,10 +1,10 @@
 import express from "express";
 import auth from "../../middleware/auth.js";
-import { claimWithdraw, getMyHybridWithdrawals, requestWithdraw } from "../controllers/withdrawController.js";
+import { claimWithdraw, getMyHybridWithdrawals } from "../controllers/withdrawController.js";
 
 const router = express.Router();
 
-router.post("/request", auth, requestWithdraw);
+/** Withdraw submission is only POST /api/user/withdraw (avoids duplicate routes). */
 router.post("/claim", auth, claimWithdraw);
 router.get("/my", auth, getMyHybridWithdrawals);
 

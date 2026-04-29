@@ -24,6 +24,29 @@ import VipBadge from "../../components/ui/VipBadge";
 const activePendingStatuses = ["pending", "claimable", "approved"];
 const BSC_TX_PREFIX = "https://bscscan.com/tx/";
 
+function formatWithdrawSubmitError(err: unknown, fallback: string): string {
+  const e = err as {
+    code?: string;
+    response?: { status?: number; data?: { msg?: string; message?: string } };
+  };
+  if (!e?.response) {
+    if (e?.code === "ECONNABORTED") return "Request timed out — try again";
+    return "Network error, try again";
+  }
+  const status = e.response.status;
+  const msg = String(e.response.data?.msg || e.response.data?.message || "").trim();
+
+  if (status === 401 || /token missing|invalid token|authorization failed/i.test(msg)) {
+    return "Please sign in — no valid session token";
+  }
+  if (/invalid password/i.test(msg)) return "Invalid password";
+  const minMatch = msg.match(/minimum withdrawal is\s+(\d+(?:\.\d+)?)/i);
+  if (minMatch) return `Minimum amount is $${minMatch[1]}`;
+  if (/insufficient hybrid balance/i.test(msg)) return "Insufficient balance";
+
+  return msg || fallback;
+}
+
 export default function WithdrawPage() {
   const router = useRouter();
 
@@ -125,11 +148,11 @@ export default function WithdrawPage() {
     }
 
     if (!Number.isFinite(amt) || amt < withdrawMin) {
-      return showToast(`Minimum withdrawal is $${withdrawMin}`, "error");
+      return showToast(`Minimum amount is $${withdrawMin}`, "error");
     }
 
     if (amt > spendableHybridBalance) {
-      return showToast("Insufficient Hybrid balance", "error");
+      return showToast("Insufficient balance", "error");
     }
 
     if (!isValidEvmAddress42(walletAddress.trim())) {
@@ -148,7 +171,8 @@ export default function WithdrawPage() {
         password: withdrawPassword,
       };
       console.log("📤 Withdraw payload:", {
-        ...payload,
+        amount: payload.amount,
+        walletAddress: payload.walletAddress,
         password: payload.password ? "[redacted]" : "",
       });
 
@@ -171,10 +195,7 @@ export default function WithdrawPage() {
       await loadHybrid(true);
     } catch (err: any) {
       console.error("❌ Withdraw API error:", err);
-      let msg = getApiErrorMessage(err, "Request failed");
-      if (!err?.response && msg === "Network error") {
-        msg = "Network error, try again";
-      }
+      const msg = formatWithdrawSubmitError(err, getApiErrorMessage(err, "Request failed"));
       setSubmitError(msg);
       if (!suppressDuplicateCatchToast(err)) {
         showToast(msg, "error");
