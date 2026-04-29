@@ -8,7 +8,8 @@ import {
   adminMarkHybridWithdrawalPaid,
   adminRejectHybridWithdrawal,
 } from "../hybrid/services/withdrawService.js";
-import { rescanDeposits } from "../hybrid/services/depositListener.js";
+import { scanHybridDeposits } from "../hybrid/services/depositListener.js";
+import { getProvider } from "../hybrid/utils/provider.js";
 
 const router = express.Router();
 const sendAdminError = (res, err, context) => {
@@ -150,21 +151,107 @@ router.post("/hybrid/withdraw/reject", auth, isAdmin, async (req, res) => {
 });
 
 /* ==============================
-   🔁 DEPOSIT RESCAN
+   🔁 DEPOSIT RESCAN & RECOVERY
 ============================== */
-router.post("/rescan-deposits", auth, isAdmin, async (req, res) => {
+
+/** Last-N-blocks backup sweep (same shape as auto recovery, for admin trigger) */
+router.post("/recover-deposits", auth, isAdmin, async (req, res) => {
   try {
-    const { fromBlock, toBlock } = req.body || {};
-    const result = await rescanDeposits(
-      fromBlock != null ? Number(fromBlock) : null,
-      toBlock != null ? Number(toBlock) : null
-    );
+    console.log("🛟 Admin recover last deposits (backup window)…");
+    let result = await scanHybridDeposits(null, null, { blocks: 2000 });
+    if (result && result.skipped === false && result.processed === 0) {
+      console.log("⚠️ No deposits found — expanding scan range");
+      result = await scanHybridDeposits(null, null, { blocks: 5000 });
+    }
     return res.json({
       success: true,
-      msg: "Rescan completed",
+      msg: "Recover scan completed",
       data: result,
     });
   } catch (err) {
+    console.error("❌ Recover last deposits failed:", err?.message || String(err));
+    return res.status(500).json({ success: false, msg: err.message, data: null });
+  }
+});
+
+/** Deep scan between explicit blocks (manual rescan) */
+router.post("/rescan-deposits", auth, isAdmin, async (req, res) => {
+  try {
+    const { fromBlock, toBlock } = req.body || {};
+    const fromN = Number(fromBlock);
+    const toN = Number(toBlock);
+    if (
+      fromBlock === undefined ||
+      fromBlock === null ||
+      toBlock === undefined ||
+      toBlock === null ||
+      !Number.isFinite(fromN) ||
+      !Number.isFinite(toN) ||
+      fromN < 0 ||
+      toN < 0 ||
+      fromN > toN
+    ) {
+      return res.status(400).json({
+        success: false,
+        msg: "Valid fromBlock and toBlock (0 ≤ fromBlock ≤ toBlock) required",
+        data: null,
+      });
+    }
+    console.log("🛟 Admin deep rescan:", fromN, toN);
+    console.log("🔎 Deep scan range:", fromN, toN);
+    const result = await scanHybridDeposits(fromN, toN, { isManualRescan: true });
+    return res.json({
+      success: true,
+      msg: "Deep rescan completed",
+      data: result,
+    });
+  } catch (err) {
+    console.error("❌ Deep rescan failed:", err?.message || String(err));
+    return res.status(500).json({ success: false, msg: err.message, data: null });
+  }
+});
+
+/** Resolve tx → block window and scan (±5 blocks) */
+router.post("/recover-by-tx", auth, isAdmin, async (req, res) => {
+  try {
+    const { txHash } = req.body || {};
+    const normalized = String(txHash || "").trim();
+    if (!/^0x[a-fA-F0-9]{64}$/.test(normalized)) {
+      return res.status(400).json({
+        success: false,
+        msg: "Valid txHash (0x + 64 hex chars) required",
+        data: null,
+      });
+    }
+    console.log("📦 Recovery job queued:", normalized);
+    const provider = getProvider();
+    const receipt = await provider.getTransactionReceipt(normalized);
+    if (!receipt) {
+      return res.status(400).json({
+        success: false,
+        msg: "Transaction not found or not yet mined",
+        data: null,
+      });
+    }
+    const bn = Number(receipt.blockNumber);
+    if (!Number.isFinite(bn)) {
+      return res.status(400).json({
+        success: false,
+        msg: "Invalid block number on receipt",
+        data: null,
+      });
+    }
+    const fromBlk = Math.max(0, bn - 5);
+    const toBlk = bn + 5;
+    console.log("🔎 Deep scan range:", fromBlk, toBlk);
+    const result = await scanHybridDeposits(fromBlk, toBlk, { isManualRescan: true });
+    return res.json({
+      success: true,
+      msg: "Recover by TX completed",
+      data: { ...result, blockNumber: bn },
+    });
+  } catch (err) {
+    console.error("❌ Recover by TX failed:", err?.message || String(err));
     return res.status(500).json({ success: false, msg: err.message, data: null });
   }
 });

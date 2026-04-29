@@ -90,7 +90,9 @@ async function dispatchRealtimeDeposit(log, provider) {
 
   const head = await provider.getBlockNumber();
   const bn = log.blockNumber != null ? Number(log.blockNumber) : NaN;
+  const txHash = log.transactionHash;
   if (Number.isFinite(bn) && bn > head - CONFIRMATIONS) {
+    console.log("⏳ Waiting confirmations:", txHash);
     processedTx.delete(log.transactionHash);
     return;
   }

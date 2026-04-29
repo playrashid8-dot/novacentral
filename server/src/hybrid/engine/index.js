@@ -107,6 +107,9 @@ const logHybridBootstrapStatus = async () => {
   console.log(
     `RPC Working: ${rpcOk ? "✅" : "❌"}${rpcOk && getCurrentRpcUrl() ? ` (${getCurrentRpcUrl()})` : ""}`
   );
+  console.log(`Realtime Listener: ${realtimeOk ? "✅" : "❌"}`);
+  console.log(`Backup Scan: ${backupScanOk ? "✅" : "❌"}`);
+  console.log(`Recovery Active: ${recoveryOk ? "✅" : "❌"}`);
   console.log(`Fallback Used: ${getRpcFallbackUsed() ? "Yes" : "No"}`);
   console.log(`Auto Reconnect: ${autoReconnectOk ? "✅" : "❌"}`);
   console.log(`Recovery Working: ${recoveryOk ? "✅" : "❌"}`);
@@ -120,7 +123,9 @@ const logHybridBootstrapStatus = async () => {
   console.log("");
   console.log("🔥 FINAL STATUS:");
   console.log(`RPC Connected: ${rpcOk ? "✅" : "❌"}`);
-  console.log(`Listener Active: ${listenerLabel}`);
+  console.log(`Realtime Listener: ${listenerLabel}`);
+  console.log(`Backup Scan: ${backupScanOk ? "✅" : "❌"}`);
+  console.log(`Recovery Active: ${recoveryOk ? "✅" : "❌"}`);
   console.log(`WebSocket Active: ${wsActive ? "✅" : wsConfigured ? "❌" : "❌ (not configured)"}`);
   console.log(`Users Loaded: ${userMap.size}`);
   console.log(`Deposit Detection: ${depositDetectOk ? "✅" : "❌"}`);
@@ -157,8 +162,9 @@ const runSweepEngine = async () => {
 /**
  * Full incremental scan from HybridSetting checkpoint → chain tip (shared with polling backup).
  * Called once after DB connects so restarts cannot miss credited blocks.
+ * @param {{ blocks?: number }} [options] — extra tail window after checkpoint scan (default 1000).
  */
-export async function runHybridStartupRecovery() {
+export async function runHybridStartupRecovery(options = {}) {
   if (!isHybridEarnEnabled()) {
     console.warn(
       "HYBRID startup recovery skipped:",
@@ -177,9 +183,20 @@ export async function runHybridStartupRecovery() {
     console.warn("HYBRID startup recovery skipped:", "HYBRID_USDT_CONTRACT missing");
     return;
   }
+  const startupBackupBlocks = Number.isFinite(Number(options?.blocks))
+    ? Math.max(1, Number(options.blocks))
+    : 1000;
   try {
     console.log("🔄 Missed deposit recovery (checkpoint → chain tip)...");
     await scanHybridDeposits(null, null, { quiet: true, skipProbe: true });
+    console.log(
+      `🔄 Startup backup window (last ${startupBackupBlocks} confirmed blocks)...`
+    );
+    await scanHybridDeposits(null, null, {
+      quiet: true,
+      skipProbe: true,
+      blocks: startupBackupBlocks,
+    });
   } catch (err) {
     console.error("❌ ERROR:", err?.message || String(err));
   }
@@ -204,11 +221,19 @@ export const startDepositListener = () => {
 
   hybridTimer = setInterval(async () => {
     try {
-      await scanHybridDeposits(null, null, { blocks: 50 });
+      console.log("🛟 Auto recovery scan running...");
+      const result = await scanHybridDeposits(null, null, { blocks: 2000 });
+      if (result && result.skipped === false && result.processed === 0) {
+        console.log("⚠️ No deposits found — expanding scan range");
+        await scanHybridDeposits(null, null, { blocks: 5000 });
+      }
     } catch (error) {
-      console.error("❌ ERROR:", error?.message || String(error));
+      console.error(
+        "❌ Auto recovery scan failed:",
+        error?.message || String(error)
+      );
     }
-  }, 120000);
+  }, 60000);
 
   runSweepEngine();
   sweepTimer = setInterval(runSweepEngine, sweepEngineMs);
@@ -235,7 +260,7 @@ export const startDepositListener = () => {
   }
 
   console.log(
-    `HYBRID engine started (deposit backup scan 120000ms, sweep ${sweepEngineMs}ms, claimable ${claimableMs}ms)`
+    `HYBRID engine started (auto recovery scan 60000ms / 2000 blocks tail + optional 5000 expand, sweep ${sweepEngineMs}ms, claimable ${claimableMs}ms)`
   );
 
   void logHybridBootstrapStatus();

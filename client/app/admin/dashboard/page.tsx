@@ -11,7 +11,7 @@ import {
   buildUserGrowthSeries,
   buildWithdrawDailySeries,
 } from "../../../lib/adminChartSeries";
-import { getAdminLogs } from "../../../lib/adminActivityLog";
+import { getAdminLogs, pushAdminLog } from "../../../lib/adminActivityLog";
 import { showSafeToast } from "../../../lib/toast";
 
 const ChartsLazy = dynamic(
@@ -37,6 +37,10 @@ export default function AdminDashboardPage() {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [deepFromBlock, setDeepFromBlock] = useState("");
+  const [deepToBlock, setDeepToBlock] = useState("");
+  const [recoverTxHash, setRecoverTxHash] = useState("");
+  const [recoveryBusy, setRecoveryBusy] = useState<string | null>(null);
 
   useEffect(() => {
     setLogs(getAdminLogs().slice(0, 8));
@@ -94,6 +98,98 @@ export default function AdminDashboardPage() {
     ? `Platform balance ${formatCurrency(stats.totalBalance ?? 0)} · Rewards ${formatCurrency(stats.totalEarnings ?? 0)}`
     : "";
 
+  const runRecoverLast = async () => {
+    setRecoveryBusy("last");
+    try {
+      const payload = await adminFetch("/admin/recover-deposits", {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      const detail = JSON.stringify(payload?.data ?? {});
+      pushAdminLog({ action: "Recover last deposits", detail });
+      showSafeToast(payload?.msg || "Recover scan completed");
+      setLogs(getAdminLogs().slice(0, 8));
+    } catch (err: any) {
+      pushAdminLog({
+        level: "error",
+        action: "Recover last deposits",
+        detail: err?.message || "Failed",
+      });
+      showSafeToast(err?.message || "Request failed");
+      setLogs(getAdminLogs().slice(0, 8));
+    } finally {
+      setRecoveryBusy(null);
+    }
+  };
+
+  const runDeepScan = async () => {
+    const fromBlock = Number(deepFromBlock);
+    const toBlock = Number(deepToBlock);
+    if (
+      !Number.isFinite(fromBlock) ||
+      !Number.isFinite(toBlock) ||
+      fromBlock < 0 ||
+      toBlock < 0 ||
+      fromBlock > toBlock
+    ) {
+      showSafeToast("Enter valid From block and To block (from ≤ to)");
+      return;
+    }
+    setRecoveryBusy("deep");
+    try {
+      const payload = await adminFetch("/admin/rescan-deposits", {
+        method: "POST",
+        body: JSON.stringify({ fromBlock, toBlock }),
+      });
+      const detail = JSON.stringify(payload?.data ?? {});
+      pushAdminLog({
+        action: "Deep scan",
+        detail: `${fromBlock}–${toBlock} ${detail}`,
+      });
+      showSafeToast(payload?.msg || "Deep scan completed");
+      setLogs(getAdminLogs().slice(0, 8));
+    } catch (err: any) {
+      pushAdminLog({
+        level: "error",
+        action: "Deep scan",
+        detail: err?.message || "Failed",
+      });
+      showSafeToast(err?.message || "Request failed");
+      setLogs(getAdminLogs().slice(0, 8));
+    } finally {
+      setRecoveryBusy(null);
+    }
+  };
+
+  const runRecoverByTx = async () => {
+    const txHash = String(recoverTxHash || "").trim();
+    if (!/^0x[a-fA-F0-9]{64}$/.test(txHash)) {
+      showSafeToast("Enter a valid transaction hash (0x + 64 hex characters)");
+      return;
+    }
+    setRecoveryBusy("tx");
+    try {
+      const payload = await adminFetch("/admin/recover-by-tx", {
+        method: "POST",
+        body: JSON.stringify({ txHash }),
+      });
+      const detail = JSON.stringify(payload?.data ?? {});
+      pushAdminLog({ action: "Recover by TX", detail: `${txHash.slice(0, 12)}… ${detail}` });
+      showSafeToast(payload?.msg || "Recover by TX completed");
+      setLogs(getAdminLogs().slice(0, 8));
+    } catch (err: any) {
+      pushAdminLog({
+        level: "error",
+        action: "Recover by TX",
+        detail: err?.message || "Failed",
+      });
+      showSafeToast(err?.message || "Request failed");
+      setLogs(getAdminLogs().slice(0, 8));
+    } finally {
+      setRecoveryBusy(null);
+    }
+  };
+
   return (
     <AdminLayout
       title="Control panel"
@@ -130,6 +226,77 @@ export default function AdminDashboardPage() {
               value={pendingRequests}
               hint={`${pendingList?.length || 0} withdrawal row(s) in queue + ${pendingPipelineDeposits} detected deposit(s)`}
             />
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+            <h3 className="text-sm font-semibold text-white">Deposit recovery</h3>
+            <p className="mt-1 text-xs text-gray-500">
+              Backup sweep (recent blocks), deep block range scan, or narrow scan around a transaction hash.
+            </p>
+            <div className="mt-4 flex flex-col gap-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  disabled={recoveryBusy !== null}
+                  onClick={() => void runRecoverLast()}
+                  className="rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/25 disabled:opacity-50"
+                >
+                  {recoveryBusy === "last" ? "Running…" : "🛟 Recover last deposits"}
+                </button>
+              </div>
+              <div className="flex flex-wrap items-end gap-3 border-t border-white/10 pt-4">
+                <label className="flex flex-col gap-1 text-xs text-gray-400">
+                  From block
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={deepFromBlock}
+                    onChange={(e) => setDeepFromBlock(e.target.value)}
+                    placeholder="e.g. 95317000"
+                    className="w-36 rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-gray-600"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-gray-400">
+                  To block
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={deepToBlock}
+                    onChange={(e) => setDeepToBlock(e.target.value)}
+                    placeholder="e.g. 95323000"
+                    className="w-36 rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-gray-600"
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={recoveryBusy !== null}
+                  onClick={() => void runDeepScan()}
+                  className="rounded-xl border border-sky-500/40 bg-sky-500/15 px-4 py-2 text-sm font-medium text-sky-200 transition hover:bg-sky-500/25 disabled:opacity-50"
+                >
+                  {recoveryBusy === "deep" ? "Scanning…" : "🔎 Deep scan"}
+                </button>
+              </div>
+              <div className="flex flex-wrap items-end gap-3 border-t border-white/10 pt-4">
+                <label className="flex min-w-[280px] flex-1 flex-col gap-1 text-xs text-gray-400">
+                  Transaction hash
+                  <input
+                    type="text"
+                    value={recoverTxHash}
+                    onChange={(e) => setRecoverTxHash(e.target.value.trim())}
+                    placeholder="0x…"
+                    className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 font-mono text-sm text-white placeholder:text-gray-600"
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={recoveryBusy !== null}
+                  onClick={() => void runRecoverByTx()}
+                  className="rounded-xl border border-amber-500/40 bg-amber-500/15 px-4 py-2 text-sm font-medium text-amber-200 transition hover:bg-amber-500/25 disabled:opacity-50"
+                >
+                  {recoveryBusy === "tx" ? "Recovering…" : "⚡ Recover by TX"}
+                </button>
+              </div>
+            </div>
           </div>
 
           <ChartsLazy

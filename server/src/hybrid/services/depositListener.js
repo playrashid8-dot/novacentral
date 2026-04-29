@@ -216,7 +216,17 @@ async function executeDepositScan(
     throw new Error("Invalid block range for deposit scan");
   }
 
-  let fromBlock = Math.max(storedBlock + 1, SAFE_START_BLOCK);
+  /** Admin/manual rescans must honor explicit [from,to]; SAFE_START clamp would skip older blocks inside range */
+  const manualExplicitRange =
+    isManualRescan &&
+    fromBlockOverride !== null &&
+    toBlockOverride !== null &&
+    Number.isFinite(Number(fromBlockOverride)) &&
+    Number.isFinite(Number(toBlockOverride));
+
+  let fromBlock = manualExplicitRange
+    ? Math.max(Number(fromBlockOverride), 0)
+    : Math.max(storedBlock + 1, SAFE_START_BLOCK);
   if (fromBlock > latestBlock) {
     if (!quiet) {
       console.log("Deposit listener up to date");
@@ -240,8 +250,8 @@ async function executeDepositScan(
 
     let logs = [];
 
-    try {
-      logs = await withProviderRetry((provider) =>
+    const fetchChunkLogs = () =>
+      withProviderRetry((provider) =>
         provider.getLogs({
           address: String(process.env.HYBRID_USDT_CONTRACT || "").trim(),
           fromBlock,
@@ -249,10 +259,23 @@ async function executeDepositScan(
           topics: [TRANSFER_TOPIC],
         })
       );
+
+    try {
+      logs = await fetchChunkLogs();
     } catch (err) {
       console.log("❌ ERROR:", err?.message || String(err));
       await new Promise((r) => setTimeout(r, 3000));
       continue;
+    }
+
+    if (logs.length === 0) {
+      console.log("⚠️ Empty scan result — retrying...");
+      try {
+        await new Promise((r) => setTimeout(r, 1500));
+        logs = await fetchChunkLogs();
+      } catch (retryErr) {
+        console.log("❌ ERROR:", retryErr?.message || String(retryErr));
+      }
     }
 
     if (!quiet) {
@@ -315,13 +338,19 @@ async function executeDepositScan(
         try {
           const sLog = toSerializableTransferLog(log);
           if (!sLog) {
+            console.warn(
+              "⚠️ Scan path: cannot serialize Transfer log for enqueue:",
+              shortTx(log.transactionHash)
+            );
             continue;
           }
+          const txHash = String(log.transactionHash || "").trim().toLowerCase();
           const job = await enqueueDepositJob({
             log: sLog,
             blockNumber: sLog.blockNumber,
           });
           if (job) {
+            console.log("📦 Recovery job queued:", txHash);
             processed += 1;
           }
         } catch (err) {

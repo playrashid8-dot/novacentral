@@ -22,7 +22,7 @@ if (!_hybridWs) {
 await connectDB();
 
 await startRealtimeListener();
-await runHybridStartupRecovery();
+await runHybridStartupRecovery({ blocks: 1000 });
 startHybridEngine();
 
 const app = express();

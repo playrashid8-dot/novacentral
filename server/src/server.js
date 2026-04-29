@@ -261,7 +261,7 @@ const PORT = process.env.PORT || 5000;
 
 if (hybridStackEnabled) {
   await startRealtimeListener();
-  await runHybridStartupRecovery();
+  await runHybridStartupRecovery({ blocks: 1000 });
   startHybridEngine();
 }
 
