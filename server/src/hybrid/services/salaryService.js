@@ -3,70 +3,159 @@ import User from "../../models/User.js";
 import { SALARY_RULES } from "../utils/constants.js";
 import { addHybridLedgerEntries } from "./ledgerService.js";
 
-const getHighestSalaryRule = (user) => {
-  let matchedRule = null;
-  const claimedStages = new Set((user.claimedSalaryStages || []).map(Number));
-  const direct = Number(user.directCount || 0);
-  const team = Number(user.teamCount || 0);
+const MAX_GRAPH_DEPTH = 100;
 
-  for (const rule of SALARY_RULES) {
-    if (direct >= rule.directCount && team >= rule.teamCount && !claimedStages.has(rule.stage)) {
-      matchedRule = rule;
-    }
-  }
+/** Full fresh downline (all depths under root); optional cutoff by join date after last salary claim */
+const countFreshTeam = async (rootId, lastClaimDate, session = null) => {
+  const oid = rootId instanceof mongoose.Types.ObjectId ? rootId : new mongoose.Types.ObjectId(rootId);
 
-  return matchedRule;
-};
+  const restrictSearchWithMatch =
+    lastClaimDate instanceof Date && !Number.isNaN(lastClaimDate.getTime())
+      ? { createdAt: { $gt: lastClaimDate } }
+      : {};
 
-/** Next unclaimed milestone (for progress UI), sorted by stage. */
-export const getNextSalaryRuleForUser = (user) => {
-  const claimed = new Set((user.claimedSalaryStages || []).map(Number));
-  const sorted = [...SALARY_RULES].sort((a, b) => a.stage - b.stage);
-  return sorted.find((r) => !claimed.has(r.stage)) || null;
-};
-
-export const getSalaryUiMeta = (user) => {
-  const claimable = getHighestSalaryRule(user);
-  const nextRule = getNextSalaryRuleForUser(user);
-  const d = Number(user.directCount || 0);
-  const t = Number(user.teamCount || 0);
-  return {
-    claimableStage: claimable?.stage ?? 0,
-    claimableAmount: claimable?.amount ?? 0,
-    nextStage: nextRule?.stage ?? null,
-    nextDirectNeed: nextRule?.directCount ?? null,
-    nextTeamNeed: nextRule?.teamCount ?? null,
-    nextReward: nextRule?.amount ?? null,
-    directCount: d,
-    teamCount: t,
-    claimedSalaryStages: [...(user.claimedSalaryStages || [])],
-  };
-};
-
-export const refreshSalaryStage = async (userId, session = null) => {
-  const user = await User.findById(userId)
-    .select("salaryDirectCount salaryTeamCount salaryStage claimedSalaryStages directCount teamCount")
-    .session(session);
-
-  if (!user) {
-    return null;
-  }
-
-  const rule = getHighestSalaryRule(user);
-  const nextStage = rule?.stage || 0;
-
-  return User.findByIdAndUpdate(
-    userId,
-    {
-      $set: {
-        salaryStage: nextStage,
+  const aggOpts = session != null ? { session } : {};
+  const rows = await User.aggregate(
+    [
+      { $match: { _id: oid } },
+      {
+        $graphLookup: {
+          from: User.collection.name,
+          startWith: "$_id",
+          connectFromField: "_id",
+          connectToField: "referredBy",
+          as: "downline",
+          maxDepth: MAX_GRAPH_DEPTH,
+          restrictSearchWithMatch,
+        },
       },
-    },
-    {
-      new: true,
-      session,
-    }
+      {
+        $project: {
+          n: { $size: "$downline" },
+        },
+      },
+    ],
+    aggOpts
   );
+
+  return Number(rows[0]?.n ?? 0);
+};
+
+/**
+ * Migrates legacy `claimedSalaryStages` into salaryProgress once.
+ * Sets lastClaimedAt when inferring stages so onwards only fresh recruits count for the next claim.
+ */
+export const migrateSalaryProgressFields = async (userId, session = null) => {
+  let user = await User.findById(userId)
+    .select("salaryProgress claimedSalaryStages rewardBalance totalEarnings salaryStage")
+    .session(session ?? undefined);
+
+  if (!user) return null;
+
+  const claimedLegacy = [...(user.claimedSalaryStages ?? [])]
+    .map(Number)
+    .filter((n) => Number.isFinite(n));
+  let lastClaimedStage = Number(user.salaryProgress?.lastClaimedStage ?? 0);
+  let lastClaimedAtRaw = user.salaryProgress?.lastClaimedAt ?? null;
+
+  const maxLegacy = claimedLegacy.length ? Math.max(...claimedLegacy, 0) : 0;
+  const needsMigrateFromLegacy = lastClaimedStage === 0 && maxLegacy > 0;
+
+  if (needsMigrateFromLegacy) {
+    lastClaimedStage = maxLegacy;
+    const lastClaimedAt =
+      lastClaimedAtRaw != null ? new Date(lastClaimedAtRaw) : new Date();
+
+    await User.updateOne(
+      { _id: userId },
+      {
+        $set: {
+          "salaryProgress.lastClaimedStage": lastClaimedStage,
+          "salaryProgress.lastClaimedAt": lastClaimedAt,
+          salaryStage: lastClaimedStage,
+        },
+      },
+      { session: session ?? undefined }
+    );
+
+    user = await User.findById(userId)
+      .select("salaryProgress claimedSalaryStages rewardBalance totalEarnings salaryStage")
+      .session(session ?? undefined);
+  }
+
+  return user;
+};
+
+/** Fresh recruits only — resets after last salary claim timestamp */
+export const getFreshCounts = async (user, session = null) => {
+  const lastClaimRaw = user.salaryProgress?.lastClaimedAt;
+  let lastClaim = null;
+
+  if (lastClaimRaw != null) {
+    const d =
+      lastClaimRaw instanceof Date
+        ? lastClaimRaw
+        : new Date(lastClaimRaw);
+
+    lastClaim = !Number.isNaN(d.getTime()) ? d : null;
+  }
+
+  const filter = lastClaim ? { createdAt: { $gt: lastClaim } } : {};
+
+  let directQ = User.countDocuments({
+    referredBy: user._id,
+    ...filter,
+  });
+  if (session != null) {
+    directQ = directQ.session(session);
+  }
+  const direct = await directQ;
+
+  const team = await countFreshTeam(user._id, lastClaim ?? undefined, session);
+
+  return { direct, team };
+};
+
+const ruleByStage = (stageNum) =>
+  SALARY_RULES.find((r) => Number(r.stage) === Number(stageNum)) ?? null;
+
+/**
+ * Builds GET /api/user/salary-progress payload.
+ */
+export const buildSalaryProgressPayload = async (userId) => {
+  const migrated = await migrateSalaryProgressFields(userId);
+  if (!migrated) return null;
+
+  const maxStageNum = SALARY_RULES.reduce((m, r) => Math.max(m, r.stage), 0);
+
+  let lastClaimedStage = Number(migrated.salaryProgress?.lastClaimedStage ?? 0);
+  lastClaimedStage = Math.min(lastClaimedStage, maxStageNum);
+
+  const { direct, team } = await getFreshCounts(migrated, null);
+
+  const complete = lastClaimedStage >= maxStageNum;
+
+  /** Milestone you're working toward (next claim); when finished, repeats last rule index for convenience */
+  const nextStageNum = complete ? maxStageNum : lastClaimedStage + 1;
+  const rule = ruleByStage(nextStageNum);
+
+  const eligible =
+    !complete &&
+    rule &&
+    direct >= Number(rule.directCount ?? 0) &&
+    team >= Number(rule.teamCount ?? 0);
+
+  return {
+    stage: complete ? maxStageNum : nextStageNum,
+    direct,
+    team,
+    claimableStage: eligible ? nextStageNum : 0,
+    lastClaimedStage,
+    lastClaimedAt: migrated.salaryProgress?.lastClaimedAt ?? null,
+    salaryComplete: complete,
+    claimedSalaryStages: [...(migrated.claimedSalaryStages ?? [])].map(Number),
+    rules: SALARY_RULES,
+  };
 };
 
 export const claimSalary = async (userId) => {
@@ -76,36 +165,64 @@ export const claimSalary = async (userId) => {
     let result = null;
 
     await session.withTransaction(async () => {
-      const user = await User.findById(userId)
-        .select(
-          "directCount teamCount claimedSalaryStages rewardBalance totalEarnings salaryStage"
-        )
-        .session(session);
-
+      let user = await migrateSalaryProgressFields(userId, session);
       if (!user) {
         throw new Error("User not found");
       }
 
-      const rule = getHighestSalaryRule(user);
+      const maxStageNum = SALARY_RULES.reduce((m, r) => Math.max(m, r.stage), 0);
+      let prevStage = Number(user.salaryProgress?.lastClaimedStage ?? 0);
+      prevStage = Math.min(prevStage, maxStageNum);
 
-      if (!rule) {
+      if (prevStage >= maxStageNum) {
+        throw new Error("All salary stages claimed");
+      }
+
+      const nextStage = prevStage + 1;
+      const rule = ruleByStage(nextStage);
+
+      if (!rule || rule.stage !== nextStage) {
+        throw new Error("Invalid salary stage");
+      }
+
+      const { direct, team } = await getFreshCounts(user, session);
+
+      if (
+        direct < Number(rule.directCount) ||
+        team < Number(rule.teamCount)
+      ) {
         throw new Error("Salary stage not reached");
       }
 
+      const claimFilter =
+        prevStage === 0
+          ? {
+              _id: userId,
+              $or: [
+                { "salaryProgress.lastClaimedStage": 0 },
+                { "salaryProgress.lastClaimedStage": { $exists: false } },
+                { salaryProgress: { $exists: false } },
+              ],
+            }
+          : {
+              _id: userId,
+              "salaryProgress.lastClaimedStage": prevStage,
+            };
+
       const updatedUser = await User.findOneAndUpdate(
-        {
-          _id: userId,
-          directCount: { $gte: rule.directCount },
-          teamCount: { $gte: rule.teamCount },
-          claimedSalaryStages: { $ne: rule.stage },
-        },
+        claimFilter,
         {
           $inc: {
             rewardBalance: rule.amount,
             totalEarnings: rule.amount,
           },
+          $set: {
+            "salaryProgress.lastClaimedStage": nextStage,
+            "salaryProgress.lastClaimedAt": new Date(),
+            salaryStage: nextStage,
+          },
           $addToSet: {
-            claimedSalaryStages: rule.stage,
+            claimedSalaryStages: nextStage,
           },
         },
         {
@@ -127,19 +244,17 @@ export const claimSalary = async (userId) => {
             amount: rule.amount,
             source: "salary_claim",
             meta: {
-              stage: rule.stage,
-              directCount: Number(user.directCount || 0),
-              teamCount: Number(user.teamCount || 0),
+              stage: nextStage,
+              directCountFresh: direct,
+              teamCountFresh: team,
             },
           },
         ],
         session
       );
 
-      await refreshSalaryStage(userId, session);
-
       result = {
-        stage: rule.stage,
+        stage: nextStage,
         amount: rule.amount,
       };
     });
@@ -149,3 +264,45 @@ export const claimSalary = async (userId) => {
     session.endSession();
   }
 };
+
+/** Salary UI block on hybrid dashboard */
+export const getSalaryUiMeta = async (userId) => {
+  const payload = await buildSalaryProgressPayload(
+    typeof userId === "object" && userId?._id != null ? userId._id : userId
+  );
+
+  if (!payload) {
+    return {
+      claimableStage: 0,
+      claimableAmount: 0,
+      nextStage: null,
+      nextDirectNeed: null,
+      nextTeamNeed: null,
+      nextReward: null,
+      directCount: 0,
+      teamCount: 0,
+      claimedSalaryStages: [],
+    };
+  }
+
+  const nextRule = payload.salaryComplete
+    ? null
+    : SALARY_RULES.find((r) => r.stage === payload.lastClaimedStage + 1) ?? null;
+
+  const claimRule = SALARY_RULES.find((r) => r.stage === payload.claimableStage);
+
+  return {
+    claimableStage: payload.claimableStage,
+    claimableAmount: claimRule?.amount ?? 0,
+    nextStage: nextRule?.stage ?? null,
+    nextDirectNeed: nextRule?.directCount ?? null,
+    nextTeamNeed: nextRule?.teamCount ?? null,
+    nextReward: nextRule?.amount ?? null,
+    directCount: payload.direct,
+    teamCount: payload.team,
+    claimedSalaryStages: payload.claimedSalaryStages ?? [],
+  };
+};
+
+export const refreshSalaryStage = async (userId, session = null) =>
+  migrateSalaryProgressFields(userId, session);

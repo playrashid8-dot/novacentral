@@ -19,11 +19,12 @@ export const LEVEL_RULES = [
   { level: 3, minDeposit: 50, directCount: 18, teamCount: 45, bonus: 50 },
 ];
 
+/** Stage thresholds: each stage uses fresh counts since lastClaimedAt only (see salaryService). */
 export const SALARY_RULES = [
-  { stage: 1, directCount: 3, teamCount: 10, amount: 30 },
-  { stage: 2, directCount: 6, teamCount: 20, amount: 80 },
-  { stage: 3, directCount: 12, teamCount: 35, amount: 250 },
-  { stage: 4, directCount: 18, teamCount: 45, amount: 500 },
+  { stage: 1, directCount: 5, teamCount: 15, amount: 30 },
+  { stage: 2, directCount: 10, teamCount: 35, amount: 80 },
+  { stage: 3, directCount: 25, teamCount: 100, amount: 250 },
+  { stage: 4, directCount: 45, teamCount: 150, amount: 500 },
 ];
 
 export const REFERRAL_RATES = [

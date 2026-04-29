@@ -26,6 +26,14 @@ type TeamMemberRow = {
     balance: number;
 };
 
+function isAfterClaim(joinedIso: string | undefined, claimedIso: string | null | undefined): boolean {
+  if (!claimedIso || !joinedIso) return false;
+  const j = new Date(joinedIso).getTime();
+  const c = new Date(claimedIso).getTime();
+  if (Number.isNaN(j) || Number.isNaN(c)) return false;
+  return j > c;
+}
+
 export default function TeamPage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -36,6 +44,7 @@ export default function TeamPage() {
   const [members, setMembers] = useState<TeamMemberRow[]>([]);
   const [membersReady, setMembersReady] = useState(false);
   const [loadingMembers, setLoadingMembers] = useState(true);
+  const [lastSalaryClaimAt, setLastSalaryClaimAt] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -53,9 +62,10 @@ export default function TeamPage() {
       setUser(data);
       if (!silent) setLoading(false);
 
-      const [res, teamRes] = await Promise.all([
+      const [res, teamRes, salRes] = await Promise.all([
         API.get("/user/referral-stats").catch(() => null),
         API.get("/user/team-members").catch(() => null),
+        API.get("/user/salary-progress").catch(() => null),
       ]);
       if (res?.data) {
         const response = normalize(res.data);
@@ -73,6 +83,13 @@ export default function TeamPage() {
         setMembers(Array.isArray(raw) ? (raw as TeamMemberRow[]) : []);
       } else {
         setMembers([]);
+      }
+      if (salRes?.data && normalize(salRes.data).success) {
+        const sal = normalize(salRes.data).data as { lastClaimedAt?: string | null } | undefined;
+        const at = sal?.lastClaimedAt;
+        setLastSalaryClaimAt(at != null && String(at).trim() ? String(at) : null);
+      } else {
+        setLastSalaryClaimAt(null);
       }
       setLastUpdatedAt(Date.now());
     } catch (err: any) {
@@ -121,6 +138,7 @@ export default function TeamPage() {
           membersReady={membersReady}
           loadingMembers={loadingMembers}
           lastUpdatedAt={lastUpdatedAt}
+          lastSalaryClaimAt={lastSalaryClaimAt}
           toast={toast}
         />
       </PageWrapper>
@@ -137,6 +155,7 @@ function TeamContent({
   membersReady,
   loadingMembers,
   lastUpdatedAt,
+  lastSalaryClaimAt,
   toast,
 }: {
   directCount: number;
@@ -147,6 +166,7 @@ function TeamContent({
   membersReady: boolean;
   loadingMembers: boolean;
   lastUpdatedAt: number | null;
+  lastSalaryClaimAt: string | null;
   toast: string;
 }) {
   const [search, setSearch] = useState("");
@@ -240,6 +260,7 @@ function TeamContent({
           totalBalance={totalBalance}
           search={search}
           setSearch={setSearch}
+          lastSalaryClaimAt={lastSalaryClaimAt}
         />
       </motion.section>
     </div>
@@ -279,6 +300,7 @@ function MembersMessage({
   totalBalance,
   search,
   setSearch,
+  lastSalaryClaimAt,
 }: {
   teamCount: number;
   referralStatsReady: boolean;
@@ -289,6 +311,7 @@ function MembersMessage({
   totalBalance: number;
   search: string;
   setSearch: (v: string) => void;
+  lastSalaryClaimAt: string | null;
 }) {
   if (loadingMembers) {
     return (
@@ -338,7 +361,14 @@ function MembersMessage({
                 className="flex justify-between rounded-xl bg-white/5 p-3 ring-1 ring-white/[0.06]"
               >
                 <div className="min-w-0 pr-2">
-                  <p className="truncate text-white">{userRow.username}</p>
+                  <p className="flex flex-wrap items-center gap-x-2 gap-y-1 truncate text-white">
+                    <span className="truncate">{userRow.username}</span>
+                    {isAfterClaim(userRow.joinedAt, lastSalaryClaimAt) ? (
+                      <span className="shrink-0 text-green-400 text-xs font-semibold uppercase tracking-wide">
+                        NEW
+                      </span>
+                    ) : null}
+                  </p>
                   <p className="text-xs text-gray-400">
                     {userRow.joinedAt ? new Date(userRow.joinedAt).toLocaleDateString() : "—"}
                   </p>

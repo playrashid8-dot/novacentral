@@ -7,6 +7,14 @@ export const fetchHybridSummary = async () => {
   return data && typeof data === "object" && Object.keys(data).length ? data : null;
 };
 
+/** Fresh direct/team counts for stage-based salary milestones (since last salary claim). */
+export const fetchSalaryProgress = async () => {
+  const res = await API.get("/user/salary-progress");
+  const response = normalize(res.data);
+  const data = response.data;
+  return data && typeof data === "object" && Object.keys(data).length ? data : null;
+};
+
 export const claimHybridRoi = async () => {
   const res = await API.post("/roi/claim");
   const response = normalize(res.data);

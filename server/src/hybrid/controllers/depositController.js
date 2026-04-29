@@ -2,7 +2,7 @@ import User from "../../models/User.js";
 import { getUserHybridDeposits } from "../services/depositService.js";
 import { getUserStakes } from "../services/stakingService.js";
 import { getCurrentRoiRate, getRoiPrincipalBase } from "../services/roiService.js";
-import { getSalaryUiMeta, refreshSalaryStage } from "../services/salaryService.js";
+import { getSalaryUiMeta } from "../services/salaryService.js";
 import { sendError, sendSuccess } from "../utils/response.js";
 import {
   LEVEL_RULES,
@@ -14,14 +14,13 @@ import { ONE_DAY_MS, ONE_HOUR_MS, WITHDRAW_DELAY_MS } from "../utils/time.js";
 
 export const getHybridDepositDashboard = async (req, res) => {
   try {
-    const refreshedUser = await refreshSalaryStage(req.user._id);
-
-    const [user, deposits, stakes] = await Promise.all([
+    const [user, deposits, stakes, salaryUi] = await Promise.all([
       User.findById(req.user._id).select(
-        "walletAddress depositBalance rewardBalance referralEarnings level pendingWithdraw salaryStage salaryDirectCount salaryTeamCount lastDailyClaim directCount teamCount claimedSalaryStages totalEarnings"
+        "walletAddress depositBalance rewardBalance referralEarnings level pendingWithdraw salaryStage salaryDirectCount salaryTeamCount lastDailyClaim directCount teamCount claimedSalaryStages totalEarnings salaryProgress"
       ),
       getUserHybridDeposits(req.user._id),
       getUserStakes(req.user._id),
+      getSalaryUiMeta(req.user._id),
     ]);
 
     if (!user) {
@@ -41,7 +40,6 @@ export const getHybridDepositDashboard = async (req, res) => {
         ? new Date(lastClaimMs + ONE_DAY_MS).toISOString()
         : null;
     const roiPrincipalBase = await getRoiPrincipalBase(req.user._id);
-    const salaryUi = getSalaryUiMeta(user);
 
     return sendSuccess(res, "Hybrid deposit data fetched successfully", {
       walletAddress: (user.walletAddress || "").toLowerCase(),
@@ -54,7 +52,7 @@ export const getHybridDepositDashboard = async (req, res) => {
       withdrawLockHours: Math.round(WITHDRAW_DELAY_MS / ONE_HOUR_MS),
       level: Number(user.level || 0),
       roiRate: getCurrentRoiRate(user.level),
-      salaryStage: Number(refreshedUser?.salaryStage ?? user.salaryStage ?? 0),
+      salaryStage: Number(user.salaryStage ?? 0),
       salaryDirectCount: Number(user.salaryDirectCount || 0),
       salaryTeamCount: Number(user.salaryTeamCount || 0),
       salaryRules: SALARY_RULES,

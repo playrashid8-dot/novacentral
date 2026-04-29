@@ -3,7 +3,6 @@ import HybridLedger from "../models/HybridLedger.js";
 import { REFERRAL_RATES } from "../utils/constants.js";
 import { addHybridLedgerEntries } from "./ledgerService.js";
 import { updateUserLevel } from "./levelService.js";
-import { refreshSalaryStage } from "./salaryService.js";
 
 const getParentId = (user) => user?.referrer || user?.referredBy || null;
 
@@ -21,9 +20,6 @@ export const distributeHybridReferralRewards = async (
     return [];
   }
 
-  const isFirstQualifiedDeposit = options.isFirstQualifiedDeposit === true;
-  const depositTxHash = String(options.depositTxHash || "").trim().toLowerCase();
-
   if (depositTxHash) {
     const existingReward = await HybridLedger.findOne({
       source: "referral_bonus",
@@ -35,7 +31,6 @@ export const distributeHybridReferralRewards = async (
   }
 
   const appliedRewards = [];
-  const salaryTouchedIds = new Set();
   const levelTouchedIds = new Set();
 
   let currentParentId = getParentId(sourceUser);
@@ -79,27 +74,6 @@ export const distributeHybridReferralRewards = async (
         levelTouchedIds.add(String(parent._id));
       }
     }
-
-    if (isFirstQualifiedDeposit) {
-      const counterUpdate =
-        depth === 1
-          ? { salaryDirectCount: 1, salaryTeamCount: 1 }
-          : { salaryTeamCount: 1 };
-
-      await User.findByIdAndUpdate(
-        parent._id,
-        {
-          $inc: counterUpdate,
-        },
-        {
-          session,
-        }
-      );
-
-      salaryTouchedIds.add(String(parent._id));
-      levelTouchedIds.add(String(parent._id));
-    }
-
     currentParentId = getParentId(parent);
     depth += 1;
   }
@@ -120,10 +94,6 @@ export const distributeHybridReferralRewards = async (
       })),
       session
     );
-  }
-
-  for (const touchedId of salaryTouchedIds) {
-    await refreshSalaryStage(touchedId, session);
   }
 
   for (const touchedId of levelTouchedIds) {

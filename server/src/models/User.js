@@ -181,6 +181,18 @@ const userSchema = new mongoose.Schema(
       default: [],
     },
 
+    salaryProgress: {
+      lastClaimedStage: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      lastClaimedAt: {
+        type: Date,
+        default: null,
+      },
+    },
+
     levelBonusStage: {
       type: Number,
       default: 0,
