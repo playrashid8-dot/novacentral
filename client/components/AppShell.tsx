@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import AppNavbar from "./AppNavbar";
 import AppSidebar from "./AppSidebar";
@@ -7,7 +8,7 @@ import BottomNav from "./BottomNav";
 
 const NO_CHROME = new Set(["/", "/login", "/signup", "/admin"]);
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const hideChrome = pathname ? NO_CHROME.has(pathname) : false;
 

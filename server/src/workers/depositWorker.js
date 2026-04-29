@@ -70,7 +70,7 @@ setInterval(() => {
 const worker = new Worker(
   "depositQueue",
   async (job) => {
-    console.log("⚙️ Worker processing:", job.id);
+    console.log("⚙️ Processing job", job.id);
     const { log } = job.data;
     await handleDeposit(log);
   },

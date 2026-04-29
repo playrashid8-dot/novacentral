@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { checkAdminSession, isAuth } from "../lib/auth";
 import { motion } from "framer-motion";
@@ -9,7 +9,7 @@ export default function ProtectedRoute({
   children,
   adminOnly = false,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   adminOnly?: boolean;
 }) {
   const router = useRouter();

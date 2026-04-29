@@ -159,6 +159,7 @@ async function executeDepositScan(
 ) {
   const quiet = scanOptions.quiet === true;
   const skipProbe = scanOptions.skipProbe === true;
+  const isManualRescan = scanOptions.isManualRescan === true;
   getProvider();
   const usdtContractNorm = String(process.env.HYBRID_USDT_CONTRACT || "")
     .trim()
@@ -367,7 +368,8 @@ export const scanHybridDeposits = async (
   const backupSpanRaw = opts.backupBlocks ?? opts.blocks;
   let resolvedFrom = fromBlockOverride;
   let resolvedTo = toBlockOverride;
-  let scanOpts = {};
+  const { backupBlocks: _bb, blocks: _b, ...restScanOpts } = opts;
+  let scanOpts = { ...restScanOpts };
 
   if (
     resolvedFrom == null &&
@@ -380,7 +382,7 @@ export const scanHybridDeposits = async (
     const span = Math.max(1, Number(backupSpanRaw) || 50);
     resolvedFrom = Math.max(0, latestBlock - (span - 1));
     resolvedTo = latestBlock;
-    scanOpts = { quiet: true, skipProbe: true };
+    scanOpts = { ...scanOpts, quiet: true, skipProbe: true };
   }
 
   if (isScanning) {
@@ -403,5 +405,5 @@ export const scanHybridDeposits = async (
 
 export const rescanDeposits = async (fromBlock, toBlock) => {
   console.log("Manual rescan started");
-  return await scanHybridDeposits(fromBlock, toBlock);
+  return await scanHybridDeposits(fromBlock, toBlock, { isManualRescan: true });
 };

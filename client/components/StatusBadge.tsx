@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 /** Maps arbitrary API statuses to badge tier — UI only. */
 export function resolveStatusTier(raw: string): "success" | "warning" | "danger" | "muted" {
   const s = String(raw || "").toLowerCase();
@@ -33,7 +35,7 @@ export default function StatusBadge({
   children,
   tier,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   tier?: "success" | "warning" | "danger" | "muted";
 }) {
   const styles = {
