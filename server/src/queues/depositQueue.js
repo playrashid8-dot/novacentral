@@ -3,13 +3,14 @@ import { redis } from "../config/redis.js";
 
 /** Shared BullMQ worker / queue tuning: max jobs started per duration (global per queue in Redis). */
 export const DEPOSIT_QUEUE_LIMITER = {
-  max: 50,
+  max: 100,
   duration: 1000,
 };
 
 export const depositQueue = redis
   ? new Queue("depositQueue", {
       connection: redis,
+      limiter: DEPOSIT_QUEUE_LIMITER,
     })
   : null;
 

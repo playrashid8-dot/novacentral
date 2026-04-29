@@ -1,4 +1,5 @@
 import express from "express";
+import mongoose from "mongoose";
 import auth from "../middleware/auth.js";
 import User from "../models/User.js";
 import HybridDeposit from "../hybrid/models/HybridDeposit.js";
@@ -13,38 +14,41 @@ const router = express.Router();
 router.get("/", auth, async (req, res) => {
   try {
     const userId = req.user._id;
+    const oid = userId instanceof mongoose.Types.ObjectId ? userId : new mongoose.Types.ObjectId(userId);
 
-    // 🔍 USER
-    const user = await User.findById(userId);
+    const user = await User.findById(userId)
+      .select(
+        "depositBalance rewardBalance pendingWithdraw todayProfit level referralEarnings teamCount",
+      )
+      .lean();
 
     if (!user) {
       return res.status(404).json({ success: false, msg: "User not found", data: null });
     }
 
-    // 💰 HYBRID DEPOSITS
-    const deposits = await HybridDeposit.find({
-      userId,
-      status: { $in: ["credited", "swept"] },
-    });
+    const [depAgg] = await HybridDeposit.aggregate([
+      {
+        $match: {
+          userId: oid,
+          status: { $in: ["credited", "swept"] },
+        },
+      },
+      { $group: { _id: null, total: { $sum: "$amount" } } },
+    ]);
+    const totalDeposited = Number(depAgg?.total || 0);
 
-    let totalDeposited = 0;
-    deposits.forEach((d) => {
-      totalDeposited += d.amount;
-    });
+    const [wdAgg] = await HybridWithdrawal.aggregate([
+      {
+        $match: {
+          userId: oid,
+          status: { $in: ["paid", "claimed"] },
+        },
+      },
+      { $group: { _id: null, total: { $sum: "$grossAmount" } } },
+    ]);
+    const totalWithdrawn = Number(wdAgg?.total || 0);
 
-    // 💸 HYBRID WITHDRAWALS
-    const withdrawals = await HybridWithdrawal.find({
-      userId,
-      status: { $in: ["paid", "claimed"] },
-    });
-
-    let totalWithdrawn = 0;
-    withdrawals.forEach((w) => {
-      totalWithdrawn += Number(w.grossAmount || 0);
-    });
-
-    // 👥 REFERRALS
-    const directUsers = await User.find({ referredBy: userId });
+    const directCount = await User.countDocuments({ referredBy: oid });
 
     const depositBalance = Number(user.depositBalance || 0);
     const rewardBalance = Number(user.rewardBalance || 0);
@@ -64,7 +68,7 @@ router.get("/", auth, async (req, res) => {
       totalWithdrawn,
 
       activePlans: 0,
-      directCount: directUsers.length,
+      directCount,
       teamCount: Number(user.teamCount || 0),
 
       referralIncome: Number(user.referralEarnings || 0),

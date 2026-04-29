@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
  * Concurrent GET /api/health against nginx or a single Node upstream.
+ * Smoke load test (scale CONCURRENT e.g. 1000 for soak).
  * Usage: BASE_URL=http://127.0.0.1:80 CONCURRENT=120 node scripts/loadTestHealth.mjs
  */
 const baseUrl = (process.env.BASE_URL || "http://127.0.0.1:5000").replace(/\/$/, "");

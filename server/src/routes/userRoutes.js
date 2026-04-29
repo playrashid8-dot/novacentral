@@ -22,9 +22,9 @@ const router = express.Router();
 
 /** Same shape as GET /referral-stats `data` (shared with /dashboard-summary). */
 async function loadReferralStatsPayload(userId) {
-  const user = await User.findById(userId).select(
-    "referralCode referralEarnings directCount teamCount teamVolume"
-  );
+  const user = await User.findById(userId)
+    .select("referralCode referralEarnings directCount teamCount teamVolume")
+    .lean();
 
   if (!user) return null;
 
@@ -39,7 +39,7 @@ async function loadReferralStatsPayload(userId) {
 
 /** Same shape as GET /team-members `data` (shared with /dashboard-summary). */
 async function loadTeamMembersPayload(userId, queryPage, queryLimit) {
-  const viewer = await User.findById(userId).select("isBlocked");
+  const viewer = await User.findById(userId).select("isBlocked").lean();
   if (!viewer) {
     return { _error: "not_found" };
   }
@@ -267,9 +267,11 @@ router.get("/dashboard", auth, async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const user = await User.findById(userId).select(
-      "depositBalance rewardBalance pendingWithdraw referralEarnings todayProfit totalEarnings level directCount teamCount"
-    );
+    const user = await User.findById(userId)
+      .select(
+        "depositBalance rewardBalance pendingWithdraw referralEarnings todayProfit totalEarnings level directCount teamCount isBlocked",
+      )
+      .lean();
 
     if (!user) {
       return res.status(404).json({ success: false, msg: "User not found", data: null });
@@ -324,6 +326,34 @@ router.get("/dashboard", auth, async (req, res) => {
 router.get("/team-members", auth, async (req, res) => {
   try {
     const userId = req.user._id;
+    const page = Math.max(1, Number.parseInt(String(req.query.page || "1"), 10) || 1);
+    const limit = Math.max(1, Math.min(Number(req.query.limit) || 50, 50));
+    const cacheKey = `team-members:${String(userId)}:${page}:${limit}`;
+
+    if (redis) {
+      try {
+        const raw = await redis.get(cacheKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          const { members, page: pg, limit: lm, total, totalPages, hasMore } = parsed;
+          return res.json({
+            success: true,
+            msg: "Team members loaded",
+            data: {
+              members,
+              page: pg,
+              limit: lm,
+              total,
+              totalPages,
+              hasMore,
+            },
+          });
+        }
+      } catch {
+        /* fall through */
+      }
+    }
+
     const payload = await loadTeamMembersPayload(userId, req.query.page, req.query.limit);
     if (payload?._error === "not_found") {
       return res.status(404).json({ success: false, msg: "User not found", data: null });
@@ -331,19 +361,29 @@ router.get("/team-members", auth, async (req, res) => {
     if (payload?._error === "blocked") {
       return res.status(403).json({ success: false, msg: "Account blocked", data: null });
     }
-    const { members, page, limit, total, totalPages, hasMore } = payload;
+    const { members, page: pageNum, limit: limitNum, total, totalPages, hasMore } = payload;
+
+    const body = {
+      members,
+      page: pageNum,
+      limit: limitNum,
+      total,
+      totalPages,
+      hasMore,
+    };
+
+    if (redis) {
+      try {
+        await redis.set(cacheKey, JSON.stringify(body), "EX", 10);
+      } catch {
+        /* ignore */
+      }
+    }
 
     return res.json({
       success: true,
       msg: "Team members loaded",
-      data: {
-        members,
-        page,
-        limit,
-        total,
-        totalPages,
-        hasMore,
-      },
+      data: body,
     });
   } catch (err) {
     console.error("Team members error:", err);
@@ -356,10 +396,38 @@ router.get("/team-members", auth, async (req, res) => {
 ============================== */
 router.get("/referral-stats", auth, async (req, res) => {
   try {
+    const userId = String(req.user._id);
+    const cacheKey = `referral-stats:${userId}`;
+
+    if (redis) {
+      try {
+        const raw = await redis.get(cacheKey);
+        if (raw) {
+          const stats = JSON.parse(raw);
+          return res.json({
+            success: true,
+            msg: "Stats fetched",
+            data: stats,
+            stats,
+          });
+        }
+      } catch {
+        /* fall through */
+      }
+    }
+
     const stats = await loadReferralStatsPayload(req.user._id);
 
     if (!stats) {
       return res.status(404).json({ success: false, msg: "User not found", data: null });
+    }
+
+    if (redis) {
+      try {
+        await redis.set(cacheKey, JSON.stringify(stats), "EX", 10);
+      } catch {
+        /* ignore */
+      }
     }
 
     res.json({
@@ -439,7 +507,7 @@ router.get("/dashboard-summary", auth, async (req, res) => {
 
     if (redis) {
       try {
-        await redis.set(cacheKey, JSON.stringify(data), "EX", 15);
+        await redis.set(cacheKey, JSON.stringify(data), "EX", 10);
       } catch {}
     }
 

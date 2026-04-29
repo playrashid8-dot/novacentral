@@ -1,4 +1,11 @@
 import { JsonRpcProvider } from "ethers";
+import {
+  getRPC,
+  getRpcUrls as getRpcUrlsFromConfig,
+  getRPCIndex,
+  setRPCIndex,
+  switchRPC as rotateRPC,
+} from "../../config/rpc.js";
 
 /** WebSocket — HYBRID_BSC_WS_URL or BSC_WS_URL — see hybrid/utils/wsProvider.js */
 export {
@@ -8,22 +15,9 @@ export {
   destroyHybridWsProvider,
 } from "./wsProvider.js";
 
-/**
- * RPC priority (env only): HYBRID_BSC_RPC_URL or BSC_RPC_URL → FALLBACK → BACKUP.
- * Lazily reads process.env on each access so values load after dotenv.
- */
 function computeUniqueRpcUrls() {
-  const raw = [
-    String(process.env.HYBRID_BSC_RPC_URL || process.env.BSC_RPC_URL || "").trim(),
-    String(process.env.HYBRID_BSC_RPC_FALLBACK || "").trim(),
-    String(process.env.HYBRID_BSC_RPC_BACKUP || "").trim(),
-  ]
-    .map((url) => String(url || "").trim())
-    .filter(Boolean);
-  return [...new Set(raw)];
+  return getRpcUrlsFromConfig();
 }
-
-let currentIndex = 0;
 
 /** Switch only after several failures — avoids rotating RPC on every chunk/transient -32005 */
 const SWITCH_AFTER_CONSECUTIVE_FAILURES = 3;
@@ -38,11 +32,7 @@ let cachedJsonRpcUrl = null;
 
 export const getRpcUrls = () => [...computeUniqueRpcUrls()];
 
-export const getCurrentRpcUrl = () => {
-  const urls = computeUniqueRpcUrls();
-  if (urls.length === 0) return "";
-  return urls[currentIndex % urls.length] || "";
-};
+export const getCurrentRpcUrl = () => getRPC();
 
 export const getRpcFallbackUsed = () => rpcFallbackUsedSession;
 
@@ -51,10 +41,7 @@ export const getProvider = () => {
   if (urls.length === 0) {
     throw new Error("HYBRID_BSC_RPC_URL or BSC_RPC_URL is required for BSC provider access");
   }
-  if (currentIndex >= urls.length) {
-    currentIndex = 0;
-  }
-  const url = urls[currentIndex % urls.length];
+  const url = getRPC();
   if (!cachedJsonRpcProvider || cachedJsonRpcUrl !== url) {
     try {
       cachedJsonRpcProvider?.destroy?.();
@@ -72,13 +59,20 @@ const switchRpc = () => {
   if (urls.length === 0) {
     return;
   }
-  const prev = currentIndex;
-  console.log("🔁 Switching RPC...");
-  currentIndex = (currentIndex + 1) % urls.length;
-  console.log("   Using:", urls[currentIndex]);
-  if (prev !== currentIndex && currentIndex !== 0) {
+  const prev = getRPCIndex();
+  if (process.env.NODE_ENV !== "production") {
+    console.log("🔁 Switching RPC...");
+  }
+  rotateRPC();
+  const next = getRPCIndex();
+  if (process.env.NODE_ENV !== "production") {
+    console.log("   Using:", urls[next]);
+  }
+  if (prev !== next && next !== 0) {
     rpcFallbackUsedSession = true;
-    console.log("RPC Fallback Used ⚠️");
+    if (process.env.NODE_ENV !== "production") {
+      console.log("RPC Fallback Used ⚠️");
+    }
   }
   cachedJsonRpcUrl = null;
   try {
@@ -151,7 +145,7 @@ export async function initializeHybridRpc() {
   rpcFallbackUsedSession = false;
 
   for (let i = 0; i < urls.length; i += 1) {
-    currentIndex = i;
+    setRPCIndex(i);
     cachedJsonRpcUrl = null;
     try {
       cachedJsonRpcProvider?.destroy?.();
@@ -176,7 +170,7 @@ export async function initializeHybridRpc() {
   }
 
   console.error("❌ RPC Failed ❌", "All RPC endpoints failed probe (getBlockNumber / getNetwork)");
-  currentIndex = 0;
+  setRPCIndex(0);
   cachedJsonRpcUrl = null;
   try {
     cachedJsonRpcProvider?.destroy?.();

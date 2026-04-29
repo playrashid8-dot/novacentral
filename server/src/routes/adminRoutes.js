@@ -12,6 +12,8 @@ import {
 import { scanHybridDeposits } from "../hybrid/services/depositListener.js";
 import { getProvider } from "../hybrid/utils/provider.js";
 import { getHybridAdminSystemStatus } from "../hybrid/utils/adminSystemStatus.js";
+import { redis } from "../config/redis.js";
+import { depositQueue } from "../queues/depositQueue.js";
 import { writeAdminAudit } from "../utils/adminAudit.js";
 import {
   buildAdminOverview,
@@ -71,6 +73,30 @@ router.get("/system-status", auth, isAdmin, async (req, res) => {
     });
   } catch (err) {
     return sendAdminError(res, err, "ADMIN SYSTEM STATUS ERROR");
+  }
+});
+
+router.get("/system-health", auth, isAdmin, async (req, res) => {
+  try {
+    let queue = null;
+    try {
+      if (depositQueue) {
+        queue = await depositQueue.getJobCounts();
+      }
+    } catch (err) {
+      queue = { error: err?.message || String(err) };
+    }
+    return res.json({
+      success: true,
+      msg: "System health",
+      data: {
+        redis: !!redis,
+        queue,
+        uptime: process.uptime(),
+      },
+    });
+  } catch (err) {
+    return sendAdminError(res, err, "ADMIN SYSTEM HEALTH ERROR");
   }
 });
 

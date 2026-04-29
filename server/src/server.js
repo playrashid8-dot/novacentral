@@ -1,5 +1,7 @@
 import "dotenv/config";
-console.log("ENV CHECK REDIS:", process.env.REDIS_URL ? "FOUND ✅" : "MISSING ❌");
+if (process.env.NODE_ENV !== "production") {
+  console.log("ENV CHECK REDIS:", process.env.REDIS_URL ? "FOUND ✅" : "MISSING ❌");
+}
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -170,8 +172,8 @@ app.use(morgan("dev"));
    🚫 GLOBAL RATE LIMIT (ANTI DDOS)
 ============================== */
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 300,
+  windowMs: 60 * 1000,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => ipKeyGenerator(req.ip),
@@ -197,7 +199,9 @@ const authLimiter = rateLimit({
    🔥 ROUTE LOGGER (DEV)
 ============================== */
 app.use((req, res, next) => {
-  console.log(`➡️ ${req.method} ${req.originalUrl}`);
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`➡️ ${req.method} ${req.originalUrl}`);
+  }
   next();
 });
 

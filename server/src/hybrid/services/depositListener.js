@@ -356,7 +356,9 @@ async function executeDepositScan(
     if (toAddresses.length > 0) {
       const users = await User.find({
         walletAddress: { $in: toAddresses },
-      }).select("_id walletAddress");
+      })
+        .select("_id walletAddress")
+        .lean();
 
       if (!quiet) {
         devLog("👤 Users loaded:", users.length);
@@ -378,6 +380,7 @@ async function executeDepositScan(
         });
       }
 
+      const pendingEnqueue = [];
       for (const log of logs) {
         const toAddress = decodeTopicAddress(log.topics?.[2]).toLowerCase();
         const matchedUser = usersByWallet.get(toAddress);
@@ -386,35 +389,45 @@ async function executeDepositScan(
           continue;
         }
 
-        try {
-          const sLog = toSerializableTransferLog(log);
-          if (!sLog) {
-            console.warn(
-              "⚠️ Scan path: cannot serialize Transfer log for enqueue:",
-              shortTx(log.transactionHash)
-            );
-            continue;
-          }
-          const txHash = String(log.transactionHash || "").trim().toLowerCase();
-          if (!txHash) continue;
-          if (seenTx.has(txHash)) {
-            continue;
-          }
-          seenTx.add(txHash);
-          if (seenTx.size > 5000) {
-            seenTx.clear();
-          }
-          const job = await enqueueDepositJob({
-            log: sLog,
-            blockNumber: sLog.blockNumber,
-          });
-          if (job) {
-            processed += 1;
-          }
-        } catch (err) {
-          console.error("❌ Queue failure:", err?.message || String(err));
-          chunkHadCreditFailure = true;
+        const sLog = toSerializableTransferLog(log);
+        if (!sLog) {
+          console.warn(
+            "⚠️ Scan path: cannot serialize Transfer log for enqueue:",
+            shortTx(log.transactionHash)
+          );
+          continue;
         }
+        const txHash = String(log.transactionHash || "").trim().toLowerCase();
+        if (!txHash) continue;
+        if (seenTx.has(txHash)) {
+          continue;
+        }
+        seenTx.add(txHash);
+        if (seenTx.size > 20000) {
+          seenTx.clear();
+        }
+        pendingEnqueue.push({ sLog });
+      }
+
+      const ENQUEUE_BATCH = 50;
+      for (let i = 0; i < pendingEnqueue.length; i += ENQUEUE_BATCH) {
+        const slice = pendingEnqueue.slice(i, i + ENQUEUE_BATCH);
+        const outcomes = await Promise.all(
+          slice.map(async ({ sLog }) => {
+            try {
+              const job = await enqueueDepositJob({
+                log: sLog,
+                blockNumber: sLog.blockNumber,
+              });
+              return job ? 1 : 0;
+            } catch (err) {
+              console.error("❌ Queue failure:", err?.message || String(err));
+              chunkHadCreditFailure = true;
+              return 0;
+            }
+          }),
+        );
+        processed += outcomes.reduce((acc, n) => acc + n, 0);
       }
     } else if (!quiet) {
       devLog("Deposit listener found no recipient addresses");
