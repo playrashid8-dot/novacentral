@@ -7,7 +7,7 @@ export const depositQueue = new Queue("depositQueue", {
 
 /** Shared BullMQ options for deposit jobs (retries / backoff / idempotent jobId = txHash). */
 export const DEPOSIT_JOB_OPTIONS = {
-  attempts: 5,
+  attempts: 3,
   backoff: {
     type: "exponential",
     delay: 5000,

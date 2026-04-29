@@ -93,9 +93,8 @@ const logHybridBootstrapStatus = async () => {
     Boolean(String(process.env.HYBRID_USDT_CONTRACT || "").trim());
 
   const wsActive = isHybridWebSocketRealtimeActive();
-  const depositParsingOk =
-    Boolean(String(process.env.HYBRID_USDT_CONTRACT || "").trim()) && creditOk;
   const workerProcessingOk = queueOk;
+
   const systemStable =
     rpcOk &&
     realtimeOk &&
@@ -116,18 +115,20 @@ const logHybridBootstrapStatus = async () => {
   console.log(`Gas Transfer: ${gasOk ? "✅" : "❌"}`);
   console.log(`Swap Working: ${sweepReady ? "✅" : "❌"}`);
 
+  const listenerLabel = realtimeOk ? "✅" : "❌";
+
+  console.log("");
   console.log("🔥 FINAL STATUS:");
   console.log(`RPC Connected: ${rpcOk ? "✅" : "❌"}`);
-  console.log(`Realtime Listener: ${realtimeOk ? "✅" : "❌"}`);
-  console.log(`WebSocket Active: ${wsActive ? "✅" : "❌"}`);
-  console.log(`Duplicate Safe: ${duplicateProtectionOk ? "✅" : "❌"}`);
-  console.log(`User Map: ${userMap.size}`);
-  console.log(`Deposit Parsing: ${depositParsingOk ? "✅" : "❌"}`);
+  console.log(`Listener Active: ${listenerLabel}`);
+  console.log(`WebSocket Active: ${wsActive ? "✅" : wsConfigured ? "❌" : "❌ (not configured)"}`);
+  console.log(`Users Loaded: ${userMap.size}`);
+  console.log(`Deposit Detection: ${depositDetectOk ? "✅" : "❌"}`);
   console.log(`Queue Working: ${queueOk ? "✅" : "❌"}`);
   console.log(`Worker Processing: ${workerProcessingOk ? "✅" : "❌"}`);
-  console.log(`Deposit Detection: ${depositDetectOk ? "✅" : "❌"}`);
-  console.log(`System Stable: ${systemStable ? "✅" : "❌"}`);
+  console.log(`Duplicate Safe: ${duplicateProtectionOk ? "✅" : "❌"}`);
   console.log(`System Ready: ${systemStable ? "✅" : "❌"}`);
+  console.log("");
 };
 
 const runSweepEngine = async () => {
@@ -229,7 +230,7 @@ export const startDepositListener = () => {
 
   if (!healthTimer) {
     healthTimer = setInterval(() => {
-      console.log("💚 System alive:", process.pid);
+      console.log("💚 Hybrid system alive");
     }, 60000);
   }
 

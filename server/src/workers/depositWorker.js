@@ -19,14 +19,13 @@ async function handleDeposit(serializedLog) {
 
   if (!normalized) {
     console.error("❌ Worker error: missing transaction hash on job");
-    return { outcome: "skip", reason: "missing_tx" };
+    return { outcome: "skip", reason: "missing_tx", processedDelta: 0 };
   }
 
-  console.log(`⚙️ Processing: ${normalized}`);
+  console.log(`⚙️ Processing job: ${normalized}`);
 
   if (await HybridDeposit.exists({ txHash: normalized })) {
-    console.log("⚠️ Duplicate skipped:", normalized);
-    return { outcome: "duplicate", txHash: normalized };
+    return { outcome: "duplicate", txHash: normalized, processedDelta: 0 };
   }
 
   const log = {
@@ -47,18 +46,17 @@ async function handleDeposit(serializedLog) {
   const expectedContract = String(process.env.HYBRID_USDT_CONTRACT || "").trim().toLowerCase();
   const logAddr = log.address != null ? String(log.address).trim().toLowerCase() : "";
   if (expectedContract && logAddr && logAddr !== expectedContract) {
-    console.error("❌ Safety check: HYBRID_USDT_CONTRACT mismatch", {
-      txHash: normalized,
-      logAddress: logAddr,
+    console.warn("❌ Invalid contract event ignored", {
       expected: expectedContract,
+      received: logAddr,
     });
-    return { outcome: "skip", reason: "contract", txHash: normalized };
+    return { outcome: "skip", reason: "contract", txHash: normalized, processedDelta: 0 };
   }
 
   const toAddr = decodeTopicAddress(log.topics?.[2]).toLowerCase();
   if (!toAddr || toAddr === "0x") {
     console.error("❌ Safety check: invalid recipient wallet on log", normalized);
-    return { outcome: "skip", reason: "wallet", txHash: normalized };
+    return { outcome: "skip", reason: "wallet", txHash: normalized, processedDelta: 0 };
   }
 
   let parsedAmount;
@@ -76,7 +74,7 @@ async function handleDeposit(serializedLog) {
 
   if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
     console.error("❌ Safety check: amount must be > 0", { txHash: normalized, parsedAmount });
-    return { outcome: "skip", reason: "amount", txHash: normalized };
+    return { outcome: "skip", reason: "amount", txHash: normalized, processedDelta: 0 };
   }
 
   console.log(`💰 Amount parsed: ${parsedAmount} USDT`);
@@ -89,7 +87,7 @@ async function handleDeposit(serializedLog) {
 
   if (!user) {
     console.warn("❌ Safety check: no user for wallet", { txHash: normalized, wallet: toAddr });
-    return { outcome: "skip", reason: "no_user", txHash: normalized };
+    return { outcome: "skip", reason: "no_user", txHash: normalized, processedDelta: 0 };
   }
 
   const usersByWallet = new Map([
@@ -103,17 +101,18 @@ async function handleDeposit(serializedLog) {
     throw new Error("Hybrid deposit credit failed");
   }
 
-  if (r.processedDelta > 0) {
-    return { outcome: "credited", txHash: normalized };
+  const processedDelta = Number(r.processedDelta) || 0;
+  if (processedDelta > 0) {
+    return { outcome: "credited", txHash: normalized, processedDelta };
   }
 
-  return { outcome: "skip", reason: "no_credit", txHash: normalized };
+  return { outcome: "skip", reason: "no_credit", txHash: normalized, processedDelta: 0 };
 }
 
 await connectDB();
 
 setInterval(() => {
-  console.log("💚 System alive:", process.pid);
+  console.log("💚 Hybrid system alive");
 }, 60000);
 
 const worker = new Worker(
@@ -130,9 +129,12 @@ const worker = new Worker(
 
 worker.on("completed", (job, result) => {
   const tx = String(job?.data?.log?.transactionHash || "").trim();
-  const outcome = result?.outcome;
-  if (outcome === "credited" && tx) {
-    console.log(`✅ Deposit processed: ${tx}`);
+  if (!tx) return;
+  const processedDelta = Number(result?.processedDelta);
+  if (Number.isFinite(processedDelta) && processedDelta > 0) {
+    console.log("✅ Deposit processed:", tx);
+  } else {
+    console.log("⚠️ Skipped (duplicate or invalid):", tx);
   }
 });
 

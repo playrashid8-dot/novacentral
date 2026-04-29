@@ -66,8 +66,11 @@ export { addUserToHybridDepositRealtimeMap } from "../services/userMap.js";
 
 async function dispatchRealtimeDeposit(log, provider) {
   if (!userMap || userMap.size === 0) {
-    console.log("🚫 CRITICAL: User map empty — skipping all processing");
-    return;
+    console.log("⚠️ User map empty — reloading...");
+    await loadUsersIntoRealtimeMap();
+    if (userMap.size === 0) {
+      return;
+    }
   }
 
   if (!log?.transactionHash) {
@@ -100,9 +103,9 @@ async function dispatchRealtimeDeposit(log, provider) {
   const expectedContract = String(process.env.HYBRID_USDT_CONTRACT || "").trim().toLowerCase();
   const logAddr = log?.address != null ? String(log.address).trim().toLowerCase() : "";
   if (expectedContract && logAddr && logAddr !== expectedContract) {
-    console.warn("❌ Safety check: HYBRID_USDT_CONTRACT mismatch on log", {
-      logAddress: logAddr,
+    console.warn("❌ Invalid contract event ignored", {
       expected: expectedContract,
+      received: logAddr,
     });
     processedTx.delete(log.transactionHash);
     return;
@@ -115,9 +118,15 @@ async function dispatchRealtimeDeposit(log, provider) {
       data: log.data,
     });
     const amountNum = Number(formatUnits(parsed.args.value, HYBRID_TOKEN.decimals));
-    if (Number.isFinite(amountNum)) {
-      console.log(`💰 Amount parsed: ${amountNum} USDT`);
+    if (
+      amountNum == null ||
+      !Number.isFinite(Number(amountNum)) ||
+      Number(amountNum) <= 0
+    ) {
+      processedTx.delete(log.transactionHash);
+      return;
     }
+    console.log(`💰 Amount parsed: ${amountNum} USDT`);
   } catch (parseErr) {
     console.error("❌ Deposit parsing error:", parseErr?.message || String(parseErr));
     processedTx.delete(log.transactionHash);
@@ -241,7 +250,7 @@ export async function startRealtimeListener() {
     if (wsUrl) {
       await initRealtimeSubscription();
     } else {
-      console.log("⚠️ Using RPC fallback (HYBRID_BSC_WS_URL / BSC_WS_URL not set)");
+      console.log("⚠️ Using RPC fallback (WebSocket not configured)");
       initRpcRealtimeSubscription();
     }
   } catch (err) {

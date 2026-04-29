@@ -68,7 +68,7 @@ export function startUserMapPeriodicRefresh() {
   setInterval(async () => {
     try {
       if (userMap.size === 0) {
-        console.warn("⚠️ User map empty — forcing DB reload");
+        console.log("⚠️ User map empty — reloading...");
       }
       await refillUserMapFromDb();
       lastSync = Date.now();
