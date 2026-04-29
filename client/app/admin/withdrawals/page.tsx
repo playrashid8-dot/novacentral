@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import AdminLayout, { adminFetch, formatCurrency, getUserLabel } from "../../../components/admin/AdminLayout";
 import Loader from "../../../components/admin/Loader";
 import Table from "../../../components/admin/Table";
@@ -36,25 +36,38 @@ export default function AdminWithdrawalsPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const loadWithdrawals = async () => {
-    try {
-      setLoading(true);
-      setError("");
-      const path = listMode === "queue" ? "/admin/withdrawals/pending" : "/admin/withdrawals";
-      const payload = await adminFetch(path);
-      setWithdrawals(payload?.data?.withdrawals || payload?.withdrawals || []);
-    } catch (err: any) {
-      const msg = err?.message || "Failed to load withdrawals";
-      setError(msg);
-      showSafeToast(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const loadWithdrawals = useCallback(
+    async (silent = false) => {
+      try {
+        if (!silent) {
+          setLoading(true);
+          setError("");
+        }
+        const path = listMode === "queue" ? "/admin/withdrawals/pending" : "/admin/withdrawals";
+        const payload = await adminFetch(path);
+        setWithdrawals(payload?.data?.withdrawals || payload?.withdrawals || []);
+        if (silent) setError("");
+      } catch (err: any) {
+        const msg = err?.message || "Failed to load withdrawals";
+        if (!silent) {
+          setError(msg);
+          showSafeToast(msg);
+        }
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [listMode]
+  );
 
   useEffect(() => {
-    loadWithdrawals();
-  }, [listMode]);
+    void loadWithdrawals(false);
+  }, [loadWithdrawals]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => void loadWithdrawals(true), 16000);
+    return () => clearInterval(id);
+  }, [loadWithdrawals]);
 
   const safeWithdrawals = useMemo(() => withdrawals.slice(0, ROW_CAP), [withdrawals]);
 

@@ -6,9 +6,11 @@ import { motion } from "framer-motion";
 import QRCode from "react-qr-code";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import Button from "../../components/Button";
+import AppToast from "../../components/AppToast";
+import VipBadge from "../../components/ui/VipBadge";
+import Card from "../../components/ui/Card";
 import { fetchCurrentUser } from "../../lib/session";
 import { fetchHybridSummary } from "../../lib/hybrid";
-import GlassCard from "../../components/GlassCard";
 import SkeletonCard from "../../components/SkeletonCard";
 import StatusBadge from "../../components/StatusBadge";
 import { depositRowStatusClass, maskAddress } from "../../lib/helpers";
@@ -21,11 +23,14 @@ export default function Deposit() {
   const router = useRouter();
 
   const [copied, setCopied] = useState(false);
+  const [toast, setToast] = useState("");
+  const [showFullAddress, setShowFullAddress] = useState(false);
   const [user, setUser]: any = useState(null);
   const [hybrid, setHybrid]: any = useState(null);
   const [walletLoading, setWalletLoading] = useState(true);
 
   const wallet = hybrid?.walletAddress || user?.walletAddress || "";
+  const vipLevel = Number(hybrid?.level ?? 0);
   const minDeposit =
     hybrid?.minDepositAmount != null && Number.isFinite(Number(hybrid.minDepositAmount))
       ? Number(hybrid.minDepositAmount)
@@ -70,21 +75,28 @@ export default function Deposit() {
     if (!wallet) return;
     await navigator.clipboard.writeText(wallet);
     setCopied(true);
+    setToast("Address copied to clipboard");
     setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setToast(""), 2500);
   };
 
   return (
     <ProtectedRoute>
     <div className="relative w-full max-w-full overflow-x-hidden pb-6 text-white">
+      <AppToast message={toast} />
+
       {/* HEADER */}
       <div className="relative z-10 mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.35em] text-indigo-300/80">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.35em] text-emerald-400/85">
             Wallet top-up
           </p>
-          <h1 className="mt-1 bg-gradient-to-r from-white via-indigo-100 to-indigo-300 bg-clip-text text-2xl font-black text-transparent sm:text-3xl">
-            Deposit
-          </h1>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <h1 className="bg-gradient-to-r from-white via-emerald-100 to-blue-300 bg-clip-text text-2xl font-black text-transparent sm:text-3xl">
+              Deposit
+            </h1>
+            <VipBadge level={vipLevel} />
+          </div>
         </div>
 
         <Button variant="ghost" className="w-full sm:w-auto" type="button" onClick={() => router.push("/dashboard")}>
@@ -97,30 +109,30 @@ export default function Deposit() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
-        className="mb-6 rounded-3xl border border-white/[0.08] bg-gradient-to-br from-[#6366F1]/25 via-[#111827] to-[#0B0F19] p-6 text-center shadow-[0_12px_48px_rgba(99,102,241,0.2)] ring-1 ring-white/[0.06]"
+        className="mb-6 rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-500/20 via-[#0f1629] to-blue-600/15 p-6 text-center shadow-glow-emerald ring-1 ring-white/[0.06]"
       >
-        <p className="text-xs font-medium uppercase tracking-[0.22em] text-gray-500">Your balance</p>
+        <p className="text-xs font-medium uppercase tracking-[0.22em] text-emerald-200/80">Your balance</p>
         <h2 className="mt-2 text-4xl font-black tracking-tight text-white tabular-nums">
           ${(Number(hybrid?.depositBalance || 0) + Number(hybrid?.rewardBalance || 0)).toFixed(2)}
         </h2>
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }}>
-        <GlassCard glow="purple">
+        <Card>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-semibold text-white">Send USDT (BEP20)</p>
-            <span className="rounded-full border border-[#6366F1]/30 bg-[#6366F1]/15 px-3 py-1 text-[10px] font-bold text-indigo-200">
+            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/12 px-3 py-1 text-[10px] font-bold text-emerald-100">
               BEP20
             </span>
           </div>
 
           <p className="mb-4 text-xs text-gray-400">
-            Send USDT (BEP20) to your dedicated address. Copy the full address — display below is masked.
+            Scan or copy your dedicated deposit address. Toggle to reveal the full address on screen before copying.
           </p>
 
           {wallet ? (
             <div className="mx-auto mb-5 flex max-w-[220px] justify-center rounded-2xl border border-white/[0.08] bg-white p-3 shadow-inner ring-1 ring-black/20">
-              <QRCode value={wallet} size={168} level="M" fgColor="#111827" bgColor="#ffffff" />
+              <QRCode value={wallet} size={168} level="M" fgColor="#0B0F19" bgColor="#ffffff" />
             </div>
           ) : (
             <div className="mx-auto mb-5">
@@ -134,24 +146,41 @@ export default function Deposit() {
             </div>
           )}
 
-          <div className="rounded-2xl border border-white/[0.08] bg-black/50 p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Masked address</p>
-            <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0 flex items-center gap-2">
+          <div className="rounded-2xl border border-white/[0.08] bg-black/40 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+                {showFullAddress ? "Full address" : "Preview"}
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowFullAddress((v) => !v)}
+                className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-[10px] font-semibold text-gray-300 transition hover:border-emerald-500/30"
+              >
+                {showFullAddress ? "Hide" : "Show full"}
+              </button>
+            </div>
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 flex items-start gap-2">
                 {!wallet && walletLoading && (
-                  <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-[#6366F1]/30 border-t-[#6366F1]" />
+                  <span className="mt-0.5 h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-emerald-500/30 border-t-emerald-400" />
                 )}
-                <span className="truncate font-mono text-xs text-gray-200">
-                  {wallet ? maskAddress(wallet) : walletLoading ? "Generating wallet…" : "—"}
+                <span className="break-all font-mono text-xs leading-relaxed text-gray-200">
+                  {wallet
+                    ? showFullAddress
+                      ? wallet
+                      : maskAddress(wallet)
+                    : walletLoading
+                      ? "Generating wallet…"
+                      : "—"}
                 </span>
               </div>
               <button
                 type="button"
                 onClick={copyWallet}
                 disabled={!wallet}
-                className="w-full shrink-0 rounded-2xl bg-[#6366F1]/20 px-4 py-3 text-xs font-semibold text-indigo-100 ring-1 ring-[#6366F1]/35 transition hover:scale-[1.02] hover:bg-[#6366F1]/30 hover:shadow-lg disabled:opacity-40 sm:w-auto"
+                className="w-full shrink-0 rounded-2xl bg-gradient-to-r from-emerald-500 to-green-400 px-4 py-3 text-xs font-bold text-gray-950 shadow-soft transition hover:brightness-110 disabled:opacity-40 sm:w-auto"
               >
-                {copied ? "Copied" : "Copy full address"}
+                {copied ? "Copied ✓" : "Copy address"}
               </button>
             </div>
           </div>
@@ -161,19 +190,19 @@ export default function Deposit() {
               Auto listener
             </span>
             <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1 text-[10px] font-semibold text-emerald-200">
-              No manual approval
+              Confirmed = credited
             </span>
           </div>
 
-          <div className="mt-5 rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4 text-xs leading-relaxed text-cyan-50/95">
-            Deposit credits are handled automatically after BEP20 confirmation. No transaction hash is required.
+          <div className="mt-5 rounded-2xl border border-blue-500/20 bg-blue-500/10 p-4 text-xs leading-relaxed text-blue-50/95">
+            Deposits move from Pending → Confirmed as BEP20 confirmations arrive. No transaction hash submission required.
           </div>
-        </GlassCard>
+        </Card>
       </motion.div>
 
       {/* INFO */}
-      <div className="mt-5 rounded-2xl border border-white/[0.08] bg-[#111827]/80 p-4 text-sm ring-1 ring-white/[0.04] backdrop-blur-xl">
-        <p className="mb-2 font-semibold text-amber-400">Important</p>
+      <Card className="mt-5 border-amber-500/15">
+        <p className="mb-2 font-semibold text-amber-200">Important</p>
 
         <ul className="space-y-1 text-xs text-gray-400">
           <li>Send only USDT (BEP20)</li>
@@ -181,60 +210,65 @@ export default function Deposit() {
           <li>Confirmation: 1–2 minutes</li>
           <li>Wrong network = permanent loss</li>
         </ul>
-      </div>
+      </Card>
 
-      {!!hybrid?.deposits?.length && (
-        <div className="mt-5 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#111827]/80 backdrop-blur-xl ring-1 ring-white/[0.04]">
+      <div className="mt-5">
+        <p className="mb-3 text-sm font-bold text-white">Deposit history</p>
+        <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-card shadow-soft backdrop-blur-xl">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[320px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-white/[0.06] text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                  <th className="px-4 py-3">Amount</th>
-                  <th className="px-4 py-3">Chain</th>
-                  <th className="px-4 py-3 text-right">When</th>
-                </tr>
-              </thead>
-              <tbody>
-                {hybrid.deposits.slice(0, 5).map((deposit: any) => {
-                  const conf = Number(deposit?.confirmations ?? 0);
-                  const failed =
-                    deposit?.confirmationStatus === STATUS.FAILED ||
-                    String(deposit?.status || "").toLowerCase() === STATUS.FAILED ||
-                    String(deposit?.status || "").toLowerCase().includes("fail");
-                  const done = !failed && conf >= DEPOSIT_CONFIRMATIONS_REQUIRED;
-                  const pending = !failed && !done;
+            {!!hybrid?.deposits?.length ? (
+              <table className="w-full min-w-[320px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-white/[0.06] text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                    <th className="px-4 py-3">Amount</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">When</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {hybrid.deposits.slice(0, 8).map((deposit: any) => {
+                    const conf = Number(deposit?.confirmations ?? 0);
+                    const failed =
+                      deposit?.confirmationStatus === STATUS.FAILED ||
+                      String(deposit?.status || "").toLowerCase() === STATUS.FAILED ||
+                      String(deposit?.status || "").toLowerCase().includes("fail");
+                    const done = !failed && conf >= DEPOSIT_CONFIRMATIONS_REQUIRED;
+                    const pending = !failed && !done;
 
-                  return (
-                    <tr key={deposit._id} className="border-b border-white/[0.04] last:border-0">
-                      <td className="px-4 py-3 font-semibold text-white tabular-nums">
-                        ${Number(deposit.amount ?? 0).toFixed(2)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-col gap-1">
-                          <StatusBadge tier={failed ? "danger" : done ? "success" : "warning"}>
-                            {failed ? "Failed" : done ? "Confirmed" : "Pending"}
-                          </StatusBadge>
-                          <span className={`text-[10px] ${depositRowStatusClass(deposit)}`}>
-                            {deposit.status ?? "—"}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-right text-xs text-gray-500">
-                        {deposit.createdAt ? new Date(deposit.createdAt).toLocaleDateString() : "—"}
-                        {pending ? (
-                          <span className="mt-1 block text-[10px] text-amber-200/90">
-                            {conf}/{DEPOSIT_CONFIRMATIONS_REQUIRED} conf.
-                          </span>
-                        ) : null}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                    return (
+                      <tr key={deposit._id} className="border-b border-white/[0.04] last:border-0 transition hover:bg-white/[0.02]">
+                        <td className="px-4 py-3 font-semibold text-white tabular-nums">
+                          ${Number(deposit.amount ?? 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-col gap-1">
+                            <StatusBadge tier={failed ? "danger" : done ? "success" : "warning"}>
+                              {failed ? "Failed" : done ? "Confirmed" : "Pending"}
+                            </StatusBadge>
+                            <span className={`text-[10px] ${depositRowStatusClass(deposit)}`}>
+                              {deposit.status ?? "—"}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right text-xs text-gray-500">
+                          {deposit.createdAt ? new Date(deposit.createdAt).toLocaleDateString() : "—"}
+                          {pending ? (
+                            <span className="mt-1 block text-[10px] text-amber-200/90">
+                              {conf}/{DEPOSIT_CONFIRMATIONS_REQUIRED} conf.
+                            </span>
+                          ) : null}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <p className="px-4 py-12 text-center text-sm text-gray-500">No deposits yet.</p>
+            )}
           </div>
         </div>
-      )}
+      </div>
 
     </div>
     </ProtectedRoute>

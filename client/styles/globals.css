@@ -25,9 +25,26 @@ body {
   overflow-x: hidden;
 }
 
+/* Design system: glass cards + soft elevation (8px grid, Web3 dark) */
+.bg-card {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.shadow-soft {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.shadow-glow-emerald {
+  box-shadow: 0 0 40px rgba(16, 185, 129, 0.18), 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
 :root {
-  --brand-primary: #6366f1;
-  --brand-success: #22c55e;
+  --brand-primary: #10b981;
+  --brand-secondary: #3b82f6;
+  --brand-success: #10b981;
   --brand-warning: #f59e0b;
   --brand-danger: #ef4444;
   --brand-dark: #0b0f19;

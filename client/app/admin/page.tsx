@@ -63,9 +63,11 @@ export default function AdminControlPanelPage() {
   const [vipUserId, setVipUserId] = useState("");
   const [vipLevelInput, setVipLevelInput] = useState("0");
 
-  const loadAll = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  const loadAll = useCallback(async (silent = false) => {
+    if (!silent) {
+      setLoading(true);
+      setError("");
+    }
     try {
       const [st, dep, wdr, usr] = await Promise.all([
         adminFetch("/admin/system-status"),
@@ -101,17 +103,25 @@ export default function AdminControlPanelPage() {
           vipLevel: u.vipLevel,
         }));
       setUsers((summaries as UserSummary[]).slice(0, 100));
+      if (silent) setError("");
     } catch (err: any) {
       const msg = err?.message || "Failed to load admin data";
-      setError(msg);
-      showSafeToast(msg);
+      if (!silent) {
+        setError(msg);
+        showSafeToast(msg);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadAll();
+    void loadAll(false);
+  }, [loadAll]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => void loadAll(true), 16000);
+    return () => clearInterval(id);
   }, [loadAll]);
 
   const recoverDeposits = async () => {
@@ -186,7 +196,7 @@ export default function AdminControlPanelPage() {
         </div>
       ) : (
         <div className="space-y-8">
-          <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+          <section className="rounded-2xl bg-card p-5 shadow-soft">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-sm font-semibold text-white">System status</h2>
               <button
@@ -212,7 +222,7 @@ export default function AdminControlPanelPage() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+          <section className="rounded-2xl bg-card p-5 shadow-soft">
             <h2 className="text-sm font-semibold text-white">Recovery</h2>
             <p className="mt-1 text-xs text-gray-500">
               Runs a duplicate-safe scan over the latest 1000 confirmed blocks to pick up missed USDT deposits.
@@ -227,7 +237,7 @@ export default function AdminControlPanelPage() {
             </button>
           </section>
 
-          <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+          <section className="rounded-2xl bg-card p-5 shadow-soft">
             <h2 className="text-sm font-semibold text-white">Latest deposits</h2>
             <div className="mt-4 overflow-x-auto">
               <table className="min-w-full text-left text-sm text-gray-200">
@@ -265,7 +275,7 @@ export default function AdminControlPanelPage() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+          <section className="rounded-2xl bg-card p-5 shadow-soft">
             <h2 className="text-sm font-semibold text-white">Withdrawals (queue)</h2>
             <p className="mt-1 text-xs text-gray-500">Approve or reject hybrid withdrawal requests (status-only updates on the record).</p>
             <div className="mt-4 overflow-x-auto">
@@ -326,7 +336,7 @@ export default function AdminControlPanelPage() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+          <section className="rounded-2xl bg-card p-5 shadow-soft">
             <h2 className="text-sm font-semibold text-white">Users</h2>
             <div className="mt-4 overflow-x-auto">
               <table className="min-w-full text-left text-sm text-gray-200">
@@ -352,7 +362,7 @@ export default function AdminControlPanelPage() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+          <section className="rounded-2xl bg-card p-5 shadow-soft">
             <h2 className="text-sm font-semibold text-white">VIP control</h2>
             <p className="mt-1 text-xs text-gray-500">Set VIP level for a user (updates vipLevel only).</p>
             <div className="mt-4 flex max-w-xl flex-col gap-3 sm:flex-row sm:items-end">

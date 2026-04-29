@@ -11,7 +11,7 @@ export default function Sidebar() {
     { name: "Dashboard", path: "/dashboard", icon: "🏠" },
     { name: "Deposit", path: "/deposit", icon: "💰" },
     { name: "Investment", path: "/investment", icon: "📊" },
-    { name: "Withdraw", path: "/withdrawal", icon: "💸" },
+    { name: "Withdraw", path: "/withdraw", icon: "💸" },
     { name: "Referral", path: "/referral", icon: "👥" },
     { name: "VIP", path: "/vip", icon: "👑" },
     { name: "Profile", path: "/profile", icon: "👤" },
@@ -41,7 +41,7 @@ export default function Sidebar() {
         <div className="flex flex-col gap-2">
 
           {menu.map((item) => {
-            const active = path === item.path;
+            const active = path === item.path || (item.path === "/withdraw" && path === "/withdrawal");
 
             return (
               <button

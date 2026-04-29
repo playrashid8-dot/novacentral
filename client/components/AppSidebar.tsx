@@ -8,7 +8,7 @@ const links = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/team", label: "Team" },
   { href: "/deposit", label: "Deposit" },
-  { href: "/withdrawal", label: "Withdraw" },
+  { href: "/withdraw", label: "Withdraw" },
   { href: "/investment", label: "Invest" },
   { href: "/vip", label: "VIP" },
   { href: "/referral", label: "Referral" },
@@ -26,14 +26,14 @@ export default function AppSidebar() {
           Menu
         </p>
         {links.map((item) => {
-          const active = path === item.href;
+          const active = path === item.href || (item.href === "/withdraw" && path === "/withdrawal");
           return (
             <Link key={item.href} href={item.href}>
               <motion.span
                 layout
                 className={`flex rounded-xl px-3 py-2.5 text-sm font-medium transition ${
                   active
-                    ? "bg-indigo-500/20 text-white shadow-[inset_0_0_0_1px_rgba(99,102,241,0.35)]"
+                    ? "bg-emerald-500/15 text-white shadow-[inset_0_0_0_1px_rgba(16,185,129,0.35)]"
                     : "text-gray-400 hover:bg-white/[0.04] hover:text-white"
                 }`}
                 whileHover={{ x: 2 }}

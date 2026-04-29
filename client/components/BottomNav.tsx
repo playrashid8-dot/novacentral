@@ -10,7 +10,7 @@ export default function BottomNav() {
   const nav = [
     { name: "Home", path: "/dashboard", icon: "🏠" },
     { name: "Deposit", path: "/deposit", icon: "↓" },
-    { name: "Team", path: "/team", icon: "👥" },
+    { name: "Withdraw", path: "/withdraw", icon: "↑" },
     { name: "History", path: "/history", icon: "📜" },
     { name: "Profile", path: "/profile", icon: "👤" },
   ];
@@ -32,7 +32,7 @@ export default function BottomNav() {
                 {active && (
                   <motion.div
                     layoutId="bottom-nav-pill"
-                    className="absolute inset-x-1 inset-y-0 rounded-xl bg-[#6366F1]/20 ring-1 ring-[#6366F1]/35"
+                    className="absolute inset-x-1 inset-y-0 rounded-xl bg-emerald-500/20 ring-1 ring-emerald-500/35"
                     transition={{ type: "spring", stiffness: 380, damping: 32 }}
                   />
                 )}
@@ -43,7 +43,7 @@ export default function BottomNav() {
                   {item.icon}
                 </motion.span>
                 <span
-                  className={`relative z-10 mt-0.5 truncate ${active ? "text-indigo-200" : "text-gray-500"}`}
+                  className={`relative z-10 mt-0.5 truncate ${active ? "text-emerald-200" : "text-gray-500"}`}
                 >
                   {item.name}
                 </span>

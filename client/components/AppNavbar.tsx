@@ -13,10 +13,10 @@ export default function AppNavbar() {
             alt=""
             width={36}
             height={36}
-            className="rounded-full shadow-[0_0_20px_rgba(99,102,241,0.45)]"
+            className="h-9 w-9 rounded-full shadow-[0_0_20px_rgba(16,185,129,0.4)]"
           />
           <div className="text-left leading-tight">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-indigo-300/80">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-400/80">
               NovaCentral
             </p>
             <p className="text-sm font-bold text-white">HybridEarn</p>
@@ -24,7 +24,7 @@ export default function AppNavbar() {
         </Link>
         <Link
           href="/profile"
-          className="rounded-2xl border border-white/10 bg-[#111827] px-4 py-2 text-xs font-semibold text-gray-200 shadow-md transition hover:border-indigo-500/40 hover:shadow-[0_4px_24px_rgba(99,102,241,0.2)] hover:scale-[1.02]"
+          className="rounded-2xl border border-white/10 bg-[#111827] px-4 py-2 text-xs font-semibold text-gray-200 shadow-md transition hover:border-emerald-500/40 hover:shadow-[0_4px_24px_rgba(16,185,129,0.15)] hover:scale-[1.02]"
         >
           Account
         </Link>

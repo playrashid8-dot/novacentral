@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import AdminKpiCard from "../../../components/admin/AdminKpiCard";
 import AdminLayout, { adminFetch, formatCurrency } from "../../../components/admin/AdminLayout";
 import Loader from "../../../components/admin/Loader";
@@ -46,42 +46,44 @@ export default function AdminDashboardPage() {
     setLogs(getAdminLogs().slice(0, 8));
   }, []);
 
-  useEffect(() => {
-    let active = true;
-
-    const load = async () => {
-      try {
+  const loadDashboard = useCallback(async (silent = false) => {
+    try {
+      if (!silent) {
         setLoading(true);
         setError("");
-        const [st, dep, wdr, pend, usr] = await Promise.all([
-          adminFetch("/admin/stats"),
-          adminFetch("/admin/deposits"),
-          adminFetch("/admin/withdrawals"),
-          adminFetch("/admin/withdrawals/pending"),
-          adminFetch("/admin/users"),
-        ]);
-        if (!active) return;
-        setStats(st?.data?.stats || st?.stats || {});
-        setDeposits(dep?.data?.deposits || dep?.deposits || []);
-        setWithdrawals(wdr?.data?.withdrawals || wdr?.withdrawals || []);
-        setPendingList(pend?.data?.withdrawals || pend?.withdrawals || []);
-        setUsers(usr?.data?.users || usr?.users || []);
-      } catch (err: any) {
-        if (active) {
-          const msg = err?.message || "Failed to load dashboard";
-          setError(msg);
-          showSafeToast(msg);
-        }
-      } finally {
-        if (active) setLoading(false);
       }
-    };
-
-    load();
-    return () => {
-      active = false;
-    };
+      const [st, dep, wdr, pend, usr] = await Promise.all([
+        adminFetch("/admin/stats"),
+        adminFetch("/admin/deposits"),
+        adminFetch("/admin/withdrawals"),
+        adminFetch("/admin/withdrawals/pending"),
+        adminFetch("/admin/users"),
+      ]);
+      setStats(st?.data?.stats || st?.stats || {});
+      setDeposits(dep?.data?.deposits || dep?.deposits || []);
+      setWithdrawals(wdr?.data?.withdrawals || wdr?.withdrawals || []);
+      setPendingList(pend?.data?.withdrawals || pend?.withdrawals || []);
+      setUsers(usr?.data?.users || usr?.users || []);
+      if (silent) setError("");
+    } catch (err: any) {
+      if (!silent) {
+        const msg = err?.message || "Failed to load dashboard";
+        setError(msg);
+        showSafeToast(msg);
+      }
+    } finally {
+      if (!silent) setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadDashboard(false);
+  }, [loadDashboard]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => void loadDashboard(true), 16000);
+    return () => clearInterval(id);
+  }, [loadDashboard]);
 
   const pendingPipelineDeposits = useMemo(
     () => deposits.filter((d) => String(d.status).toLowerCase() === "detected").length,
@@ -228,7 +230,7 @@ export default function AdminDashboardPage() {
             />
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+          <div className="rounded-2xl bg-card p-5 shadow-soft">
             <h3 className="text-sm font-semibold text-white">Deposit recovery</h3>
             <p className="mt-1 text-xs text-gray-500">
               Backup sweep (recent blocks), deep block range scan, or narrow scan around a transaction hash.
@@ -306,7 +308,7 @@ export default function AdminDashboardPage() {
           />
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+            <div className="rounded-2xl bg-card p-5 shadow-soft">
               <h3 className="text-sm font-semibold text-white">Liquidity snapshot</h3>
               <p className="mt-1 text-xs text-gray-500">{totalVolumeHint}</p>
               <dl className="mt-4 grid gap-3 text-sm">
@@ -325,7 +327,7 @@ export default function AdminDashboardPage() {
               </dl>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+            <div className="rounded-2xl bg-card p-5 shadow-soft">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold text-white">Recent activity</h3>
                 <Link
