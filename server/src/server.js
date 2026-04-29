@@ -1,4 +1,5 @@
 import "dotenv/config";
+console.log("ENV CHECK REDIS:", process.env.REDIS_URL ? "FOUND ✅" : "MISSING ❌");
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";

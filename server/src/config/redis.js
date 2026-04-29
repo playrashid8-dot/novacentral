@@ -11,9 +11,7 @@ if (process.env.REDIS_URL) {
   });
 
   redis.on("connect", () => {
-    if (process.env.NODE_ENV !== "production") {
-      console.log("✅ Redis connected");
-    }
+    console.log("✅ Redis connected");
   });
 
   redis.on("error", () => {
