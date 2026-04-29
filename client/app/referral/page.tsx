@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import API, { getApiErrorMessage, normalize } from "../../lib/api";
 import ProtectedRoute from "../../components/ProtectedRoute";
@@ -9,7 +9,14 @@ import AppToast from "../../components/AppToast";
 import { fetchCurrentUser } from "../../lib/session";
 import { claimHybridSalary, fetchHybridSummary } from "../../lib/hybrid";
 import GradientButton from "../../components/GradientButton";
-import ProgressBar from "../../components/ProgressBar";
+
+/** Mirrors server `SALARY_RULES` (hybrid/utils/constants.js) */
+const SALARY_UI_STAGES = [
+  { level: 1, direct: 3, team: 10, reward: 30 },
+  { level: 2, direct: 6, team: 20, reward: 80 },
+  { level: 3, direct: 12, team: 35, reward: 250 },
+  { level: 4, direct: 18, team: 45, reward: 500 },
+] as const;
 
 export default function Referral() {
   const [copied, setCopied] = useState(false);
@@ -61,31 +68,38 @@ export default function Referral() {
   };
 
   const su = hybrid?.salaryUi;
-  const directCount = Number(
-    su?.directCount ?? hybrid?.directCount ?? stats?.directCount ?? 0,
-  );
-  const teamCount = Number(su?.teamCount ?? hybrid?.teamCount ?? stats?.teamCount ?? 0);
-  const nextDirectNeed = Number(su?.nextDirectNeed ?? hybrid?.salaryRules?.[0]?.directCount ?? 3);
-  const nextTeamNeed = Number(su?.nextTeamNeed ?? hybrid?.salaryRules?.[0]?.teamCount ?? 10);
-  const needDirectBar = Number.isFinite(nextDirectNeed) && nextDirectNeed > 0 ? nextDirectNeed : 1;
-  const needTeamBar = Number.isFinite(nextTeamNeed) && nextTeamNeed > 0 ? nextTeamNeed : 1;
-  const salaryClaimable = Number(su?.claimableStage ?? hybrid?.salaryStage ?? 0) > 0;
+  const direct = Number(su?.directCount ?? hybrid?.directCount ?? stats?.directCount ?? 0);
+  const team = Number(su?.teamCount ?? hybrid?.teamCount ?? stats?.teamCount ?? 0);
+  const backendClaimableStage = Number(su?.claimableStage ?? hybrid?.salaryStage ?? 0);
 
-  const claimSalary = async () => {
-    if (!salaryClaimable || salaryLoading) return;
+  const claimedStages = useMemo(
+    () => (su?.claimedSalaryStages ?? []).map(Number),
+    [su?.claimedSalaryStages],
+  );
+
+  const nextStage =
+    SALARY_UI_STAGES.find((s) => !claimedStages.includes(s.level)) ?? null;
+
+  const handleClaimStage = async (stageLevel: number) => {
+    const canPay =
+      backendClaimableStage === stageLevel &&
+      backendClaimableStage > 0 &&
+      !salaryLoading;
+    if (!canPay) return;
 
     try {
       setSalaryLoading(true);
-      const result = await claimHybridSalary();
+      const result = (await claimHybridSalary()) as {
+        msg?: string;
+        amount?: number;
+        stage?: number;
+      } | null;
+      const claimed = Number(result?.stage ?? stageLevel);
       const salMsg =
-        typeof (result as { msg?: string })?.msg === "string" &&
-        (result as { msg?: string }).msg?.trim()
-          ? String((result as { msg?: string }).msg).trim()
+        typeof result?.msg === "string" && result.msg.trim()
+          ? result.msg.trim()
           : "";
-      showToast(
-        salMsg ||
-          `Salary claimed: $${Number((result as { amount?: number })?.amount ?? 0).toFixed(2)}`,
-      );
+      showToast(salMsg || `Stage ${claimed} claimed · $${Number(result?.amount ?? 0).toFixed(2)} USDT`);
       const hybridData = await fetchHybridSummary().catch(() => null);
       setHybrid(hybridData);
     } catch (err: any) {
@@ -94,6 +108,25 @@ export default function Referral() {
       setSalaryLoading(false);
     }
   };
+
+  const salaryStagesUi = useMemo(
+    () =>
+      SALARY_UI_STAGES.map((stage) => {
+        const isUnlocked = direct >= stage.direct && team >= stage.team;
+        const isClaimed = claimedStages.includes(stage.level);
+        const isNext = backendClaimableStage === stage.level;
+
+        return {
+          ...stage,
+          isUnlocked,
+          isClaimed,
+          isNext,
+        };
+      }),
+    [direct, team, claimedStages, backendClaimableStage],
+  );
+
+  const salaryClaimable = backendClaimableStage > 0;
 
   return (
     <ProtectedRoute>
@@ -147,8 +180,8 @@ export default function Referral() {
       {/* 📊 STATS */}
       <div className="grid grid-cols-2 gap-3">
 
-        <Stat title="Team Count" value={hybrid?.teamCount || stats?.teamCount || 0} />
-        <Stat title="Direct Count" value={hybrid?.directCount || stats?.directCount || 0} />
+        <Stat title="Team Count" value={team} />
+        <Stat title="Direct Count" value={direct} />
         <Stat title="Team Volume" value={`$${Number(stats?.teamVolume || 0).toFixed(2)}`} />
         <Stat title="Referral Code" value={stats?.referralCode || user?.referralCode || "-"} />
 
@@ -160,24 +193,6 @@ export default function Referral() {
           title="ROI Rate"
           value={`${(Number(hybrid?.roiRate || 0) * 100).toFixed(2)}%`}
         />
-      </div>
-
-      <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur-2xl">
-        <p className="text-sm font-semibold text-white">Live Progress</p>
-        <div className="mt-3 space-y-3">
-          <ProgressBar
-            label="Direct"
-            value={directCount}
-            max={needDirectBar}
-            hint={`Direct: ${directCount} / ${nextDirectNeed}`}
-          />
-          <ProgressBar
-            label="Team"
-            value={teamCount}
-            max={needTeamBar}
-            hint={`Team: ${teamCount} / ${nextTeamNeed}`}
-          />
-        </div>
       </div>
 
       <div className="mt-5 p-[1px] rounded-2xl bg-gradient-to-r from-yellow-400/70 via-purple-500/70 to-cyan-400/70">
@@ -193,31 +208,89 @@ export default function Referral() {
         <div className="rounded-2xl bg-[#08080d]/95 p-4 backdrop-blur-2xl">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-[10px] uppercase tracking-[0.24em] text-yellow-200/80">Salary Rewards</p>
-              <h3 className="mt-1 text-lg font-black text-white">
-                {su?.nextStage != null ? `Next: stage ${su.nextStage}` : "Salary milestones"}
-              </h3>
+              <p className="text-[10px] uppercase tracking-[0.24em] text-yellow-200/80">Salary Rewards (HybridEarn)</p>
+              <h3 className="mt-1 text-lg font-black text-white">Stage milestones</h3>
             </div>
-            <span className={`rounded-full border px-3 py-1 text-[10px] font-bold ${salaryClaimable ? "border-green-300/30 bg-green-400/10 text-green-200" : "border-yellow-300/20 bg-yellow-400/10 text-yellow-200"}`}>
-              {salaryClaimable ? "Reward ready" : "In progress"}
+            <span
+              className={`rounded-full border px-3 py-1 text-[10px] font-bold ${
+                salaryClaimable
+                  ? "border-green-300/30 bg-green-400/10 text-green-200"
+                  : "border-yellow-300/20 bg-yellow-400/10 text-yellow-200"
+              }`}
+            >
+              {salaryClaimable ? "Reward ready (server)" : "In progress"}
             </span>
           </div>
           <p className="mt-3 text-xs text-gray-400">
-            Next milestone needs {nextDirectNeed} direct + {nextTeamNeed} team. Claim unlocks when you
-            qualify for a stage you have not claimed yet.
+            Direct = your direct referrals only. Team = total network size. Thresholds match the server; claim becomes
+            available when you meet the next unclaimed stage and the server marks it ready.
           </p>
+          {nextStage && (
+            <div className="mt-4">
+              <p className="text-gray-400 text-xs">Next Stage Progress</p>
+              <div className="mt-1.5 w-full bg-gray-700 h-2 rounded-full">
+                <div
+                  className="bg-emerald-500 h-2 rounded-full transition-[width] duration-300"
+                  style={{
+                    width: `${Math.min((team / nextStage.team) * 100, 100)}%`,
+                  }}
+                />
+              </div>
+              <p className="text-[11px] text-gray-500 mt-1.5 tabular-nums">
+                Team {team}/{nextStage.team}
+                {nextStage.direct > 0 ? ` · Direct ${direct}/${nextStage.direct}` : ""}
+              </p>
+            </div>
+          )}
           <div className="mt-4 space-y-3">
-            <ProgressBar label="Direct" value={directCount} max={needDirectBar} />
-            <ProgressBar label="Team" value={teamCount} max={needTeamBar} />
+            {salaryStagesUi.map((stage) => {
+              const borderClass = stage.isClaimed
+                ? "border-blue-400/80 bg-blue-500/10"
+                : stage.isUnlocked && stage.isNext
+                  ? "border-emerald-400/70 bg-emerald-500/10"
+                  : "border-white/10 bg-white/5";
+              const btnDisabled =
+                !stage.isUnlocked || stage.isClaimed || !stage.isNext || salaryLoading;
+
+              return (
+                <div
+                  key={stage.level}
+                  className={`rounded-2xl border p-4 ${borderClass}`}
+                >
+                  <h2 className="text-base font-bold text-white">Stage {stage.level}</h2>
+                  <p className="text-gray-400 text-xs mt-1">
+                    Need direct {stage.direct} · team {stage.team}
+                  </p>
+                  <p className="text-emerald-400 font-bold mt-2">${stage.reward} USDT</p>
+                  <div className="text-xs text-gray-400 mt-2 tabular-nums">
+                    Direct: {direct}/{stage.direct} • Team: {team}/{stage.team}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={btnDisabled}
+                    onClick={() => handleClaimStage(stage.level)}
+                    className={`mt-3 w-full py-2 rounded-xl text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                      stage.isClaimed
+                        ? "bg-blue-500"
+                        : stage.isUnlocked && stage.isNext
+                          ? "bg-emerald-500 hover:bg-emerald-400"
+                          : "bg-gray-600"
+                    }`}
+                  >
+                    {stage.isClaimed
+                      ? "Claimed"
+                      : stage.isUnlocked
+                        ? stage.isNext
+                          ? salaryLoading
+                            ? "Claiming…"
+                            : "Claim Salary"
+                          : "Waiting"
+                        : "Locked"}
+                  </button>
+                </div>
+              );
+            })}
           </div>
-          <GradientButton
-            onClick={claimSalary}
-            disabled={!salaryClaimable || salaryLoading}
-            loading={salaryLoading}
-            className="mt-4"
-          >
-            {salaryLoading ? "Claiming..." : "Claim Salary Reward"}
-          </GradientButton>
         </div>
       </div>
 

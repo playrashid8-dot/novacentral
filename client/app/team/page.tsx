@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import API, { getApiErrorMessage, normalize } from "../../lib/api";
 import { logout } from "../../lib/auth";
@@ -35,6 +35,7 @@ export default function TeamPage() {
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [members, setMembers] = useState<TeamMemberRow[]>([]);
   const [membersReady, setMembersReady] = useState(false);
+  const [loadingMembers, setLoadingMembers] = useState(true);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -43,14 +44,19 @@ export default function TeamPage() {
 
   const load = useCallback(async (silent: boolean) => {
     try {
-      if (!silent) setLoading(true);
-      const [data, res, teamRes] = await Promise.all([
-        fetchCurrentUser(),
+      if (!silent) {
+        setLoading(true);
+        setLoadingMembers(true);
+      }
+      const data = await fetchCurrentUser();
+      if (!data) throw new Error("No user data");
+      setUser(data);
+      if (!silent) setLoading(false);
+
+      const [res, teamRes] = await Promise.all([
         API.get("/user/referral-stats").catch(() => null),
         API.get("/user/team-members").catch(() => null),
       ]);
-      if (!data) throw new Error("No user data");
-      setUser(data);
       if (res?.data) {
         const response = normalize(res.data);
         const payload =
@@ -75,19 +81,27 @@ export default function TeamPage() {
     } finally {
       setReferralStatsReady(true);
       setMembersReady(true);
+      setLoadingMembers(false);
       if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     void load(false);
-    const onFocus = () => void load(true);
+    const onFocus = () => {
+      if (document.hidden) return;
+      void load(true);
+    };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [load]);
 
   useEffect(() => {
-    const id = window.setInterval(() => void load(true), 15000);
+    const tick = () => {
+      if (document.hidden) return;
+      void load(true);
+    };
+    const id = window.setInterval(tick, 15000);
     return () => window.clearInterval(id);
   }, [load]);
 
@@ -105,6 +119,7 @@ export default function TeamPage() {
           referralStatsReady={referralStatsReady}
           members={members}
           membersReady={membersReady}
+          loadingMembers={loadingMembers}
           lastUpdatedAt={lastUpdatedAt}
           toast={toast}
         />
@@ -120,6 +135,7 @@ function TeamContent({
   referralStatsReady,
   members,
   membersReady,
+  loadingMembers,
   lastUpdatedAt,
   toast,
 }: {
@@ -129,12 +145,34 @@ function TeamContent({
   referralStatsReady: boolean;
   members: TeamMemberRow[];
   membersReady: boolean;
+  loadingMembers: boolean;
   lastUpdatedAt: number | null;
   toast: string;
 }) {
-  const countA = members.filter((u) => u.level === "A").length;
-  const countB = members.filter((u) => u.level === "B").length;
-  const countC = members.filter((u) => u.level === "C").length;
+  const [search, setSearch] = useState("");
+
+  const levelCounts = useMemo(() => {
+    const counts = { A: 0, B: 0, C: 0 };
+    members.forEach((m) => {
+      counts[m.level]++;
+    });
+    return counts;
+  }, [members]);
+
+  const filteredMembers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return members;
+    return members.filter((u) =>
+      String(u.username ?? "")
+        .toLowerCase()
+        .includes(q)
+    );
+  }, [members, search]);
+
+  const totalBalance = useMemo(
+    () => members.reduce((sum, u) => sum + Number(u.balance ?? 0), 0),
+    [members]
+  );
 
   return (
     <div className="relative w-full max-w-full overflow-x-hidden pb-3 text-white">
@@ -186,7 +224,7 @@ function TeamContent({
             <span>{referralStatsReady ? `${teamCount} in network` : "—"}</span>
             {membersReady && (
               <span className="tabular-nums text-gray-400">
-                Level A: {countA} · B: {countB} · C: {countC}
+                Level A: {levelCounts.A} · B: {levelCounts.B} · C: {levelCounts.C}
               </span>
             )}
           </div>
@@ -197,6 +235,11 @@ function TeamContent({
           referralStatsReady={referralStatsReady}
           members={members}
           membersReady={membersReady}
+          loadingMembers={loadingMembers}
+          filteredMembers={filteredMembers}
+          totalBalance={totalBalance}
+          search={search}
+          setSearch={setSearch}
         />
       </motion.section>
     </div>
@@ -231,12 +274,32 @@ function MembersMessage({
   referralStatsReady,
   members,
   membersReady,
+  loadingMembers,
+  filteredMembers,
+  totalBalance,
+  search,
+  setSearch,
 }: {
   teamCount: number;
   referralStatsReady: boolean;
   members: TeamMemberRow[];
   membersReady: boolean;
+  loadingMembers: boolean;
+  filteredMembers: TeamMemberRow[];
+  totalBalance: number;
+  search: string;
+  setSearch: (v: string) => void;
 }) {
+  if (loadingMembers) {
+    return (
+      <div className="space-y-2">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-12 animate-pulse rounded-xl bg-white/5" />
+        ))}
+      </div>
+    );
+  }
+
   if (!referralStatsReady || !membersReady) {
     return (
       <div className="rounded-xl border border-white/[0.06] bg-black/25 px-3 py-8 text-center">
@@ -245,26 +308,51 @@ function MembersMessage({
     );
   }
 
+  if (!loadingMembers && teamCount > 0 && members.length === 0) {
+    return (
+      <div className="text-center text-sm text-red-400">Failed to load team members</div>
+    );
+  }
+
   if (members.length > 0) {
     return (
-      <div className="max-h-[min(420px,55vh)] space-y-3 overflow-y-auto pr-1">
-        {members.map((userRow) => (
-          <div
-            key={userRow.id ?? `${userRow.username}-${userRow.level}`}
-            className="flex justify-between rounded-xl bg-white/5 p-3 ring-1 ring-white/[0.06]"
-          >
-            <div className="min-w-0 pr-2">
-              <p className="truncate text-white">{userRow.username}</p>
-              <p className="text-xs text-gray-400">
-                {userRow.joinedAt ? new Date(userRow.joinedAt).toLocaleDateString() : "—"}
-              </p>
-            </div>
-            <div className="shrink-0 text-right">
-              <p className="font-bold tabular-nums text-emerald-400">${Number(userRow.balance).toFixed(2)}</p>
-              <p className="text-xs text-gray-400">Level {userRow.level}</p>
-            </div>
-          </div>
-        ))}
+      <div className="space-y-3">
+        <div className="text-sm font-bold text-emerald-400 tabular-nums">
+          Total Team Balance: ${totalBalance.toFixed(2)}
+        </div>
+        <input
+          type="search"
+          placeholder="Search username…"
+          className="mb-3 w-full rounded-xl bg-white/5 p-2 text-sm text-white placeholder:text-gray-500 ring-1 ring-white/[0.08] outline-none focus:ring-white/20"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          autoComplete="off"
+        />
+        <div className="max-h-[min(420px,55vh)] space-y-3 overflow-y-auto pr-1">
+          {filteredMembers.length === 0 ? (
+            <p className="py-4 text-center text-sm text-gray-500">No usernames match your search.</p>
+          ) : (
+            filteredMembers.map((userRow) => (
+              <div
+                key={userRow.id ?? `${userRow.username}-${userRow.level}`}
+                className="flex justify-between rounded-xl bg-white/5 p-3 ring-1 ring-white/[0.06]"
+              >
+                <div className="min-w-0 pr-2">
+                  <p className="truncate text-white">{userRow.username}</p>
+                  <p className="text-xs text-gray-400">
+                    {userRow.joinedAt ? new Date(userRow.joinedAt).toLocaleDateString() : "—"}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="font-bold tabular-nums text-emerald-400">
+                    ${Number(userRow.balance).toFixed(2)}
+                  </p>
+                  <p className="text-xs text-gray-400">Level {userRow.level}</p>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     );
   }
