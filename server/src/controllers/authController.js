@@ -1,6 +1,7 @@
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import { createUserWallet } from "../hybrid/services/walletService.js";
 import { addUserToHybridDepositRealtimeMap } from "../hybrid/services/userMap.js";
 import { updateUserLevel } from "../hybrid/services/levelService.js";
@@ -34,8 +35,10 @@ const sendAuthResponse = (res, status, success, msg, data = null) =>
 
 const bumpTeamCounts = async (referredById) => {
   let current = referredById;
+  const visited = new Set();
 
-  while (current) {
+  while (current && !visited.has(String(current))) {
+    visited.add(String(current));
     const parent = await User.findById(current).select("_id referredBy");
     if (!parent) break;
 
@@ -53,7 +56,7 @@ const generateCode = async () => {
   let exists = true;
 
   while (exists) {
-    code = "NC" + Math.random().toString(36).substring(2, 8).toUpperCase();
+    code = "NC" + crypto.randomBytes(4).toString("hex").toUpperCase();
     exists = await User.findOne({ referralCode: code });
   }
 
@@ -116,14 +119,6 @@ export const register = async (req, res) => {
     let refUser = null;
     if (referralCode) {
       refUser = await User.findOne({ referralCode });
-
-      if (refUser) {
-        await User.updateOne(
-          { _id: refUser._id },
-          { $inc: { directCount: 1 } }
-        );
-        await updateUserLevel(refUser._id);
-      }
     }
 
     const normalizedWalletAddress = normalizeStoredWalletAddress(wallet.address);
@@ -146,6 +141,11 @@ export const register = async (req, res) => {
     });
 
     if (refUser) {
+      await User.updateOne(
+        { _id: refUser._id },
+        { $inc: { directCount: 1 } }
+      );
+      await updateUserLevel(refUser._id);
       await bumpTeamCounts(refUser._id);
     }
 
@@ -166,10 +166,14 @@ export const register = async (req, res) => {
   } catch (err) {
     console.error("REGISTER ERROR:", err.message);
     if (err?.code === 11000) {
+      if (err?.keyPattern?.walletAddress || err?.keyValue?.walletAddress) {
+        return sendAuthResponse(res, 409, false, "Wallet already assigned, please retry signup");
+      }
+
       return sendAuthResponse(res, 400, false, "User already exists");
     }
 
-    return sendAuthResponse(res, 500, false, "Server error");
+    return sendAuthResponse(res, 500, false, "Internal server error");
   }
 };
 
@@ -190,7 +194,7 @@ export const me = async (req, res) => {
     });
   } catch (err) {
     console.error("AUTH ME ERROR:", err.message);
-    return sendAuthResponse(res, 500, false, "Server error");
+    return sendAuthResponse(res, 500, false, "Internal server error");
   }
 };
 
@@ -249,7 +253,7 @@ export const login = async (req, res) => {
 
   } catch (err) {
     console.error("LOGIN ERROR:", err.message);
-    return sendAuthResponse(res, 500, false, "Server error");
+    return sendAuthResponse(res, 500, false, "Internal server error");
   }
 };
 

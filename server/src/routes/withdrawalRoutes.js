@@ -25,7 +25,8 @@ const isAdmin = async (req, res, next) => {
 
     next();
   } catch (err) {
-    res.status(500).json({ success: false, msg: err.message, data: null });
+    console.error("WITHDRAWAL ADMIN CHECK ERROR:", err.message);
+    res.status(500).json({ success: false, msg: "Internal server error", data: null });
   }
 };
 

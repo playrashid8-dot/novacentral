@@ -26,7 +26,7 @@ import {
 const router = express.Router();
 const sendAdminError = (res, err, context) => {
   console.error(`${context}:`, err.message);
-  return res.status(500).json({ success: false, msg: err.message, data: null });
+  return res.status(500).json({ success: false, msg: "Internal server error", data: null });
 };
 
 /** Legacy withdrawals may omit risk fields — keep admin UI stable. */
@@ -56,7 +56,8 @@ const isAdmin = async (req, res, next) => {
 
     next();
   } catch (err) {
-    res.status(500).json({ success: false, msg: err.message, data: null });
+    console.error("ADMIN CHECK ERROR:", err.message);
+    res.status(500).json({ success: false, msg: "Internal server error", data: null });
   }
 };
 
@@ -395,7 +396,8 @@ router.post("/hybrid/withdraw/approve", auth, isAdmin, async (req, res) => {
     });
     return res.json({ success: true, msg: "Withdrawal approved", data: { withdrawal: data } });
   } catch (err) {
-    return res.status(400).json({ success: false, msg: err.message, data: null });
+    console.error("ADMIN WITHDRAW APPROVE ERROR:", err.message);
+    return res.status(400).json({ success: false, msg: "Request failed", data: null });
   }
 });
 
@@ -418,7 +420,8 @@ router.post("/hybrid/withdraw/pay", auth, isAdmin, async (req, res) => {
     });
     return res.json({ success: true, msg: "Withdrawal marked as paid", data });
   } catch (err) {
-    return res.status(400).json({ success: false, msg: err.message, data: null });
+    console.error("ADMIN WITHDRAW PAY ERROR:", err.message);
+    return res.status(400).json({ success: false, msg: "Request failed", data: null });
   }
 });
 
@@ -438,7 +441,8 @@ router.post("/hybrid/withdraw/reject", auth, isAdmin, async (req, res) => {
     });
     return res.json({ success: true, msg: "Withdrawal rejected and refunded", data: { withdrawal: data } });
   } catch (err) {
-    return res.status(400).json({ success: false, msg: err.message, data: null });
+    console.error("ADMIN WITHDRAW REJECT ERROR:", err.message);
+    return res.status(400).json({ success: false, msg: "Request failed", data: null });
   }
 });
 
@@ -459,7 +463,8 @@ router.post("/withdraw/approve/:id", auth, isAdmin, async (req, res) => {
     });
     return res.json({ success: true, msg: "Withdrawal approved", data: { withdrawal: data } });
   } catch (err) {
-    return res.status(400).json({ success: false, msg: err.message, data: null });
+    console.error("ADMIN REST WITHDRAW APPROVE ERROR:", err.message);
+    return res.status(400).json({ success: false, msg: "Request failed", data: null });
   }
 });
 
@@ -479,7 +484,8 @@ router.post("/withdraw/reject/:id", auth, isAdmin, async (req, res) => {
     });
     return res.json({ success: true, msg: "Withdrawal rejected and refunded", data: { withdrawal: data } });
   } catch (err) {
-    return res.status(400).json({ success: false, msg: err.message, data: null });
+    console.error("ADMIN REST WITHDRAW REJECT ERROR:", err.message);
+    return res.status(400).json({ success: false, msg: "Request failed", data: null });
   }
 });
 
@@ -511,7 +517,7 @@ router.post("/recover-deposits", auth, isAdmin, async (req, res) => {
     });
   } catch (err) {
     console.error("❌ Recovery failed:", err?.message || String(err));
-    return res.status(500).json({ success: false, msg: err.message, data: null });
+    return res.status(500).json({ success: false, msg: "Internal server error", data: null });
   }
 });
 
@@ -553,7 +559,7 @@ router.post("/rescan-deposits", auth, isAdmin, async (req, res) => {
     });
   } catch (err) {
     console.error("❌ Deep rescan failed:", err?.message || String(err));
-    return res.status(500).json({ success: false, msg: err.message, data: null });
+    return res.status(500).json({ success: false, msg: "Internal server error", data: null });
   }
 });
 
@@ -607,7 +613,7 @@ router.post("/recover-by-tx", auth, isAdmin, async (req, res) => {
     });
   } catch (err) {
     console.error("❌ Recover by TX failed:", err?.message || String(err));
-    return res.status(500).json({ success: false, msg: err.message, data: null });
+    return res.status(500).json({ success: false, msg: "Internal server error", data: null });
   }
 });
 

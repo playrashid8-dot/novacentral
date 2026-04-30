@@ -168,7 +168,7 @@ export const createDeposit = async (req, res) => {
   } catch (err) {
     console.log("ERROR:", err.message);
     logControllerError("deposit.create", req, err);
-    res.status(500).json({ success: false, msg: err.message });
+    res.status(500).json({ success: false, msg: "Internal server error", data: null });
   }
 };
 
@@ -285,7 +285,7 @@ export const approveDeposit = async (req, res) => {
 
   } catch (err) {
     logControllerError("deposit.approve", req, err);
-    res.status(500).json({ success: false, msg: err.message });
+    res.status(500).json({ success: false, msg: "Internal server error", data: null });
   } finally {
     session.endSession();
   }
@@ -354,7 +354,7 @@ export const rejectDeposit = async (req, res) => {
 
   } catch (err) {
     logControllerError("deposit.reject", req, err);
-    res.status(500).json({ success: false, msg: err.message });
+    res.status(500).json({ success: false, msg: "Internal server error", data: null });
   } finally {
     session.endSession();
   }
@@ -377,6 +377,6 @@ export const getMyDeposits = async (req, res) => {
 
   } catch (err) {
     logControllerError("deposit.list", req, err);
-    res.status(500).json({ success: false, msg: err.message });
+    res.status(500).json({ success: false, msg: "Internal server error", data: null });
   }
 };

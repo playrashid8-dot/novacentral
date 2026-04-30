@@ -233,7 +233,7 @@ export const createWithdrawal = async (req, res) => {
 
   } catch (err) {
     logControllerError("withdrawal.create", req, err);
-    res.status(500).json({ success: false, msg: err.message, data: null });
+    res.status(500).json({ success: false, msg: "Internal server error", data: null });
   } finally {
     if (session) {
       session.endSession();
@@ -258,7 +258,7 @@ export const getMyWithdrawals = async (req, res) => {
 
   } catch (err) {
     logControllerError("withdrawal.list", req, err);
-    res.status(500).json({ success: false, msg: err.message, data: null });
+    res.status(500).json({ success: false, msg: "Internal server error", data: null });
   }
 };
 
@@ -331,7 +331,7 @@ export const approveWithdrawal = async (req, res) => {
 
   } catch (err) {
     logControllerError("withdrawal.approve", req, err);
-    res.status(500).json({ success: false, msg: err.message, data: null });
+    res.status(500).json({ success: false, msg: "Internal server error", data: null });
   } finally {
     session.endSession();
   }
@@ -437,7 +437,7 @@ export const rejectWithdrawal = async (req, res) => {
 
   } catch (err) {
     logControllerError("withdrawal.reject", req, err);
-    res.status(500).json({ success: false, msg: err.message, data: null });
+    res.status(500).json({ success: false, msg: "Internal server error", data: null });
   } finally {
     session.endSession();
   }

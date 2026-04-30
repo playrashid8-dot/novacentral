@@ -51,24 +51,17 @@ function normalizeCorsOrigin(origin) {
   return String(origin).replace(/\/$/, "");
 }
 
-const corsAllowedOrigins = new Set([
+const allowedOrigins = [
   "https://hybridearn.com",
   "https://www.hybridearn.com",
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
-  "https://novacentral.vercel.app",
-]);
+];
 
-for (const part of (process.env.ALLOWED_ORIGINS || "").split(",")) {
-  const o = normalizeCorsOrigin(part.trim());
-  if (o) corsAllowedOrigins.add(o);
-}
+const corsAllowedOrigins = new Set(allowedOrigins);
 
 function isCorsOriginAllowed(origin) {
   if (!origin) return true;
   const n = normalizeCorsOrigin(origin);
   if (corsAllowedOrigins.has(n)) return true;
-  if (n.endsWith(".vercel.app")) return true;
   return false;
 }
 
@@ -96,7 +89,6 @@ const corsOptions = {
     "X-CSRF-Token",
     "X-XSRF-Token",
     "X-Requested-With",
-    "Authorization",
     "Idempotency-Key",
   ],
 };
@@ -131,7 +123,7 @@ process.on("unhandledRejection", (err) => {
    🔐 GLOBAL SECURITY
 ============================== */
 
-// ✅ CORS (dynamic origin — credentials + Vercel preview *.vercel.app)
+// ✅ CORS (strict production whitelist)
 app.use(cors(corsOptions));
 
 // ✅ COOKIES FIRST (needed before CSRF / body-dependent verification)
@@ -162,7 +154,11 @@ app.get("/api/csrf-token", (req, res) => {
 });
 
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok" });
+  res.json({
+    success: true,
+    msg: "Health check ok",
+    data: { status: "ok" },
+  });
 });
 
 // ✅ LOGGER
@@ -259,7 +255,7 @@ app.use((err, req, res, next) => {
 
   res.status(err.status || 500).json({
     success: false,
-    msg: err.message || "Internal Server Error",
+    msg: err.status && err.status < 500 ? err.message : "Internal server error",
     data: null,
   });
 });

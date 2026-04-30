@@ -12,6 +12,7 @@ export const distributeHybridReferralRewards = async (
   session = null,
   options = {}
 ) => {
+  const { depositTxHash } = options || {};
   const sourceUser = await User.findById(userId)
     .select("referredBy referrer")
     .session(session);
@@ -32,11 +33,17 @@ export const distributeHybridReferralRewards = async (
 
   const appliedRewards = [];
   const levelTouchedIds = new Set();
+  const visited = new Set();
 
   let currentParentId = getParentId(sourceUser);
   let depth = 1;
 
-  while (currentParentId && depth <= REFERRAL_RATES.length) {
+  while (
+    currentParentId &&
+    depth <= REFERRAL_RATES.length &&
+    !visited.has(String(currentParentId))
+  ) {
+    visited.add(String(currentParentId));
     const parent = await User.findById(currentParentId)
       .select("_id referredBy referrer")
       .session(session);
@@ -89,7 +96,7 @@ export const distributeHybridReferralRewards = async (
         meta: {
           depth: item.depth,
           fromUserId: String(userId),
-          ...(depositTxHash ? { depositTxHash } : {}),
+          depositTxHash,
         },
       })),
       session

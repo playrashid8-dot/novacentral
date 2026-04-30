@@ -128,6 +128,8 @@ const userSchema = new mongoose.Schema(
     // 📍 WALLET ADDRESS (stored lowercase for on-chain Transfer `to` matching)
     walletAddress: {
       type: String,
+      unique: true,
+      sparse: true,
       default: "",
       trim: true,
       lowercase: true,
@@ -296,6 +298,5 @@ userSchema.methods.toJSON = function () {
 //
 userSchema.index({ createdAt: -1 });
 userSchema.index({ referredBy: 1, createdAt: -1 });
-userSchema.index({ walletAddress: 1 });
 
 export default mongoose.model("User", userSchema);

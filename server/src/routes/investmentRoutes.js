@@ -31,12 +31,13 @@ router.get("/active", auth, async (req, res) => {
 
     res.json({
       success: true,
-      investments,
+      msg: "Active investments fetched successfully",
+      data: { investments },
     });
 
   } catch (err) {
     console.error("ACTIVE INVESTMENTS ERROR:", err.message);
-    res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ success: false, msg: "Internal server error", data: null });
   }
 });
 
@@ -52,12 +53,13 @@ router.get("/completed", auth, async (req, res) => {
 
     res.json({
       success: true,
-      investments,
+      msg: "Completed investments fetched successfully",
+      data: { investments },
     });
 
   } catch (err) {
     console.error("COMPLETED INVESTMENTS ERROR:", err.message);
-    res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ success: false, msg: "Internal server error", data: null });
   }
 });
 
@@ -85,16 +87,19 @@ router.get("/summary", auth, async (req, res) => {
 
     res.json({
       success: true,
-      summary: {
-        totalInvested,
-        totalEarned,
-        activeCount,
+      msg: "Investment summary fetched successfully",
+      data: {
+        summary: {
+          totalInvested,
+          totalEarned,
+          activeCount,
+        },
       },
     });
 
   } catch (err) {
     console.error("SUMMARY ERROR:", err.message);
-    res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ success: false, msg: "Internal server error", data: null });
   }
 });
 

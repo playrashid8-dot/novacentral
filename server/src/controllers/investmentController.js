@@ -20,7 +20,11 @@ export const createInvestment = async (req, res) => {
 
     // ✅ VALIDATION
     if (!amount || amount < 10) {
-      return res.status(400).json({ msg: "Minimum investment is $10" });
+      return res.status(400).json({
+        success: false,
+        msg: "Minimum investment is $10",
+        data: null,
+      });
     }
 
     const plans = {
@@ -31,22 +35,38 @@ export const createInvestment = async (req, res) => {
     };
 
     if (!plans[plan]) {
-      return res.status(400).json({ msg: "Invalid plan" });
+      return res.status(400).json({
+        success: false,
+        msg: "Invalid plan",
+        data: null,
+      });
     }
 
     // 🔍 USER
     const user = await User.findById(req.user._id);
 
     if (!user) {
-      return res.status(404).json({ msg: "User not found" });
+      return res.status(404).json({
+        success: false,
+        msg: "User not found",
+        data: null,
+      });
     }
 
     if (user.isBlocked) {
-      return res.status(403).json({ msg: "Account blocked" });
+      return res.status(403).json({
+        success: false,
+        msg: "Account blocked",
+        data: null,
+      });
     }
 
     if (user.balance < amount) {
-      return res.status(400).json({ msg: "Insufficient balance" });
+      return res.status(400).json({
+        success: false,
+        msg: "Insufficient balance",
+        data: null,
+      });
     }
 
     const selected = plans[plan];
@@ -91,12 +111,12 @@ export const createInvestment = async (req, res) => {
     res.json({
       success: true,
       msg: "Investment started 🚀",
-      investment,
+      data: { investment },
     });
 
   } catch (err) {
     console.error("INVESTMENT ERROR:", err.message);
-    res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ success: false, msg: "Internal server error", data: null });
   }
 };
 
@@ -111,11 +131,12 @@ export const getMyInvestments = async (req, res) => {
 
     res.json({
       success: true,
-      investments: data,
+      msg: "Investments fetched successfully",
+      data: { investments: data },
     });
 
   } catch (err) {
     console.error("GET INVESTMENTS ERROR:", err.message);
-    res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ success: false, msg: "Internal server error", data: null });
   }
 };

@@ -4,11 +4,7 @@ import User from "../models/User.js";
 
 const auth = async (req, res, next) => {
   try {
-    const cookieToken = req.cookies?.token;
-    const header = req.headers.authorization;
-    const headerToken =
-      header && header.startsWith("Bearer ") ? header.split(" ")[1] : null;
-    const token = cookieToken || headerToken;
+    const token = req.cookies?.token;
 
     // ❌ EMPTY TOKEN
     if (!token) {

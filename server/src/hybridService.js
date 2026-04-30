@@ -38,7 +38,11 @@ const app = express();
 const PORT = Number(process.env.PORT) || 5050;
 
 app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok" });
+  res.json({
+    success: true,
+    msg: "Health check ok",
+    data: { status: "ok" },
+  });
 });
 
 app.listen(PORT, () => {
