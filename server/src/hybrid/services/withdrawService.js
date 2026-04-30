@@ -19,6 +19,7 @@ import {
   failIdempotency,
   getCompletedIdempotency,
   markIdempotencyProcessing,
+  releaseIdempotentAction,
 } from "./idempotencyService.js";
 
 const getMonthlyLimit = (level) => WITHDRAW_MONTHLY_LIMITS[Math.min(Number(level || 0), 3)] || 0;
@@ -581,52 +582,58 @@ export const executeApprovedWithdrawalPayout = async (withdrawalId = null) => {
   }
 
   const payoutKey = `withdrawal:${String(withdrawal._id)}`;
-  const storedResponse = await getCompletedIdempotency("payout", payoutKey);
-  if (storedResponse?.txHash) {
-    await markHybridWithdrawalPaidAfterAutoVerification(withdrawal._id, storedResponse.txHash, null);
-    return { processed: true, withdrawalId: withdrawal._id, txHash: storedResponse.txHash };
-  }
+  let txHash = normalizeTxHash(withdrawal.txHash);
 
   try {
-    await markIdempotencyProcessing("payout", payoutKey);
-
-    let txHash = normalizeTxHash(withdrawal.txHash);
-
-    if (!txHash) {
-      const token = getPayoutContract();
-      const amountWei = parseUnits(String(withdrawal.netAmount), HYBRID_TOKEN.decimals);
-      const tx = await token.transfer(withdrawal.walletAddress, amountWei);
-      txHash = normalizeTxHash(tx.hash);
-
-      if (!txHash) {
-        throw new Error("Payout transaction hash missing after broadcast");
-      }
-
-      const stored = await HybridWithdrawal.findOneAndUpdate(
-        {
-          _id: withdrawal._id,
-          status: "approved",
-          paidAt: null,
-          $or: [{ txHash: null }, { txHash: "" }],
-        },
-        {
-          $set: {
-            txHash,
-            payoutStatus: "verifying",
-          },
-        },
-        { new: true }
-      );
-
-      if (!stored) {
-        throw new Error("Unable to store payout transaction hash");
-      }
-
-      await tx.wait(1);
+    if (txHash) {
+      const result = await markHybridWithdrawalPaidAfterAutoVerification(withdrawal._id, txHash);
+      return { processed: true, ...result };
     }
 
+    const storedResponse = await getCompletedIdempotency("payout", payoutKey);
+    if (storedResponse?.txHash) {
+      const result = await markHybridWithdrawalPaidAfterAutoVerification(
+        withdrawal._id,
+        storedResponse.txHash
+      );
+      return { processed: true, ...result };
+    }
+
+    await markIdempotencyProcessing("payout", payoutKey);
+
+    const token = getPayoutContract();
+    const amountWei = parseUnits(String(withdrawal.netAmount), HYBRID_TOKEN.decimals);
+    const tx = await token.transfer(withdrawal.walletAddress, amountWei);
+    txHash = normalizeTxHash(tx.hash);
+
+    if (!txHash) {
+      throw new Error("Payout transaction hash missing after broadcast");
+    }
+
+    const stored = await HybridWithdrawal.findOneAndUpdate(
+      {
+        _id: withdrawal._id,
+        status: "approved",
+        paidAt: null,
+        $or: [{ txHash: null }, { txHash: "" }],
+      },
+      {
+        $set: {
+          txHash,
+          payoutStatus: "verifying",
+        },
+      },
+      { new: true }
+    );
+
+    if (!stored) {
+      throw new Error("Unable to store payout transaction hash");
+    }
+
+    await tx.wait(1);
+
     await verifyPayoutTransferInReceipt(txHash, withdrawal.walletAddress, withdrawal.netAmount);
-    const result = await markHybridWithdrawalPaidAfterAutoVerification(withdrawal._id, txHash, null);
+    const result = await markHybridWithdrawalPaidAfterAutoVerification(withdrawal._id, txHash);
     await completeIdempotency(
       "payout",
       payoutKey,
@@ -638,7 +645,9 @@ export const executeApprovedWithdrawalPayout = async (withdrawalId = null) => {
     );
     return { processed: true, ...result };
   } catch (error) {
-    await failIdempotency("payout", payoutKey, error);
+    if (!txHash) {
+      await releaseIdempotentAction("payout", payoutKey);
+    }
     await storePayoutFailure(withdrawal._id, error);
     throw error;
   }
@@ -726,7 +735,7 @@ export const adminApproveHybridWithdrawal = async (withdrawalId, adminId = null)
   }
 };
 
-const markHybridWithdrawalPaidAfterAutoVerification = async (withdrawalId, txHash, adminId = null) => {
+const markHybridWithdrawalPaidAfterAutoVerification = async (withdrawalId, txHash) => {
   const normalized = normalizeTxHash(txHash);
   if (!normalized) {
     throw adminClientError("Valid transaction hash required");
@@ -810,7 +819,6 @@ const markHybridWithdrawalPaidAfterAutoVerification = async (withdrawalId, txHas
           payoutStatus: "idle",
           payoutLockedUntil: null,
           payoutLastError: "",
-          ...(adminId ? { paidBy: adminId } : {}),
         },
       },
       { new: true, session }

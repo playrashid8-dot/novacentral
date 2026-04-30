@@ -12,6 +12,7 @@ import { scanHybridDeposits } from "../hybrid/services/depositListener.js";
 import { addHybridLedgerEntries } from "../hybrid/services/ledgerService.js";
 import { getProvider } from "../hybrid/utils/provider.js";
 import { getHybridAdminSystemStatus } from "../hybrid/utils/adminSystemStatus.js";
+import { getSystemHealth } from "../hybrid/utils/systemHealth.js";
 import { getReadyRedis } from "../config/redis.js";
 import { depositQueue } from "../queues/depositQueue.js";
 import { writeAdminAudit } from "../utils/adminAudit.js";
@@ -91,6 +92,7 @@ router.get("/system-status", auth, isAdmin, async (req, res) => {
 
 router.get("/system-health", auth, isAdmin, async (req, res) => {
   try {
+    const system = await getSystemHealth();
     let queue = null;
     try {
       if (getReadyRedis() && depositQueue) {
@@ -106,6 +108,10 @@ router.get("/system-health", auth, isAdmin, async (req, res) => {
       data: {
         redis: !!getReadyRedis(),
         queue,
+        system,
+        pendingDeposits: system.pendingDeposits,
+        failedPayouts: system.failedPayouts,
+        executor: system.executor,
         uptime: process.uptime(),
       },
     });

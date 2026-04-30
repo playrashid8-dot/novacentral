@@ -8,6 +8,12 @@ const conflictError = (message) => {
   return err;
 };
 
+const failedIdempotencyError = (row) => {
+  const err = new Error(row?.lastError || "Previous request with this idempotency key failed");
+  err.statusCode = 409;
+  return err;
+};
+
 export async function beginIdempotentAction(type, key) {
   const normalized = normalizeKey(key);
   if (!normalized) {
@@ -16,7 +22,11 @@ export async function beginIdempotentAction(type, key) {
 
   const existing = await Idempotency.findOne({ type, key: normalized }).lean();
   if (existing) {
-    if (existing.status === "completed" || existing.status === "failed") {
+    if (existing.status === "failed") {
+      throw failedIdempotencyError(existing);
+    }
+
+    if (existing.status === "completed") {
       return { key: normalized, existing, shouldProcess: false };
     }
 
@@ -35,7 +45,11 @@ export async function beginIdempotentAction(type, key) {
     }
 
     const raced = await Idempotency.findOne({ type, key: normalized }).lean();
-    if (raced?.status === "completed" || raced?.status === "failed") {
+    if (raced?.status === "failed") {
+      throw failedIdempotencyError(raced);
+    }
+
+    if (raced?.status === "completed") {
       return { key: normalized, existing: raced, shouldProcess: false };
     }
 
@@ -49,6 +63,13 @@ export async function completeIdempotentAction(type, key, response, session = nu
   const normalized = normalizeKey(key);
   if (!normalized) {
     return null;
+  }
+
+  const existing = await Idempotency.findOne({ type, key: normalized })
+    .session(session)
+    .lean();
+  if (existing?.status === "failed") {
+    throw failedIdempotencyError(existing);
   }
 
   return Idempotency.findOneAndUpdate(
@@ -109,8 +130,15 @@ export async function getCompletedIdempotency(type, key) {
   const row = await Idempotency.findOne({
     type,
     key: normalized,
-    status: "completed",
   }).lean();
+
+  if (row?.status === "failed") {
+    throw failedIdempotencyError(row);
+  }
+
+  if (row?.status !== "completed") {
+    return null;
+  }
 
   return row?.response || null;
 }
@@ -121,19 +149,46 @@ export async function markIdempotencyProcessing(type, key, session = null) {
     return null;
   }
 
-  return Idempotency.findOneAndUpdate(
-    { type, key: normalized },
-    {
-      $set: {
-        status: "processing",
-        lastError: "",
+  const existing = await Idempotency.findOne({ type, key: normalized })
+    .session(session)
+    .lean();
+  if (existing?.status === "failed") {
+    throw failedIdempotencyError(existing);
+  }
+  if (existing?.status === "completed") {
+    return existing;
+  }
+
+  try {
+    return await Idempotency.findOneAndUpdate(
+      { type, key: normalized },
+      {
+        $set: {
+          status: "processing",
+          lastError: "",
+        },
+        $setOnInsert: {
+          response: null,
+        },
       },
-      $setOnInsert: {
-        response: null,
-      },
-    },
-    { upsert: true, new: true, ...(session ? { session } : {}) }
-  );
+      { upsert: true, new: true, ...(session ? { session } : {}) }
+    );
+  } catch (err) {
+    if (err?.code !== 11000) {
+      throw err;
+    }
+
+    const raced = await Idempotency.findOne({ type, key: normalized })
+      .session(session)
+      .lean();
+    if (raced?.status === "failed") {
+      throw failedIdempotencyError(raced);
+    }
+    if (raced?.status === "completed") {
+      return raced;
+    }
+    throw conflictError("Request is already being processed");
+  }
 }
 
 export async function completeIdempotency(type, key, response, session = null) {

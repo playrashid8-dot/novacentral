@@ -36,6 +36,7 @@ let withdrawExecutorTimer = null;
 let healthTimer = null;
 let sweepRunning = false;
 let withdrawExecutorRunning = false;
+let withdrawExecutorIntervalMs = null;
 
 const BASE_SCAN = 300;
 
@@ -306,6 +307,7 @@ export const startDepositListener = () => {
   pendingDepositTimer = setInterval(runPendingDepositRetry, retryPendingDepositMs);
 
   const withdrawExecutorMs = Number(process.env.HYBRID_WITHDRAW_EXECUTOR_MS || 30000);
+  withdrawExecutorIntervalMs = withdrawExecutorMs;
   const runWithdrawExecutor = async () => {
     if (withdrawExecutorRunning) {
       return;
@@ -344,3 +346,9 @@ export const startDepositListener = () => {
 };
 
 export const startHybridEngine = startDepositListener;
+
+export const getHybridWithdrawExecutorStatus = () => ({
+  scheduled: withdrawExecutorTimer != null,
+  running: withdrawExecutorRunning,
+  intervalMs: withdrawExecutorIntervalMs,
+});
