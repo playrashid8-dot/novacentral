@@ -7,6 +7,14 @@ export const fetchHybridSummary = async () => {
   return data && typeof data === "object" && Object.keys(data).length ? data : null;
 };
 
+/** Hybrid ledger entries only (deposits, withdrawals, ROI, referral, salary). */
+export const fetchHybridLedger = async () => {
+  const res = await API.get("/hybrid/ledger");
+  const response = normalize(res.data);
+  const entries = response.data?.entries;
+  return Array.isArray(entries) ? entries : [];
+};
+
 /** Fresh direct/team counts for stage-based salary milestones (since last salary claim). */
 export const fetchSalaryProgress = async () => {
   const res = await API.get("/user/salary-progress");

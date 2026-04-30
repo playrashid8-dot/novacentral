@@ -27,7 +27,7 @@ export default function Home() {
       setStatsError(false);
       try {
         const res = await axios.get(`${BASE_URL}/public/platform-stats`, {
-          withCredentials: true,
+          withCredentials: false,
           validateStatus: (s) => s === 200,
         });
 

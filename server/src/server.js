@@ -24,7 +24,14 @@ import adminRoutes from "./routes/adminRoutes.js";
 import publicStatsRoutes from "./routes/publicStatsRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import historyRoutes from "./routes/historyRoutes.js";
-import { roiRoutes, salaryRoutes, stakingRoutes, withdrawRoutes, hybridDepositRoutes } from "./hybrid/routes/index.js";
+import {
+  roiRoutes,
+  salaryRoutes,
+  stakingRoutes,
+  withdrawRoutes,
+  hybridDepositRoutes,
+  ledgerRoutes,
+} from "./hybrid/routes/index.js";
 import { startHybridEngine, runHybridStartupRecovery } from "./hybrid/engine/index.js";
 import { startRealtimeListener } from "./hybrid/listeners/realtimeListener.js";
 import { checkRpcHealth } from "./hybrid/utils/provider.js";
@@ -288,6 +295,7 @@ app.use("/api/salary", salaryRoutes);
 app.use("/api/stake", stakingRoutes);
 app.use("/api/withdraw", withdrawRoutes);
 app.use("/api/hybrid/deposit", hybridDepositRoutes);
+app.use("/api/hybrid/ledger", ledgerRoutes);
 
 /* ==============================
    ❌ 404 HANDLER

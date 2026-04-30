@@ -8,7 +8,7 @@ export function resolveStatusTier(raw: string): "success" | "warning" | "danger"
 
   if (/fail|reject|error|cancel/.test(s)) return "danger";
   if (/pending|confirming|wait|process|claimable/.test(s)) return "warning";
-  if (/confirmed|success|approved|paid|claimed|swept|credited|complete/.test(s)) return "success";
+  if (/confirmed|success|approved|paid|claimed|swept|credited|complete|refunded/.test(s)) return "success";
 
   return "muted";
 }

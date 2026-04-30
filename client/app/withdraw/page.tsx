@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { motion } from "framer-motion";
 import ProtectedRoute from "../../components/ProtectedRoute";
-import { getApiErrorMessage } from "../../lib/api";
-import { showToast as showVipToast } from "../../lib/vipToast";
+import { showToast as showVipToast, getMessage } from "../../lib/vipToast";
 import { estimateWithdrawNetUsd, inferWithdrawFeeRate } from "../../lib/withdrawFeeEstimate";
 import { fetchHybridSummary, fetchHybridWithdrawals, requestHybridWithdraw } from "../../lib/hybrid";
 import { maskAddress, isValidEvmAddress42 } from "../../lib/helpers";
@@ -15,6 +14,8 @@ import Input from "../../components/ui/Input";
 import Badge from "../../components/ui/Badge";
 import Modal from "../../components/ui/Modal";
 import { SkeletonLine } from "../../components/Skeleton";
+
+const OPEN_WITHDRAW_STATUSES = new Set(["pending", "claimable", "approved"]);
 
 const BSC_TX_PREFIX = "https://bscscan.com/tx/";
 
@@ -89,7 +90,7 @@ export default function WithdrawPage() {
         setWithdrawals(withdrawalData || []);
       }
     } catch (e: any) {
-      if (!silent) setLoadError(getApiErrorMessage(e, "Could not load withdrawal data"));
+      if (!silent) setLoadError(getMessage(e, "Could not load withdrawal data"));
     } finally {
       if (!silent) setDataLoading(false);
     }
@@ -120,6 +121,14 @@ export default function WithdrawPage() {
   const withdraw = async () => {
     if (loading) return;
     setSubmitError("");
+
+    const hasOpenWithdrawal = withdrawals.some((w) =>
+      OPEN_WITHDRAW_STATUSES.has(String(w.status || "").toLowerCase()),
+    );
+    if (hasOpenWithdrawal) {
+      showVipToast("error", "Withdrawal already pending");
+      return;
+    }
 
     const amt = Number(amount || 0);
 
@@ -169,7 +178,7 @@ export default function WithdrawPage() {
       setWithdrawPassword("");
       await loadHybrid(true);
     } catch (err: any) {
-      const msg = formatWithdrawSubmitError(err, getApiErrorMessage(err, "Request failed"));
+      const msg = formatWithdrawSubmitError(err, getMessage(err, "Request failed"));
       setSubmitError(msg);
       const toastMsg =
         /already pending/i.test(msg) ? "Withdrawal already pending" : msg;

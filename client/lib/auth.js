@@ -61,7 +61,7 @@ export const logout = (reason) => {
 
   setTimeout(() => {
     window.location.href = "/login";
-  }, 500);
+  }, 800);
 };
 
 export const resetLogoutState = () => {
