@@ -11,7 +11,6 @@ import {
   DASHBOARD_MAIN_BUNDLE_KEY,
   hybridDashboardSWRConfig,
 } from "../../lib/swr-fetch";
-import { useAnimatedNumber } from "../../lib/useAnimatedNumber";
 import AppToast from "../../components/AppToast";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import PageWrapper from "../../components/PageWrapper";
@@ -29,8 +28,8 @@ const DashboardRoiSection = dynamic(
 
 function StatTilesSkeleton({ cardClassName }: { cardClassName: string }) {
   return (
-    <div className="mt-5 grid grid-cols-1 gap-2.5 sm:mt-6 sm:grid-cols-3 sm:gap-3" aria-busy aria-label="Loading stats">
-      {[1, 2, 3].map((i) => (
+    <div className="mt-5 grid grid-cols-1 gap-2.5 sm:mt-6 sm:grid-cols-2 sm:gap-3" aria-busy aria-label="Loading stats">
+      {[1, 2].map((i) => (
         <div key={i} className={`${cardClassName} p-3 sm:p-4`}>
           <div className="h-2.5 w-24 animate-pulse rounded bg-white/10" />
           <div className="mt-3 h-8 w-28 animate-pulse rounded bg-white/10" />
@@ -43,8 +42,10 @@ function StatTilesSkeleton({ cardClassName }: { cardClassName: string }) {
 function RoiBlockSkeleton({ cardClass }: { cardClass: string }) {
   return (
     <div className={`${cardClass} mt-5 animate-pulse p-4 shadow-none sm:p-5`} aria-busy aria-label="Loading ROI">
-      <div className="h-2.5 w-20 rounded bg-white/15" />
-      <div className="mt-4 h-24 rounded-xl bg-white/5 sm:h-20" />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="h-5 w-32 rounded bg-white/15" />
+        <div className="h-12 w-full rounded-2xl bg-white/10 sm:w-36" />
+      </div>
     </div>
   );
 }
@@ -55,19 +56,16 @@ export default function Dashboard() {
   const [toast, setToast] = useState("");
   const [toastTone, setToastTone] = useState<"neutral" | "success" | "error">("neutral");
   const [roiLoading, setRoiLoading] = useState(false);
-  const [tick, setTick] = useState(0);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
 
   const {
     data: bundle,
     mutate: mutateDashboardBundle,
     isLoading: loadingBundle,
-    isValidating: statsValidating,
   } = useSWR(DASHBOARD_MAIN_BUNDLE_KEY, fetchDashboardMainBundleSWR, hybridDashboardSWRConfig);
 
   const user = bundle?.user;
   const hybrid = bundle?.hybrid;
-  const loadingPage = loadingBundle && !user;
   const loadingStats = loadingBundle && !bundle;
 
   useEffect(() => {
@@ -84,18 +82,11 @@ export default function Dashboard() {
     }, 2500);
   };
 
-  useEffect(() => {
-    if (!hybrid?.nextRoiClaimAt || hybrid?.canClaimRoi) return;
-    const id = setInterval(() => setTick((n) => n + 1), 1000);
-    return () => clearInterval(id);
-  }, [hybrid?.nextRoiClaimAt, hybrid?.canClaimRoi]);
-
   const currentVipLevel = Number(hybrid?.level ?? user?.level ?? 0);
-  const totalEarnedUsd = Number(hybrid?.totalEarnings ?? user?.totalEarnings ?? 0);
   const depositUsd = Number(hybrid?.depositBalance ?? 0);
+  const rewardUsd = Number(hybrid?.rewardBalance ?? 0);
+  const totalBalanceUsd = depositUsd + rewardUsd;
   const stakingUsd = Number(hybrid?.activeStakeAmount ?? 0);
-
-  const animEarned = useAnimatedNumber(loadingStats ? 0 : totalEarnedUsd, 900);
 
   const handleClaimRoi = async () => {
     if (roiLoading || hybrid?.canClaimRoi !== true || currentVipLevel < 1) return;
@@ -119,8 +110,8 @@ export default function Dashboard() {
   return (
     <ProtectedRoute>
       <PageWrapper
-        loading={loadingPage && !user}
-        data={user?._id}
+        loading={false}
+        data={loadingBundle ? true : user?._id}
         emptyText="No data available"
       >
         <div className="relative w-full max-w-full overflow-x-hidden px-1 pb-24 text-white sm:px-0">
@@ -128,13 +119,7 @@ export default function Dashboard() {
 
           <header className="relative z-10 flex flex-col gap-3 transition-opacity duration-300 ease-out sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h1 className="text-lg font-bold tracking-tight text-white sm:text-2xl">HybridEarn</h1>
-              <p className="mt-0.5 text-[11px] text-gray-400 sm:text-xs">Smart Income Dashboard</p>
-              {loadingStats ? (
-                <p className="mt-2 text-[11px] text-gray-500">Loading stats…</p>
-              ) : statsValidating ? (
-                <p className="mt-2 text-[11px] text-gray-500">Updating…</p>
-              ) : null}
+              <h1 className="text-lg font-bold tracking-tight text-white sm:text-xl">Smart Income Dashboard</h1>
             </div>
             <LiveRefreshIndicator lastUpdatedAt={lastUpdatedAt} className="sm:pt-1" />
           </header>
@@ -142,10 +127,9 @@ export default function Dashboard() {
           {loadingStats ? (
             <StatTilesSkeleton cardClassName={CARD} />
           ) : (
-            <div className="mt-5 grid grid-cols-1 gap-2.5 sm:mt-6 sm:grid-cols-3 sm:gap-3">
-              <StatTile cardClassName={CARD} label="Deposit Balance" value={`$${depositUsd.toFixed(2)}`} />
+            <div className="mt-5 grid grid-cols-1 gap-2.5 sm:mt-6 sm:grid-cols-2 sm:gap-3">
+              <StatTile cardClassName={CARD} label="Total Balance" value={`$${totalBalanceUsd.toFixed(2)}`} />
               <StatTile cardClassName={CARD} label="Active Plan" value={`$${stakingUsd.toFixed(2)}`} />
-              <StatTile cardClassName={CARD} label="Total Earned" value={`$${animEarned.toFixed(2)}`} accent />
             </div>
           )}
 
@@ -155,7 +139,6 @@ export default function Dashboard() {
             <DashboardRoiSection
               cardClass={CARD}
               hybrid={hybrid}
-              tick={tick}
               roiLoading={roiLoading}
               currentVipLevel={currentVipLevel}
               handleClaimRoi={handleClaimRoi}
@@ -177,20 +160,14 @@ export default function Dashboard() {
 function StatTile({
   label,
   value,
-  accent,
   cardClassName,
 }: {
   label: string;
   value: string;
-  accent?: boolean;
   cardClassName: string;
 }) {
   return (
-    <div
-      className={`${cardClassName} p-3 transition duration-300 ease-out hover:scale-[1.01] sm:p-4 ${
-        accent ? "shadow-[0_0_20px_rgba(16,185,129,0.28)]" : ""
-      }`}
-    >
+    <div className={`${cardClassName} p-3 transition duration-300 ease-out hover:scale-[1.01] sm:p-4`}>
       <p className="text-[10px] text-gray-400 sm:text-xs">{label}</p>
       <h2 className="mt-1 text-xl font-bold tabular-nums text-white sm:mt-1.5 sm:text-2xl">{value}</h2>
     </div>

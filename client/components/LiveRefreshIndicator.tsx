@@ -19,7 +19,7 @@ function formatAgo(ms: number) {
 }
 
 /** Live pulse + “Updated X ago” for auto-refresh UX. */
-function LiveRefreshIndicator({ lastUpdatedAt, className = "", label = "Live" }: Props) {
+function LiveRefreshIndicator({ lastUpdatedAt, className = "", label = "🟢 Live" }: Props) {
   const [, setTick] = useState(0);
 
   useEffect(() => {

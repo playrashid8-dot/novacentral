@@ -65,19 +65,9 @@ export default function Home() {
     fetchStats();
   }, []);
 
-  const statLoading = (
-    <span className="inline-flex items-center justify-center gap-2" aria-busy="true">
-      <span
-        className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/25 border-t-white"
-        aria-hidden
-      />
-      <span className="font-black text-gray-200">…</span>
-    </span>
-  );
-
   const statDisplay = (value: unknown) => {
-    if (statsLoading) return statLoading;
-    if (statsError || value === undefined || value === null) return "—";
+    if (statsLoading) return "...";
+    if (statsError || value === undefined || value === null) return "Stats unavailable";
     return Number(value).toLocaleString();
   };
 
@@ -125,7 +115,7 @@ export default function Home() {
             <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white">HybridEarn</h1>
             <p className="mt-3 text-lg sm:text-xl font-semibold text-gray-200">Earn on-chain with HybridEarn</p>
             <p className="mt-4 text-sm leading-relaxed text-gray-400">
-              Manual daily ROI, staking, referrals, and team salary bonuses — with secure cookie auth and BEP20
+               daily ROI, staking, referrals, and team salary bonuses — with secure cookie auth and BEP20
               infrastructure.
             </p>
           </GlassCard>
@@ -164,9 +154,6 @@ export default function Home() {
               className="p-4 text-center"
             />
           </div>
-          {statsError && !statsLoading && (
-            <p className="mt-3 text-center text-xs text-amber-200/90">Stats temporarily unavailable</p>
-          )}
         </section>
 
         {/* Features */}
@@ -175,7 +162,7 @@ export default function Home() {
             Features
           </h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Feature title="Daily ROI" desc="Manual daily ROI system" icon="calendar" />
+            <Feature title="Daily ROI" desc="Daily ROI system" icon="calendar" />
             <Feature title="VIP Rates" desc="VIP rates from 1% to 2%" icon="spark" />
             <Feature title="Referral Income" desc="L1, L2, L3 rewards" icon="users" />
             <Feature title="Staking" desc="7d to 60d plans" icon="layers" />
@@ -199,9 +186,9 @@ export default function Home() {
             Security
           </h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <SecurityCard label="httpOnly cookies" icon="lock" />
-            <SecurityCard label="Withdrawal review" icon="shield" />
-            <SecurityCard label="BEP20 USDT rails" icon="chain" />
+            <SecurityCard label="Fast & Secure" icon="lock" />
+            <SecurityCard label="24/7 Support" icon="shield" />
+            <SecurityCard label="Trusted Platform" icon="chain" />
           </div>
         </section>
 

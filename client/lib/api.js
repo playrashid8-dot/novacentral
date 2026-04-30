@@ -117,32 +117,16 @@ API.interceptors.request.use(async (config) => {
 
   if (typeof window !== "undefined") {
     config._requestStartedAt = Date.now();
-    /** Pending ≥ 2000 ms before surfacing slow-network copy (fewer needless toasts). */
-    config.__updatingToastTimer = window.setTimeout(() => {
-      showSafeToast("Updating data…");
-    }, 2000);
   }
 
   return config;
 });
 
-function clearUpdatingToastTimer(cfg) {
-  if (!cfg) return;
-  if (cfg.__updatingToastTimer != null) {
-    window.clearTimeout(cfg.__updatingToastTimer);
-    delete cfg.__updatingToastTimer;
-  }
-}
-
 API.interceptors.response.use(
-  (res) => {
-    clearUpdatingToastTimer(res.config);
-    return res;
-  },
+  (res) => res,
 
   async (error) => {
     const cfgEarly = error.config || {};
-    clearUpdatingToastTimer(cfgEarly);
 
     const reqUrlEarly = String(cfgEarly.url || "");
     const skipWithdrawUiToast = reqUrlEarly.includes("/user/withdraw");
@@ -151,7 +135,6 @@ API.interceptors.response.use(
       if (typeof window !== "undefined" && !skipWithdrawUiToast) {
         const isTimeout =
           error.code === "ECONNABORTED" || error.code === "TIMEOUT";
-        /** Timer shows "Updating data…" only after pending ≥2000ms; clears on settle. */
         const started = Number(cfgEarly._requestStartedAt) || 0;
         const elapsed = started ? Date.now() - started : 0;
         const networkMsg =

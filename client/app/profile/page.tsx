@@ -148,7 +148,7 @@ export default function Profile() {
           <GlassCard glow="gold" className="mt-5">
             <p className="text-[10px] uppercase tracking-[0.24em] text-yellow-200/80">Security</p>
             <h3 className="mt-1 text-lg font-black">Update password</h3>
-            <p className="mt-2 text-xs text-gray-400">Session uses httpOnly cookies only.</p>
+            <p className="mt-2 text-xs text-gray-400">Fast & Secure Payments</p>
             <input
               type="password"
               placeholder="Current password"
