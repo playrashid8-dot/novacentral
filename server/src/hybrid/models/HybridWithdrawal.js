@@ -61,8 +61,6 @@ const hybridWithdrawalSchema = new mongoose.Schema(
       default: null,
       trim: true,
       lowercase: true,
-      unique: true,
-      sparse: true,
     },
     sourceRewardAmount: {
       type: Number,
@@ -161,6 +159,17 @@ const hybridWithdrawalSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+  }
+);
+
+const TXHASH_PARTIAL = { txHash: { $type: "string" } };
+
+/** Uniqueness for documents that store a tx hash string (unset field = no index entry; fixes null collisions) */
+hybridWithdrawalSchema.index(
+  { txHash: 1 },
+  {
+    unique: true,
+    partialFilterExpression: TXHASH_PARTIAL,
   }
 );
 

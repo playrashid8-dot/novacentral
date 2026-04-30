@@ -21,6 +21,9 @@
     "withdraw:backfill-risk": "node scripts/backfillWithdrawRisk.js",
     "deposit:backfill-qualified": "node scripts/backfillQualifiedDeposits.js",
     "ledger:reconcile": "node scripts/reconcileHybridLedger.js",
+    "ledger:fix-mismatch": "node scripts/fixLedgerMismatch.js",
+    "referral:backfill": "node scripts/backfillReferral.js",
+    "db:ensure-indexes": "node scripts/ensureProductionIndexes.js",
     "test:p0-financial-safety": "node scripts/p0FinancialSafetySimulation.js"
   },
   "keywords": [

@@ -21,6 +21,7 @@ import depositRoutes from "./routes/depositRoutes.js";
 import investmentRoutes from "./routes/investmentRoutes.js";
 import withdrawalRoutes from "./routes/withdrawalRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import publicStatsRoutes from "./routes/publicStatsRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import historyRoutes from "./routes/historyRoutes.js";
 import { roiRoutes, salaryRoutes, stakingRoutes, withdrawRoutes, hybridDepositRoutes } from "./hybrid/routes/index.js";
@@ -273,6 +274,7 @@ app.use((req, res, next) => {
 /* ==============================
    🔥 API ROUTES
 ============================== */
+app.use("/api/public", healthLimiter, publicStatsRoutes);
 app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/deposit", depositRoutes);
