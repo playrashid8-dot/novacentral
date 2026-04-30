@@ -164,9 +164,12 @@ export async function processDepositLog(log, iface, usersByWallet, options = {})
     return { creditFailure: false, processedDelta: 0 };
   }
 
-  if (process.env.NODE_ENV !== "production") {
-    console.log(`📥 Deposit detected: ${txHash}`);
-  }
+  console.log("📥 Deposit detected", {
+    txHash,
+    userId: String(matchedUser._id),
+    amount,
+    blockNumber: log.blockNumber,
+  });
   devLog("📥 Checking deposits for:", userWalletLower);
   devLog("📥 Deposit detail:", {
     txHash: shortTx(txHash),
@@ -189,6 +192,17 @@ export async function processDepositLog(log, iface, usersByWallet, options = {})
     await markPendingDepositCredited(txHash);
   };
 
+  const pendingFailurePayload = {
+    txHash,
+    userId: matchedUser._id,
+    walletAddress: toAddress,
+    amount,
+    blockNumber: log.blockNumber,
+    fromAddress,
+    tokenAddress: String(process.env.HYBRID_USDT_CONTRACT || "").trim(),
+    serializedLog,
+  };
+
   if (options?.skipQueue !== true) {
     /** @type {{ kind: string; job?: unknown } | null} */
     let enqueueOutcome = null;
@@ -201,47 +215,67 @@ export async function processDepositLog(log, iface, usersByWallet, options = {})
         : null;
     } catch (err) {
       console.error("❌ Deposit enqueue failed:", err?.message || String(err));
+      await recordPendingDepositFailure({
+        ...pendingFailurePayload,
+        error: err,
+      });
+      return { creditFailure: true, holdCheckpoint: true, processedDelta: 0 };
     }
 
-    if (enqueueOutcome?.kind === "queued") {
+    if (!serializedLog || !enqueueOutcome) {
+      console.error("❌ Deposit enqueue skipped: missing serialized log", shortTx(txHash));
+      await recordPendingDepositFailure({
+        ...pendingFailurePayload,
+        error: new Error("enqueueDepositJob: missing serialized transfer log"),
+      });
+      return { creditFailure: true, holdCheckpoint: true, processedDelta: 0 };
+    }
+
+    if (enqueueOutcome.kind === "queued") {
       return { creditFailure: false, holdCheckpoint: true, processedDelta: 0, queued: true };
     }
 
-    if (enqueueOutcome?.kind === "defer") {
+    if (enqueueOutcome.kind === "defer") {
+      console.log("⏸️ Deposit deferred — queue/worker not ready, will retry on next scan", {
+        txHash,
+        userId: String(matchedUser._id),
+      });
       return { creditFailure: false, holdCheckpoint: true, processedDelta: 0 };
     }
 
-    console.error("❌ Deposit queue unavailable — crediting directly and holding checkpoint:", shortTx(txHash));
-    await recordPendingDepositFailure({
-      txHash,
-      userId: matchedUser._id,
-      walletAddress: toAddress,
-      amount,
-      blockNumber: log.blockNumber,
-      fromAddress,
-      tokenAddress: String(process.env.HYBRID_USDT_CONTRACT || "").trim(),
-      serializedLog,
-      error: new Error("Deposit queue unavailable"),
-    });
-
-    try {
-      await creditDirectly();
-      return { creditFailure: false, holdCheckpoint: true, processedDelta: 1 };
-    } catch (err) {
-      console.error("❌ ERROR:", err?.message || String(err));
-      await recordPendingDepositFailure({
+    if (enqueueOutcome.kind === "direct") {
+      console.warn("⚠️ Redis unavailable — crediting deposit directly (fallback)", {
         txHash,
-        userId: matchedUser._id,
-        walletAddress: toAddress,
+        userId: String(matchedUser._id),
         amount,
         blockNumber: log.blockNumber,
-        fromAddress,
-        tokenAddress: String(process.env.HYBRID_USDT_CONTRACT || "").trim(),
-        serializedLog,
-        error: err,
       });
-      return { creditFailure: true, processedDelta: 0 };
+      await recordPendingDepositFailure({
+        ...pendingFailurePayload,
+        error: new Error("Deposit queue unavailable (Redis down — direct credit path)"),
+      });
+      try {
+        await creditDirectly();
+        return { creditFailure: false, holdCheckpoint: true, processedDelta: 1 };
+      } catch (err) {
+        console.error("❌ Direct deposit credit failed:", err?.message || String(err));
+        await recordPendingDepositFailure({
+          ...pendingFailurePayload,
+          error: err,
+        });
+        return { creditFailure: true, processedDelta: 0 };
+      }
     }
+
+    console.error("❌ Unknown deposit enqueue outcome — not crediting", {
+      txHash,
+      outcome: enqueueOutcome,
+    });
+    await recordPendingDepositFailure({
+      ...pendingFailurePayload,
+      error: new Error("Unknown enqueue outcome"),
+    });
+    return { creditFailure: true, holdCheckpoint: true, processedDelta: 0 };
   }
 
   try {

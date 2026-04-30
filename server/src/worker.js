@@ -44,7 +44,10 @@ if (!isRedisReady(connection)) {
   const worker = new Worker(
     "depositQueue",
     async (job) => {
-      console.log("Processing job:", job.data);
+      const txHash = String(job?.data?.log?.transactionHash || job?.id || "")
+        .trim()
+        .toLowerCase();
+      console.log("⚙️ Processing deposit", { txHash });
       const { processDepositJob } = await import("./hybrid/services/depositService.js");
       return processDepositJob(job.data);
     },
@@ -60,15 +63,21 @@ if (!isRedisReady(connection)) {
   }, 30000);
 
   worker.on("completed", (job, result) => {
-    const tx = String(job?.data?.log?.transactionHash || "").trim();
-    if (!tx) return;
+    const txHash = String(
+      job?.data?.log?.transactionHash || job?.id || result?.txHash || ""
+    )
+      .trim()
+      .toLowerCase();
+    if (!txHash) return;
     const processedDelta = Number(result?.processedDelta);
-    if (process.env.NODE_ENV !== "production") {
-      if (Number.isFinite(processedDelta) && processedDelta > 0) {
-        console.log("✅ Deposit processed:", tx);
-      } else {
-        console.log("⚠️ Skipped (duplicate or invalid):", tx);
-      }
+    if (Number.isFinite(processedDelta) && processedDelta > 0) {
+      console.log("✅ Deposit processed", {
+        txHash,
+        userId: result?.userId,
+        amount: result?.amount,
+      });
+    } else {
+      console.log("⚠️ Duplicate/skipped deposit", { txHash });
     }
   });
 

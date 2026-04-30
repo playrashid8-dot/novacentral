@@ -38,11 +38,13 @@ import { checkRpcHealth } from "./hybrid/utils/provider.js";
 import { getSystemHealth } from "./hybrid/utils/systemHealth.js";
 
 process.on("uncaughtException", (err) => {
-  console.error("CRASH:", err?.message || String(err));
+  console.error("API FATAL:", err);
+  process.exit(1);
 });
 
-process.on("unhandledRejection", (err) => {
-  console.error("REJECTION:", err?.message || String(err));
+process.on("unhandledRejection", (reason) => {
+  console.error("API FATAL:", reason);
+  process.exit(1);
 });
 
 const REQUIRED_ENV_VARS = [

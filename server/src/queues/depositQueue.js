@@ -127,9 +127,7 @@ export async function enqueueDepositJob({ log, blockNumber }) {
       { log: merged, blockNumber: merged.blockNumber },
       addOpts,
     );
-    if (process.env.NODE_ENV !== "production") {
-      console.log("📦 Job queued:", txHash);
-    }
+    console.log("📦 Deposit queued", { txHash });
     return { kind: "queued", job };
   } catch (err) {
     if (!redis || redis.status !== "ready") {
@@ -138,9 +136,7 @@ export async function enqueueDepositJob({ log, blockNumber }) {
 
     const msg = err?.message || String(err);
     if (/already exists|duplicate|JobId/i.test(msg)) {
-      if (process.env.NODE_ENV !== "production") {
-        console.log("📦 Duplicate job skipped (queue):", txHash);
-      }
+      console.log("📦 Deposit queued", { txHash, duplicate: true });
       return { kind: "queued", job: null };
     }
     console.error("❌ Queue error:", msg);

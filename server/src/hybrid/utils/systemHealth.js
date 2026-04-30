@@ -8,6 +8,8 @@ import { getHybridWithdrawExecutorStatus } from "../engine/index.js";
 
 const WORKER_HEARTBEAT_KEY = "depositQueue:worker:heartbeat";
 const WORKER_HEARTBEAT_MAX_AGE_MS = 120000;
+/** Stricter “worker responding” signal for ops (nested `worker.alive`). */
+const WORKER_ALIVE_MAX_AGE_MS = 60000;
 
 export async function getSystemHealth() {
   const mongo = mongoose.connection.readyState === 1;
@@ -18,6 +20,8 @@ export async function getSystemHealth() {
   let workerOk = false;
   let queueLag = null;
   let queueOk = false;
+  /** @type {{ active: number; waiting: number; failed: number } | null} */
+  let depositQueueStats = null;
 
   if (redis) {
     try {
@@ -40,10 +44,16 @@ export async function getSystemHealth() {
         "active",
         "failed"
       );
-      queueLag =
-        Number(counts.waiting || 0) +
-        Number(counts.delayed || 0) +
-        Number(counts.active || 0);
+      const waitingJobs =
+        Number(counts.waiting || 0) + Number(counts.delayed || 0);
+      const activeJobs = Number(counts.active || 0);
+      const failedJobs = Number(counts.failed || 0);
+      depositQueueStats = {
+        active: activeJobs,
+        waiting: waitingJobs,
+        failed: failedJobs,
+      };
+      queueLag = waitingJobs + activeJobs;
       queueOk = true;
     } catch (_) {
       queueOk = false;
@@ -92,6 +102,16 @@ export async function getSystemHealth() {
     ...getHybridWithdrawExecutorStatus(),
     approvedQueue: approvedPayouts,
   };
+  const heartbeatAgeMs =
+    Number.isFinite(workerHeartbeat) && workerHeartbeat > 0
+      ? Date.now() - workerHeartbeat
+      : null;
+  const workerNested = {
+    heartbeatAgeMs,
+    alive:
+      heartbeatAgeMs != null && heartbeatAgeMs < WORKER_ALIVE_MAX_AGE_MS,
+  };
+
   const criticalFailures = [
     !mongo ? "mongo" : null,
     !rpcOk ? "rpc" : null,
@@ -120,12 +140,21 @@ export async function getSystemHealth() {
       withdrawPayout: payoutConfigured,
     },
     queueLag,
+    depositQueue: depositQueueStats
+      ? {
+          active: depositQueueStats.active,
+          waiting: depositQueueStats.waiting,
+          failed: depositQueueStats.failed,
+        }
+      : {
+          active: 0,
+          waiting: 0,
+          failed: 0,
+        },
+    worker: workerNested,
     pendingDeposits,
     failedPayouts,
     executor,
-    workerHeartbeatAgeMs:
-      Number.isFinite(workerHeartbeat) && workerHeartbeat > 0
-        ? Date.now() - workerHeartbeat
-        : null,
+    workerHeartbeatAgeMs: heartbeatAgeMs,
   };
 }

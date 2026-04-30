@@ -112,7 +112,13 @@ async function processSerializedDepositLog(serializedLog) {
 
   const processedDelta = Number(r.processedDelta) || 0;
   if (processedDelta > 0) {
-    return { outcome: "credited", txHash: normalized, processedDelta };
+    return {
+      outcome: "credited",
+      txHash: normalized,
+      processedDelta,
+      userId: String(user._id),
+      amount: parsedAmount,
+    };
   }
 
   return { outcome: "skip", reason: "no_credit", txHash: normalized, processedDelta: 0 };
