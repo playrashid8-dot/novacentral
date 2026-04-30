@@ -19,6 +19,7 @@
     "verify:redis": "node scripts/verifyRedis.mjs",
     "wallet:normalize": "node scripts/walletNormalizationFix.mjs",
     "withdraw:backfill-risk": "node scripts/backfillWithdrawRisk.js",
+    "deposit:backfill-qualified": "node scripts/backfillQualifiedDeposits.js",
     "ledger:reconcile": "node scripts/reconcileHybridLedger.js",
     "test:p0-financial-safety": "node scripts/p0FinancialSafetySimulation.js"
   },

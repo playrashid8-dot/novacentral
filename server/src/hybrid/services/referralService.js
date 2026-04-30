@@ -27,7 +27,6 @@ export const distributeHybridReferralRewards = async (
 
   const alreadyRewarded = await HybridLedger.findOne({
     source: "referral_bonus",
-    "meta.firstDeposit": true,
     "meta.fromUserId": String(userId),
   }).session(session);
 

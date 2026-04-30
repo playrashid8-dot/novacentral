@@ -41,6 +41,12 @@ const assertWithdrawTransition = (currentStatus, nextStatus) => {
   }
 };
 
+const assertAdminPendingWithdrawal = (withdrawal) => {
+  if (withdrawal?.status !== "pending" || withdrawal?.paidAt != null) {
+    throw adminClientError("Invalid state transition");
+  }
+};
+
 const getMonthKey = (value) => {
   const date = new Date(value);
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
@@ -435,6 +441,7 @@ const wrapAdminClientError = (error, fallback) => {
 
 const transferEventIface = new Interface(BSC_USDT_ABI);
 const PAYOUT_LOCK_MS = Number(process.env.HYBRID_WITHDRAW_PAYOUT_LOCK_MS || 5 * 60 * 1000);
+const STALE_PAYOUT_SENDING_MS = 5 * 60 * 1000;
 
 const getPayoutPrivateKey = () =>
   String(process.env.HYBRID_PAYOUT_PRIVATE_KEY || "").trim();
@@ -654,11 +661,31 @@ const recoverNonceUsedPayout = async (withdrawal, runtime) => {
   const chainNonce = await provider.getTransactionCount(payoutWallet);
 
   if (chainNonce <= payoutNonce) {
-    return { processed: false, reason: "nonce_not_used" };
+    return null;
   }
 
   console.log("⚠️ Tx already broadcast (nonce used)");
   return verifyAndMarkPaid(withdrawal, null, runtime);
+};
+
+const resetStaleSendingPayouts = async (withdrawalId = null, now = new Date()) => {
+  const staleBefore = new Date(now.getTime() - STALE_PAYOUT_SENDING_MS);
+  return HybridWithdrawal.updateMany(
+    {
+      ...(withdrawalId ? { _id: withdrawalId } : {}),
+      status: "approved",
+      paidAt: null,
+      payoutStatus: "sending",
+      payoutStartedAt: { $lte: staleBefore },
+    },
+    {
+      $set: {
+        payoutLastError: "Stale payout sender lock reset after crash recovery window",
+        payoutLockedUntil: null,
+        payoutStatus: "failed",
+      },
+    }
+  );
 };
 
 const createPayoutRuntime = (overrides = {}) => ({
@@ -743,6 +770,7 @@ const createPayoutRuntime = (overrides = {}) => ({
   completeIdempotency,
   releaseIdempotentAction,
   storePayoutFailure,
+  resetStaleSendingPayouts,
   getProvider,
   getPayoutSigner,
   getPayoutContract,
@@ -774,6 +802,7 @@ export const executeApprovedWithdrawalPayout = async (withdrawalId = null, runti
       console.log("💸 Payout start", { withdrawalId: String(withdrawalId) });
       return nonceRecovery;
     }
+    await runtime.resetStaleSendingPayouts(withdrawalId, now);
   } else {
     const recoverable = await runtime.findApprovedWithTxHash();
     if (recoverable) {
@@ -787,6 +816,8 @@ export const executeApprovedWithdrawalPayout = async (withdrawalId = null, runti
       console.log("💸 Payout start", { withdrawalId: String(nonceRecoverable._id) });
       return nonceRecovery;
     }
+
+    await runtime.resetStaleSendingPayouts(null, now);
   }
 
   let withdrawal = await runtime.claimWithdrawal(withdrawalId, now, lockUntil);
@@ -838,6 +869,10 @@ export const executeApprovedWithdrawalPayout = async (withdrawalId = null, runti
       console.log("🔢 Nonce", { nonce: payoutNonce });
     }
 
+    if (!Number.isInteger(Number(withdrawal?.payoutNonce))) {
+      throw new Error("Unable to lock payout nonce before broadcast");
+    }
+
     const chainNonce = await provider.getTransactionCount(signer.address);
     if (chainNonce > Number(withdrawal.payoutNonce)) {
       console.log("⚠️ Tx already broadcast (nonce used)");
@@ -848,7 +883,9 @@ export const executeApprovedWithdrawalPayout = async (withdrawalId = null, runti
 
     const token = runtime.getPayoutContract(signer);
     const amountWei = parseUnits(String(withdrawal.netAmount), HYBRID_TOKEN.decimals);
-    const tx = await token.transfer(withdrawal.walletAddress, amountWei);
+    const tx = await token.transfer(withdrawal.walletAddress, amountWei, {
+      nonce: Number(withdrawal.payoutNonce),
+    });
     txHash = normalizeTxHash(tx.hash);
 
     if (!txHash) {
@@ -887,7 +924,7 @@ export const executeApprovedWithdrawalPayout = async (withdrawalId = null, runti
   }
 };
 
-export const runAutoWithdrawExecutorBatch = async (limit = 5) => {
+export const runAutoWithdrawExecutorBatch = async (limit = 5, runtimeOverrides = {}) => {
   if (!canAutoExecuteWithdrawals()) {
     return { enabled: false, processed: 0, failed: 0 };
   }
@@ -898,7 +935,7 @@ export const runAutoWithdrawExecutorBatch = async (limit = 5) => {
 
   for (let i = 0; i < max; i += 1) {
     try {
-      const result = await executeApprovedWithdrawalPayout();
+      const result = await executeApprovedWithdrawalPayout(null, runtimeOverrides);
       if (!result?.processed) {
         break;
       }
@@ -932,6 +969,7 @@ export const adminApproveHybridWithdrawal = async (withdrawalId, adminId = null)
       throw adminClientError("Withdrawal not found", 404);
     }
 
+    assertAdminPendingWithdrawal(withdrawal);
     assertWithdrawTransition(withdrawal.status, "approved");
 
     if (new Date(withdrawal.availableAt).getTime() > Date.now()) {
@@ -1009,6 +1047,7 @@ const markHybridWithdrawalPaidAfterAutoVerification = async (withdrawalId, txHas
     const withdrawal = await HybridWithdrawal.findOne({
       _id: withdrawalId,
       status: "approved",
+      paidAt: null,
     }).session(session);
 
     if (!withdrawal) {
@@ -1044,6 +1083,7 @@ const markHybridWithdrawalPaidAfterAutoVerification = async (withdrawalId, txHas
       {
         _id: withdrawalId,
         status: "approved",
+        paidAt: null,
       },
       {
         $set: {
@@ -1146,6 +1186,7 @@ export const adminRejectHybridWithdrawal = async (withdrawalId) => {
       throw adminClientError("Withdrawal not found", 404);
     }
 
+    assertAdminPendingWithdrawal(withdrawal);
     assertWithdrawTransition(withdrawal.status, "rejected");
 
     const rewardBack = Number(withdrawal.sourceRewardAmount || 0);

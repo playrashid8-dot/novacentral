@@ -131,7 +131,7 @@ const userSchema = new mongoose.Schema(
     // Create the Mongo index manually; do not rely on Mongoose for this field:
     // db.users.createIndex(
     //   { walletAddress: 1 },
-    //   { unique: true, partialFilterExpression: { walletAddress: { $type: "string", $ne: "" } } }
+    //   { unique: true, partialFilterExpression: { walletAddress: { $type: "string" } } }
     // );
     walletAddress: {
       type: String,
@@ -313,7 +313,7 @@ userSchema.index(
   { walletAddress: 1 },
   {
     unique: true,
-    partialFilterExpression: { walletAddress: { $type: "string", $ne: "" } },
+    partialFilterExpression: { walletAddress: { $type: "string" } },
   }
 );
 

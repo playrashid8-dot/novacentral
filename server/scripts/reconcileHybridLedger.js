@@ -13,7 +13,8 @@ const round8 = (value) => Number(Number(value || 0).toFixed(8));
 const parseArgs = () => {
   const args = new Set(process.argv.slice(2));
   return {
-    apply: args.has("--apply"),
+    forceApply: args.has("--force-apply"),
+    legacyApply: args.has("--apply"),
     userId: process.argv.find((arg) => arg.startsWith("--userId="))?.split("=")[1] || null,
   };
 };
@@ -53,7 +54,7 @@ const getLedgerBalances = async (userId, session = null) => {
   }, {});
 };
 
-const buildAdjustments = (user, ledgerBalances) =>
+const buildMismatches = (user, ledgerBalances) =>
   BALANCE_TYPES.map((balanceType) => {
     const userBalance = round8(user[balanceType]);
     const ledgerBalance = round8(ledgerBalances[balanceType]);
@@ -67,7 +68,7 @@ const buildAdjustments = (user, ledgerBalances) =>
     };
   }).filter((item) => Math.abs(item.diff) > EPSILON);
 
-const applyLedgerAdjustments = async (user, adjustments) => {
+const applyUserBalanceCorrection = async (user) => {
   const session = await mongoose.startSession();
 
   try {
@@ -82,26 +83,21 @@ const applyLedgerAdjustments = async (user, adjustments) => {
       }
 
       const ledgerBalances = await getLedgerBalances(user._id, session);
-      const freshAdjustments = buildAdjustments(lockedUser, ledgerBalances);
+      const freshMismatches = buildMismatches(lockedUser, ledgerBalances);
 
-      if (freshAdjustments.length === 0) {
+      if (freshMismatches.length === 0) {
         return;
       }
 
-      await HybridLedger.insertMany(
-        freshAdjustments.map((item) => ({
-          userId: user._id,
-          entryType: item.diff > 0 ? "credit" : "debit",
-          balanceType: item.balanceType,
-          amount: Math.abs(item.diff),
-          source: "ledger_reconciliation",
-          meta: {
-            previousLedgerBalance: item.ledgerBalance,
-            observedUserBalance: item.userBalance,
-            reason: "Align ledger with existing user balance after audit mismatch",
-          },
-        })),
-        { ordered: true, session }
+      await User.updateOne(
+        { _id: user._id },
+        {
+          $set: BALANCE_TYPES.reduce((acc, balanceType) => {
+            acc[balanceType] = ledgerBalances[balanceType];
+            return acc;
+          }, {}),
+        },
+        { session }
       );
     });
   } finally {
@@ -110,7 +106,11 @@ const applyLedgerAdjustments = async (user, adjustments) => {
 };
 
 const main = async () => {
-  const { apply, userId } = parseArgs();
+  const { forceApply, legacyApply, userId } = parseArgs();
+  if (legacyApply && !forceApply) {
+    console.error("--apply is ignored in strict mode. Use --force-apply for manual correction.");
+  }
+
   await connect();
 
   const query = userId ? { _id: userId } : {};
@@ -122,27 +122,34 @@ const main = async () => {
 
   for (const user of users) {
     const ledgerBalances = await getLedgerBalances(user._id);
-    const adjustments = buildAdjustments(user, ledgerBalances);
+    const mismatchedBalances = buildMismatches(user, ledgerBalances);
 
-    if (adjustments.length === 0) {
+    if (mismatchedBalances.length === 0) {
       continue;
     }
+
+    console.error("Ledger mismatch detected", {
+      userId: String(user._id),
+      username: user.username,
+      mismatchedBalances,
+    });
 
     mismatches.push({
       userId: String(user._id),
       username: user.username,
-      adjustments,
+      mismatchedBalances,
     });
 
-    if (apply) {
-      await applyLedgerAdjustments(user, adjustments);
+    if (forceApply) {
+      await applyUserBalanceCorrection(user);
     }
   }
 
   console.log(
     JSON.stringify(
       {
-        apply,
+        strictMode: !forceApply,
+        forceApply,
         checkedUsers: users.length,
         mismatchedUsers: mismatches.length,
         mismatches,

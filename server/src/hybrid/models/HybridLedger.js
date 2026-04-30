@@ -49,7 +49,7 @@ hybridLedgerSchema.index(
   { sparse: true }
 );
 hybridLedgerSchema.index(
-  { source: 1, "meta.firstDeposit": 1, "meta.fromUserId": 1 },
+  { source: 1, "meta.fromUserId": 1 },
   { sparse: true }
 );
 

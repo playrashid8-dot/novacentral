@@ -9,7 +9,7 @@ import { normalizeStoredWalletAddress } from "../utils/normalizeStoredWallet.js"
 
 const TOKEN_COOKIE_NAME = "token";
 
-const getCookieOptions = () => {
+const getCookieOptions = (overrides = {}) => {
   const isProd =
     process.env.NODE_ENV === "production" ||
     process.env.RAILWAY_ENVIRONMENT === "production";
@@ -19,11 +19,12 @@ const getCookieOptions = () => {
     secure: isProd,
     sameSite: isProd ? "none" : "lax",
     path: "/",
+    ...overrides,
   };
 };
 
-const setAuthCookie = (res, token) => {
-  const options = getCookieOptions();
+const setAuthCookie = (res, token, overrides = {}) => {
+  const options = getCookieOptions(overrides);
   res.cookie(TOKEN_COOKIE_NAME, token, options);
 };
 
@@ -122,6 +123,15 @@ export const register = async (req, res) => {
     }
 
     const normalizedWalletAddress = normalizeStoredWalletAddress(wallet.address);
+    const existingUserWithWallet = await User.findOne({
+      walletAddress: normalizedWalletAddress,
+    })
+      .select("_id")
+      .lean();
+
+    if (existingUserWithWallet) {
+      throw new Error("Wallet already in use");
+    }
 
     const user = await User.create({
       username,
@@ -165,6 +175,10 @@ export const register = async (req, res) => {
 
   } catch (err) {
     console.error("REGISTER ERROR:", err.message);
+    if (err?.message === "Wallet already in use") {
+      return sendAuthResponse(res, 409, false, "Wallet already in use");
+    }
+
     if (err?.code === 11000) {
       if (err?.keyPattern?.walletAddress || err?.keyValue?.walletAddress) {
         return sendAuthResponse(res, 409, false, "Wallet already assigned, please retry signup");
@@ -245,7 +259,7 @@ export const login = async (req, res) => {
     const safeUser = await User.findById(user._id).select("-password -privateKey");
     await User.updateOne({ _id: user._id }, { $set: { lastLogin: new Date() } });
 
-    setAuthCookie(res, token);
+    setAuthCookie(res, token, safeUser?.isAdmin ? { sameSite: "strict" } : {});
 
     return sendAuthResponse(res, 200, true, "Login successful", {
       user: safeUser,

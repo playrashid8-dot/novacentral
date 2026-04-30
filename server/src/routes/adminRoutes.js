@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import auth from "../middleware/auth.js";
 import User from "../models/User.js";
 import HybridDeposit from "../hybrid/models/HybridDeposit.js";
+import HybridLedger from "../hybrid/models/HybridLedger.js";
 import HybridWithdrawal from "../hybrid/models/HybridWithdrawal.js";
 import {
   adminApproveHybridWithdrawal,
@@ -13,6 +14,7 @@ import { addHybridLedgerEntries } from "../hybrid/services/ledgerService.js";
 import { getProvider } from "../hybrid/utils/provider.js";
 import { getHybridAdminSystemStatus } from "../hybrid/utils/adminSystemStatus.js";
 import { getSystemHealth } from "../hybrid/utils/systemHealth.js";
+import { getHybridWithdrawExecutorStatus } from "../hybrid/engine/index.js";
 import { getReadyRedis } from "../config/redis.js";
 import { depositQueue } from "../queues/depositQueue.js";
 import { writeAdminAudit } from "../utils/adminAudit.js";
@@ -93,6 +95,7 @@ router.get("/system-status", auth, isAdmin, async (req, res) => {
 router.get("/system-health", auth, isAdmin, async (req, res) => {
   try {
     const system = await getSystemHealth();
+    const executorStatus = getHybridWithdrawExecutorStatus();
     let queue = null;
     try {
       if (getReadyRedis() && depositQueue) {
@@ -111,6 +114,8 @@ router.get("/system-health", auth, isAdmin, async (req, res) => {
         system,
         pendingDeposits: system.pendingDeposits,
         failedPayouts: system.failedPayouts,
+        rpc: system.rpc,
+        executorStatus,
         executor: system.executor,
         uptime: process.uptime(),
       },
@@ -121,11 +126,19 @@ router.get("/system-health", auth, isAdmin, async (req, res) => {
 });
 
 router.get("/ledger", auth, isAdmin, async (req, res) => {
-  return res.json({
-    success: true,
-    msg: "Ledger data",
-    data: [],
-  });
+  try {
+    const ledger = await HybridLedger.find()
+      .sort({ createdAt: -1 })
+      .limit(100);
+
+    return res.json({
+      success: true,
+      msg: "Ledger data",
+      data: ledger,
+    });
+  } catch (err) {
+    return sendAdminError(res, err, "ADMIN LEDGER ERROR");
+  }
 });
 
 /* ==============================
@@ -526,6 +539,10 @@ router.post("/recover-deposits", auth, isAdmin, async (req, res) => {
     console.error("❌ Recovery failed:", err?.message || String(err));
     return res.status(500).json({ success: false, msg: "Internal server error", data: null });
   }
+});
+
+router.post("/hybrid/deposit/scan", auth, isAdmin, async (req, res) => {
+  return res.redirect(307, "/api/admin/recover-deposits");
 });
 
 /** Deep scan between explicit blocks (manual rescan) */

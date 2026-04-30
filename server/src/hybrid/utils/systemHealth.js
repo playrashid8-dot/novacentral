@@ -103,6 +103,14 @@ export async function getSystemHealth() {
   return {
     status: criticalFailures.length > 0 ? "degraded" : "ok",
     criticalFailures,
+    redis: {
+      ok: redisOk,
+      required: requireRedis,
+      connected: Boolean(redis),
+    },
+    rpc: {
+      ok: rpcOk,
+    },
     checks: {
       mongo,
       redis: redisOk,
