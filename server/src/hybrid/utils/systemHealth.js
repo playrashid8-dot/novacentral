@@ -6,6 +6,7 @@ import PendingDeposit from "../models/PendingDeposit.js";
 import HybridWithdrawal from "../models/HybridWithdrawal.js";
 import HybridSetting from "../models/HybridSetting.js";
 import { getHybridWithdrawExecutorStatus } from "../engine/index.js";
+import { getDepositRecoveryHealth } from "../services/depositBackfill.js";
 
 const WORKER_HEARTBEAT_KEY = "depositQueue:worker:heartbeat";
 const WORKER_HEARTBEAT_MAX_AGE_MS = 120000;
@@ -106,6 +107,13 @@ export async function getSystemHealth() {
     }
   }
 
+  const recovery = await getDepositRecoveryHealth(lastProcessedBlock);
+  if (recovery.warning) {
+    depositDetectionWarning = depositDetectionWarning
+      ? `${depositDetectionWarning}; ${recovery.warning}`
+      : recovery.warning;
+  }
+
   let pendingDeposits = null;
   let failedPayouts = null;
   let approvedPayouts = null;
@@ -198,5 +206,6 @@ export async function getSystemHealth() {
     lastProcessedBlock,
     lastDetectedTxTime,
     depositDetectionWarning,
+    recovery,
   };
 }
