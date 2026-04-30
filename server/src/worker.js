@@ -7,21 +7,42 @@ import { getRedis } from "./config/redis.js";
 await connectDB();
 
 const connection = getRedis();
+const WORKER_HEARTBEAT_KEY = "depositQueue:worker:heartbeat";
+const WORKER_HEARTBEAT_TTL_SECONDS = 90;
 
 if (!connection) {
   console.warn("⚠️ Redis missing — worker idle");
 } else {
+  const writeWorkerHeartbeat = async () => {
+    try {
+      await connection.set(
+        WORKER_HEARTBEAT_KEY,
+        String(Date.now()),
+        "EX",
+        WORKER_HEARTBEAT_TTL_SECONDS,
+      );
+    } catch (err) {
+      console.error("❌ Worker heartbeat failed:", err?.message || String(err));
+    }
+  };
+
   const worker = new Worker(
     "depositQueue",
     async (job) => {
+      console.log("Processing job:", job.data);
       const { processDepositJob } = await import("./hybrid/services/depositService.js");
       return processDepositJob(job.data);
     },
     {
       connection,
-      concurrency: 20,
+      concurrency: 5,
     }
   );
+
+  await writeWorkerHeartbeat();
+  setInterval(() => {
+    void writeWorkerHeartbeat();
+  }, 30000);
 
   worker.on("completed", (job, result) => {
     const tx = String(job?.data?.log?.transactionHash || "").trim();

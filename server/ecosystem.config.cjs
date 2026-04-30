@@ -11,6 +11,7 @@ const path = require("path");
 const cwd = __dirname;
 
 const interpreterArgs = "--expose-gc --max-old-space-size=1024";
+const workerInterpreterArgs = "--expose-gc --max-old-space-size=512";
 
 const commonEnv = {
   NODE_ENV: process.env.NODE_ENV || "production",
@@ -48,9 +49,9 @@ module.exports = {
       name: "nova-worker-deposit",
       cwd,
       script: "./src/worker.js",
-      instances: 3,
+      instances: 2,
       exec_mode: "fork",
-      interpreter_args: interpreterArgs,
+      interpreter_args: workerInterpreterArgs,
       env: commonEnv,
     },
   ],

@@ -116,9 +116,6 @@ async function dispatchRealtimeDeposit(log, provider) {
     return;
   }
   if (processedTx.size > 10000) {
-    if (process.env.NODE_ENV !== "production") {
-      console.log("⚠️ processedTx cleared (safety)");
-    }
     processedTx.clear();
   }
   processedTx.add(log.transactionHash);

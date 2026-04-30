@@ -5,7 +5,7 @@ const connection = getRedis();
 
 /** Shared BullMQ worker / queue tuning: max jobs started per duration (global per queue in Redis). */
 export const DEPOSIT_QUEUE_LIMITER = {
-  max: 100,
+  max: 50,
   duration: 1000,
 };
 

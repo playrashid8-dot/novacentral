@@ -173,7 +173,7 @@ app.use(morgan("dev"));
 ============================== */
 const globalLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 100,
+  max: 50,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => ipKeyGenerator(req.ip),

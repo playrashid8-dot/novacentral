@@ -59,7 +59,20 @@ pm2 logs
 pm2 monit
 ```
 
-Multicore utilization: **nova-api** uses **cluster mode** (`instances: 3`) on **PORT=5000**. **nova-worker-deposit** runs **2** fork processes consuming **`depositQueue`**. **nova-hybrid** is a **singleton** (WebSocket + engine).
+Multicore utilization: **nova-api** uses **cluster mode** (`instances: 3`) on **PORT=5000**. **nova-worker-deposit** runs **2** fork processes consuming **`depositQueue`** (align with BullMQ **concurrency: 10** and queue limiter **50/sec**). **nova-hybrid** is a **singleton** (WebSocket + engine).
+
+---
+
+## Railway (HTTP + worker services)
+
+Use separate services from the same repo: API (`src/server.js` with `NOVA_SERVICE=api`), hybrid (`src/hybridService.js`), and worker (`src/worker.js`). Share **`REDIS_URL`**, **`MONGODB_URI`**, and **`JWT_SECRET`**.
+
+| Service | Setting |
+|--------|---------|
+| **Worker** | **1–2 replicas** (avoid duplicate hybrid listeners — only one hybrid service) |
+| **Memory** | **512 MB** minimum for the deposit worker; scale API/hybrid per traffic |
+
+Queue visibility: admin **`GET /api/admin/system-health`** includes **`depositQueue.getJobCounts()`** when Redis is configured.
 
 ---
 
@@ -103,3 +116,10 @@ BASE_URL=http://127.0.0.1:80 CONCURRENT=150 REPEATS=5 node scripts/loadTestHealt
 | Auto scaling active (cloud/K8s/ops) | |
 
 **FINAL STATUS — SYSTEM SCALABLE:** ✅ / ❌
+
+---
+
+## Load test checklist (5K–10K users target)
+
+- **500–1000** concurrent or rapid requests against **`GET /api/health`** and authenticated **`GET /api/dashboard`** / **`GET /api/user/dashboard-summary`** — expect fast responses (Redis cache **10s TTL** on dashboard summaries).
+- **Deposits**: enqueue path uses **`depositQueue`** with limiter; confirm **`GET /api/admin/system-health`** shows sane **`queue`** counts under burst traffic.

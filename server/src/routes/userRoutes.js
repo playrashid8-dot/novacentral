@@ -214,9 +214,11 @@ router.post("/password", auth, async (req, res) => {
 ============================== */
 router.get("/stats", auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select(
-      "depositBalance rewardBalance pendingWithdraw referralEarnings todayProfit totalEarnings isBlocked level directCount teamCount"
-    );
+    const user = await User.findById(req.user._id)
+      .select(
+        "depositBalance rewardBalance pendingWithdraw referralEarnings todayProfit totalEarnings isBlocked level directCount teamCount",
+      )
+      .lean();
 
     if (!user) {
       return res.status(404).json({ success: false, msg: "User not found", data: null });
@@ -266,6 +268,25 @@ router.get("/stats", auth, async (req, res) => {
 router.get("/dashboard", auth, async (req, res) => {
   try {
     const userId = req.user._id;
+    const redis = getRedis();
+    const cacheKey = `dashboard-user:${String(userId)}`;
+
+    if (redis) {
+      try {
+        const raw = await redis.get(cacheKey);
+        if (raw) {
+          const dashboard = JSON.parse(raw);
+          return res.json({
+            success: true,
+            msg: "Dashboard data",
+            data: dashboard,
+            dashboard,
+          });
+        }
+      } catch {
+        /* fall through */
+      }
+    }
 
     const user = await User.findById(userId)
       .select(
@@ -306,6 +327,14 @@ router.get("/dashboard", auth, async (req, res) => {
       level: Number(user.level || 0),
       roiRate: getCurrentRoiRate(user.level),
     };
+
+    if (redis) {
+      try {
+        await redis.set(cacheKey, JSON.stringify(dashboard), "EX", 10);
+      } catch {
+        /* ignore */
+      }
+    }
 
     res.json({
       success: true,

@@ -1,6 +1,7 @@
 import express from "express";
 import mongoose from "mongoose";
 import auth from "../middleware/auth.js";
+import { getRedis } from "../config/redis.js";
 import User from "../models/User.js";
 import HybridDeposit from "../hybrid/models/HybridDeposit.js";
 import HybridWithdrawal from "../hybrid/models/HybridWithdrawal.js";
@@ -15,6 +16,25 @@ router.get("/", auth, async (req, res) => {
   try {
     const userId = req.user._id;
     const oid = userId instanceof mongoose.Types.ObjectId ? userId : new mongoose.Types.ObjectId(userId);
+    const redis = getRedis();
+    const cacheKey = `dashboard-route:${String(userId)}`;
+
+    if (redis) {
+      try {
+        const raw = await redis.get(cacheKey);
+        if (raw) {
+          const dashboard = JSON.parse(raw);
+          return res.json({
+            success: true,
+            msg: "Dashboard data",
+            data: dashboard,
+            dashboard,
+          });
+        }
+      } catch {
+        /* fall through */
+      }
+    }
 
     const user = await User.findById(userId)
       .select(
@@ -76,6 +96,14 @@ router.get("/", auth, async (req, res) => {
       level: Number(user.level || 0),
       roiRate: getCurrentRoiRate(user.level),
     };
+
+    if (redis) {
+      try {
+        await redis.set(cacheKey, JSON.stringify(dashboard), "EX", 10);
+      } catch {
+        /* ignore */
+      }
+    }
 
     res.json({
       success: true,
