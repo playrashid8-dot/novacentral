@@ -27,15 +27,15 @@ import { startHybridEngine, runHybridStartupRecovery } from "./hybrid/engine/ind
 import { startRealtimeListener } from "./hybrid/listeners/realtimeListener.js";
 
 process.on("uncaughtException", (err) => {
-  console.error("CRASH:", err);
+  console.error("CRASH:", err?.stack || err);
 });
 
 process.on("unhandledRejection", (err) => {
-  console.error("REJECTION:", err);
+  console.error("REJECTION:", err?.stack || err);
 });
 
 if (!process.env.JWT_SECRET) {
-  throw new Error("JWT_SECRET missing");
+  console.error("JWT_SECRET missing");
 }
 
 const app = express();
@@ -110,9 +110,31 @@ const corsOptions = {
 app.set("trust proxy", 1);
 
 /* ==============================
-   🔥 CONNECT DATABASE
+   🧪 IMMEDIATE HEALTH CHECKS
 ============================== */
-await connectDB();
+app.get("/", (req, res) => {
+  res.json({
+    success: true,
+    msg: "API running",
+    data: { status: "ok" },
+  });
+});
+
+app.get("/api", (req, res) => {
+  res.json({
+    success: true,
+    msg: "API working",
+    data: { status: "ok" },
+  });
+});
+
+app.get("/api/health", (req, res) => {
+  res.json({
+    success: true,
+    msg: "Health check ok",
+    data: { status: "ok" },
+  });
+});
 
 /**
  * infra: NOVA_SERVICE=api → stateless HTTP only (scaled behind LB).
@@ -136,7 +158,7 @@ app.use(express.json({ limit: "10kb" }));
 // ✅ CSRF (after cookieParser + JSON — required for cookie-based secrets)
 app.use(csrfProtection);
 
-// ✅ HELMET (SECURITY HEADERS) — before routes so health + API share headers
+// ✅ HELMET (SECURITY HEADERS)
 app.use(helmet());
 
 app.get("/api/csrf-token", (req, res) => {
@@ -153,14 +175,6 @@ app.get("/api/csrf-token", (req, res) => {
     success: true,
     msg: "CSRF token generated",
     data: { csrfToken: token },
-  });
-});
-
-app.get("/api/health", (req, res) => {
-  res.json({
-    success: true,
-    msg: "Health check ok",
-    data: { status: "ok" },
   });
 });
 
@@ -222,25 +236,6 @@ app.use("/api/withdraw", withdrawRoutes);
 app.use("/api/hybrid/deposit", hybridDepositRoutes);
 
 /* ==============================
-   🧪 HEALTH CHECK
-============================== */
-app.get("/", (req, res) => {
-  res.json({
-    success: true,
-    msg: "API running",
-    data: null,
-  });
-});
-
-app.get("/api", (req, res) => {
-  res.json({
-    success: true,
-    msg: "API working",
-    data: null,
-  });
-});
-
-/* ==============================
    ❌ 404 HANDLER
 ============================== */
 app.use((req, res) => {
@@ -274,15 +269,51 @@ app.use((err, req, res, next) => {
 /* ==============================
    🚀 START SERVER
 ============================== */
-if (hybridStackEnabled) {
-  await startRealtimeListener();
-  await runHybridStartupRecovery({ blocks: 1000 });
-  startHybridEngine();
-}
-
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server running on ${PORT}`);
   if (!hybridStackEnabled) {
     console.log(`📦 NOVA_SERVICE=${novaService} — hybrid stack disabled here (listener runs in src/hybridService.js)`);
   }
+  void startBackgroundServices();
 });
+
+server.on("error", (err) => {
+  console.error("SERVER LISTEN ERROR:", err?.stack || err);
+});
+
+process.on("SIGTERM", () => {
+  console.log("SIGTERM received, closing server");
+  server.close(() => {
+    console.log("Server closed");
+    process.exit(0);
+  });
+});
+
+async function startBackgroundServices() {
+  const db = await connectDB();
+  if (!db) {
+    console.error("Startup continuing without MongoDB connection");
+  }
+
+  if (!hybridStackEnabled) {
+    return;
+  }
+
+  try {
+    await startRealtimeListener();
+  } catch (err) {
+    console.error("Realtime listener startup failed:", err?.message || String(err));
+  }
+
+  try {
+    await runHybridStartupRecovery({ blocks: 1000 });
+  } catch (err) {
+    console.error("Hybrid startup recovery failed:", err?.message || String(err));
+  }
+
+  try {
+    startHybridEngine();
+  } catch (err) {
+    console.error("Hybrid engine startup failed:", err?.message || String(err));
+  }
+}

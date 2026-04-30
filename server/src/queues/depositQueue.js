@@ -16,6 +16,10 @@ export const depositQueue = connection
     })
   : null;
 
+depositQueue?.on("error", (err) => {
+  console.error("❌ Deposit queue unavailable:", err?.message || String(err));
+});
+
 /** Shared BullMQ options for deposit jobs (retries / backoff / idempotent jobId = txHash). */
 export const DEPOSIT_JOB_OPTIONS = {
   attempts: 3,
