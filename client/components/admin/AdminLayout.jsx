@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { BASE_URL } from "../../lib/api";
 import { fetchCurrentUser } from "../../lib/session";
 import { showSafeToast } from "../../lib/toast";
 import Loader from "./Loader";
 
-export const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+export const API_BASE = BASE_URL;
 
 let adminCsrfToken = null;
 
@@ -29,6 +29,7 @@ export async function adminFetch(path, options = {}) {
   if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && !String(path).includes("csrf-token")) {
     const token = await ensureAdminCsrf();
     if (token) {
+      headers["X-CSRF-Token"] = token;
       headers["CSRF-Token"] = token;
       headers["csrf-token"] = token;
     }
@@ -51,6 +52,7 @@ export async function adminFetch(path, options = {}) {
     if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && !String(path).includes("csrf-token")) {
       const token = await ensureAdminCsrf();
       if (token) {
+        headers["X-CSRF-Token"] = token;
         headers["CSRF-Token"] = token;
         headers["csrf-token"] = token;
       }

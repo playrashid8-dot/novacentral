@@ -3,6 +3,8 @@ import axios from "axios";
 import { showSafeToast } from "./toast";
 import { devWarn } from "./devWarn";
 
+axios.defaults.withCredentials = true;
+
 /**
  * Axios base URL must end with `/api` so `/auth/*` and `/csrf-token` resolve correctly.
  */
@@ -15,7 +17,7 @@ function normalizeApiBase(envUrl) {
   return `${noSlash}/api`;
 }
 
-const BASE_URL = normalizeApiBase(process.env.NEXT_PUBLIC_API_URL);
+export const BASE_URL = normalizeApiBase(process.env.NEXT_PUBLIC_API_URL);
 
 const API = axios.create({
   baseURL: BASE_URL,
@@ -63,25 +65,17 @@ export const normalize = (res) => {
  */
 export const initCSRF = async (force = false) => getCSRF(force);
 
-function isPlainObjectData(data) {
-  return (
-    data != null &&
-    typeof data === "object" &&
-    !Array.isArray(data) &&
-    !(typeof FormData !== "undefined" && data instanceof FormData)
-  );
-}
-
 function attachCsrfToConfig(config, token) {
   if (!token) return;
-  if (isPlainObjectData(config.data)) {
-    config.data = { ...config.data, _csrf: token };
-  } else if (config.data == null || config.data === "") {
-    config.data = { _csrf: token };
+  config.headers = config.headers || {};
+
+  if (config.headers?.set) {
+    config.headers.set("X-CSRF-Token", token);
+    config.headers.set("x-csrf-token", token);
+    config.headers.set("CSRF-Token", token);
   } else {
-    config.headers = config.headers || {};
     config.headers["X-CSRF-Token"] = token;
-    config.headers["csrf-token"] = token;
+    config.headers["x-csrf-token"] = token;
     config.headers["CSRF-Token"] = token;
   }
 }
@@ -172,15 +166,7 @@ API.interceptors.response.use(
       csrfToken = null;
       cfg._csrfRetry = true;
       const token = await getCSRF(true);
-      if (isPlainObjectData(cfg.data)) {
-        cfg.data = { ...cfg.data, _csrf: token };
-      } else if (cfg.data == null || cfg.data === "") {
-        cfg.data = { _csrf: token };
-      } else if (cfg.data && typeof cfg.data === "object") {
-        cfg.data._csrf = token;
-      } else {
-        attachCsrfToConfig(cfg, token);
-      }
+      attachCsrfToConfig(cfg, token);
       return API.request(cfg);
     }
 

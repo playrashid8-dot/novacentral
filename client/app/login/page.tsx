@@ -47,10 +47,14 @@ export default function Login() {
       setLoading(true);
       resetLogoutState();
 
-      await initCSRF();
+      const csrfToken = await initCSRF();
       await API.post("/auth/login", {
         username: cleanUsername,
         password: cleanPassword,
+      }, {
+        headers: {
+          "X-CSRF-Token": csrfToken,
+        },
       });
 
       showToast("Login successful ✅");

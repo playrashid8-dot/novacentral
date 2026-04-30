@@ -1,1 +1,0 @@
-{"sessionId":"6db99e","runId":"pre-fix","hypothesisId":"H2","location":"server/src/controllers/depositController.js:56","message":"deposit amount validation error response shape","data":{"status":400,"hasData":false,"msg":"Amount must be a number greater than 0"},"timestamp":1777191897747}

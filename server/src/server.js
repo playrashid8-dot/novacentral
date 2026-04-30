@@ -46,11 +46,13 @@ const isProd =
   process.env.NODE_ENV === "production" ||
   process.env.RAILWAY_ENVIRONMENT === "production";
 
+const crossSiteSameSite = isProd ? "none" : "lax";
+
 const csrfProtection = csrf({
   cookie: {
     httpOnly: true,
     secure: isProd,
-    sameSite: isProd ? "none" : "lax",
+    sameSite: crossSiteSameSite,
   },
 });
 
@@ -64,7 +66,14 @@ const allowedOrigins = [
   "https://hybridearn.com",
   "https://www.hybridearn.com",
   "http://localhost:3000",
-];
+  process.env.FRONTEND_URL,
+  process.env.CLIENT_URL,
+  process.env.NEXT_PUBLIC_FRONTEND_URL,
+  ...(process.env.CORS_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+].filter(Boolean).map(normalizeCorsOrigin);
 
 const corsAllowedOrigins = new Set(allowedOrigins);
 const devVercelOriginPattern = /^https:\/\/[a-z0-9-]+\.vercel\.app$/i;
@@ -99,7 +108,9 @@ const corsOptions = {
     "CSRF-Token",
     "csrf-token",
     "X-CSRF-Token",
+    "x-csrf-token",
     "X-XSRF-Token",
+    "x-xsrf-token",
     "X-Requested-With",
     "Idempotency-Key",
   ],
@@ -181,9 +192,9 @@ app.get("/api/csrf-token", (req, res) => {
   const token = req.csrfToken();
 
   res.cookie("XSRF-TOKEN", token, {
-    httpOnly: false,
+    httpOnly: true,
     secure: isProd,
-    sameSite: isProd ? "none" : "lax",
+    sameSite: crossSiteSameSite,
     path: "/",
   });
 
