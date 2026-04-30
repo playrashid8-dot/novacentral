@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { Interface, isAddress, getAddress, parseUnits } from "ethers";
+import { Contract, Interface, isAddress, getAddress, parseUnits, Wallet } from "ethers";
 import User from "../../models/User.js";
 import HybridWithdrawal from "../models/HybridWithdrawal.js";
 import {
@@ -10,10 +10,16 @@ import {
   WITHDRAW_MONTHLY_LIMITS,
 } from "../utils/constants.js";
 import hybridConfig from "../../config/hybridConfig.js";
-import { withProviderRetry } from "../utils/provider.js";
+import { getProvider, withProviderRetry } from "../utils/provider.js";
 import { ensureMonthWindow, WITHDRAW_DELAY_MS } from "../utils/time.js";
 import { addHybridLedgerEntries } from "./ledgerService.js";
 import { getSpendableHybridBalance, splitHybridBalance } from "./balanceService.js";
+import {
+  completeIdempotency,
+  failIdempotency,
+  getCompletedIdempotency,
+  markIdempotencyProcessing,
+} from "./idempotencyService.js";
 
 const getMonthlyLimit = (level) => WITHDRAW_MONTHLY_LIMITS[Math.min(Number(level || 0), 3)] || 0;
 
@@ -69,8 +75,19 @@ export const requestHybridWithdrawal = async (
   }
 
   const walletLower = checksummed.toLowerCase();
+  const withdrawIdempotencyKey = idempotencyKey
+    ? `${String(userId)}:${String(idempotencyKey).trim().toLowerCase()}`
+    : null;
 
-  if (idempotencyKey) {
+  if (withdrawIdempotencyKey) {
+    const storedResponse = await getCompletedIdempotency("withdraw", withdrawIdempotencyKey);
+    if (storedResponse?.withdrawalId) {
+      const withdrawal = await HybridWithdrawal.findById(storedResponse.withdrawalId);
+      if (withdrawal) {
+        return { withdrawal };
+      }
+    }
+
     const previous = await HybridWithdrawal.findOne({ userId, idempotencyKey });
 
     if (previous?.idempotencyResponse) {
@@ -84,6 +101,10 @@ export const requestHybridWithdrawal = async (
     let result = null;
 
     session.startTransaction();
+
+      if (withdrawIdempotencyKey) {
+        await markIdempotencyProcessing("withdraw", withdrawIdempotencyKey, session);
+      }
 
       const user = await User.findById(userId)
         .select(
@@ -299,6 +320,17 @@ export const requestHybridWithdrawal = async (
             session,
           }
         );
+
+        await completeIdempotency(
+          "withdraw",
+          withdrawIdempotencyKey,
+          {
+            withdrawalId: String(withdrawal._id),
+            status: withdrawal.status,
+            grossAmount: numericAmount,
+          },
+          session
+        );
       }
 
     await session.commitTransaction();
@@ -306,6 +338,9 @@ export const requestHybridWithdrawal = async (
     return result;
   } catch (error) {
     await session.abortTransaction();
+    if (withdrawIdempotencyKey) {
+      await failIdempotency("withdraw", withdrawIdempotencyKey, error);
+    }
     throw new Error(error.message || "Failed to request withdrawal");
   } finally {
     session.endSession();
@@ -397,6 +432,26 @@ const wrapAdminClientError = (error, fallback) => {
 };
 
 const transferEventIface = new Interface(BSC_USDT_ABI);
+const PAYOUT_LOCK_MS = Number(process.env.HYBRID_WITHDRAW_PAYOUT_LOCK_MS || 5 * 60 * 1000);
+
+const getPayoutPrivateKey = () =>
+  String(process.env.HYBRID_PAYOUT_PRIVATE_KEY || "").trim();
+
+export const canAutoExecuteWithdrawals = () =>
+  Boolean(getPayoutPrivateKey() && hybridConfig.usdtContract);
+
+const getPayoutContract = () => {
+  const payoutKey = getPayoutPrivateKey();
+  if (!payoutKey) {
+    throw new Error("HYBRID_PAYOUT_PRIVATE_KEY missing");
+  }
+  if (!hybridConfig.usdtContract) {
+    throw new Error("USDT contract not configured");
+  }
+
+  const signer = new Wallet(payoutKey, getProvider());
+  return new Contract(hybridConfig.usdtContract, BSC_USDT_ABI, signer);
+};
 
 /**
  * Requires a successful receipt and a matching USDT Transfer to the user's wallet
@@ -473,6 +528,147 @@ export const verifyPayoutTx = async (txHash, expectedAmount, userAddress) => {
   }
 };
 
+const storePayoutFailure = async (withdrawalId, error) => {
+  await HybridWithdrawal.findOneAndUpdate(
+    {
+      _id: withdrawalId,
+      status: "approved",
+    },
+    {
+      $set: {
+        payoutLastError: String(error?.message || error || "Payout failed").slice(0, 500),
+        payoutLockedUntil: null,
+        payoutStatus: "failed",
+      },
+    }
+  );
+};
+
+export const executeApprovedWithdrawalPayout = async (withdrawalId = null) => {
+  const now = new Date();
+  const lockUntil = new Date(now.getTime() + PAYOUT_LOCK_MS);
+
+  const withdrawal = await HybridWithdrawal.findOneAndUpdate(
+    {
+      ...(withdrawalId ? { _id: withdrawalId } : {}),
+      status: "approved",
+      paidAt: null,
+      $or: [
+        { payoutLockedUntil: null },
+        { payoutLockedUntil: { $exists: false } },
+        { payoutLockedUntil: { $lte: now } },
+      ],
+    },
+    {
+      $set: {
+        payoutLockedUntil: lockUntil,
+        payoutStartedAt: now,
+        payoutLastError: "",
+        payoutStatus: "sending",
+      },
+      $inc: {
+        payoutAttemptCount: 1,
+      },
+    },
+    {
+      new: true,
+      sort: { approvedAt: 1, createdAt: 1 },
+    }
+  );
+
+  if (!withdrawal) {
+    return { processed: false, reason: "none_available" };
+  }
+
+  const payoutKey = `withdrawal:${String(withdrawal._id)}`;
+  const storedResponse = await getCompletedIdempotency("payout", payoutKey);
+  if (storedResponse?.txHash) {
+    await markHybridWithdrawalPaidAfterAutoVerification(withdrawal._id, storedResponse.txHash, null);
+    return { processed: true, withdrawalId: withdrawal._id, txHash: storedResponse.txHash };
+  }
+
+  try {
+    await markIdempotencyProcessing("payout", payoutKey);
+
+    let txHash = normalizeTxHash(withdrawal.txHash);
+
+    if (!txHash) {
+      const token = getPayoutContract();
+      const amountWei = parseUnits(String(withdrawal.netAmount), HYBRID_TOKEN.decimals);
+      const tx = await token.transfer(withdrawal.walletAddress, amountWei);
+      txHash = normalizeTxHash(tx.hash);
+
+      if (!txHash) {
+        throw new Error("Payout transaction hash missing after broadcast");
+      }
+
+      const stored = await HybridWithdrawal.findOneAndUpdate(
+        {
+          _id: withdrawal._id,
+          status: "approved",
+          paidAt: null,
+          $or: [{ txHash: null }, { txHash: "" }],
+        },
+        {
+          $set: {
+            txHash,
+            payoutStatus: "verifying",
+          },
+        },
+        { new: true }
+      );
+
+      if (!stored) {
+        throw new Error("Unable to store payout transaction hash");
+      }
+
+      await tx.wait(1);
+    }
+
+    await verifyPayoutTransferInReceipt(txHash, withdrawal.walletAddress, withdrawal.netAmount);
+    const result = await markHybridWithdrawalPaidAfterAutoVerification(withdrawal._id, txHash, null);
+    await completeIdempotency(
+      "payout",
+      payoutKey,
+      {
+        withdrawalId: String(withdrawal._id),
+        txHash,
+        status: "paid",
+      }
+    );
+    return { processed: true, ...result };
+  } catch (error) {
+    await failIdempotency("payout", payoutKey, error);
+    await storePayoutFailure(withdrawal._id, error);
+    throw error;
+  }
+};
+
+export const runAutoWithdrawExecutorBatch = async (limit = 5) => {
+  if (!canAutoExecuteWithdrawals()) {
+    return { enabled: false, processed: 0, failed: 0 };
+  }
+
+  let processed = 0;
+  let failed = 0;
+  const max = Math.max(1, Number(limit) || 5);
+
+  for (let i = 0; i < max; i += 1) {
+    try {
+      const result = await executeApprovedWithdrawalPayout();
+      if (!result?.processed) {
+        break;
+      }
+      processed += 1;
+    } catch (err) {
+      failed += 1;
+      console.error("Auto withdraw executor failed:", err?.message || String(err));
+    }
+  }
+
+  return { enabled: true, processed, failed };
+};
+
 /** Strict state machine: no automatic state changes before admin approval. */
 export const autoMarkClaimable = async () => {
   return { modifiedCount: 0 };
@@ -530,7 +726,7 @@ export const adminApproveHybridWithdrawal = async (withdrawalId, adminId = null)
   }
 };
 
-export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash, adminId = null) => {
+const markHybridWithdrawalPaidAfterAutoVerification = async (withdrawalId, txHash, adminId = null) => {
   const normalized = normalizeTxHash(txHash);
   if (!normalized) {
     throw adminClientError("Valid transaction hash required");
@@ -611,6 +807,9 @@ export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash, adminI
           status: "paid",
           txHash: normalized,
           paidAt: nowPaid,
+          payoutStatus: "idle",
+          payoutLockedUntil: null,
+          payoutLastError: "",
           ...(adminId ? { paidBy: adminId } : {}),
         },
       },
@@ -683,6 +882,10 @@ export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash, adminI
   } finally {
     session.endSession();
   }
+};
+
+export const adminMarkHybridWithdrawalPaid = async () => {
+  throw adminClientError("Manual mark-paid is disabled. Approved withdrawals are paid by the auto executor.", 410);
 };
 
 export const adminRejectHybridWithdrawal = async (withdrawalId) => {

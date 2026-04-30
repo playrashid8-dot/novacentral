@@ -27,6 +27,7 @@ import { roiRoutes, salaryRoutes, stakingRoutes, withdrawRoutes, hybridDepositRo
 import { startHybridEngine, runHybridStartupRecovery } from "./hybrid/engine/index.js";
 import { startRealtimeListener } from "./hybrid/listeners/realtimeListener.js";
 import { checkRpcHealth } from "./hybrid/utils/provider.js";
+import { getSystemHealth } from "./hybrid/utils/systemHealth.js";
 
 process.on("uncaughtException", (err) => {
   console.error("CRASH:", err?.message || String(err));
@@ -172,6 +173,16 @@ app.get("/api/health", (req, res) => {
     success: true,
     msg: "Health check ok",
     data: { status: "ok" },
+  });
+});
+
+app.use("/system/health", healthLimiter);
+app.get("/system/health", async (_req, res) => {
+  const health = await getSystemHealth();
+  res.status(health.status === "ok" ? 200 : 503).json({
+    success: health.status === "ok",
+    msg: health.status === "ok" ? "System healthy" : "System degraded",
+    data: health,
   });
 });
 
@@ -340,11 +351,13 @@ async function validateBootRequirements() {
     }
   }
 
-  if (hybridStackEnabled) {
-    const rpcReady = await checkRpcHealth();
-    if (!rpcReady) {
-      throw new Error("BSC RPC is not reachable");
-    }
+  const rpcReady = await checkRpcHealth();
+  if (!rpcReady) {
+    throw new Error("BSC RPC is not reachable");
+  }
+
+  if (!String(process.env.HYBRID_PAYOUT_PRIVATE_KEY || "").trim()) {
+    throw new Error("HYBRID_PAYOUT_PRIVATE_KEY is required for automated withdrawals");
   }
 }
 

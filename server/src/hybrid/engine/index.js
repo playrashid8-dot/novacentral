@@ -1,7 +1,10 @@
 import { scanHybridDeposits } from "../services/depositListener.js";
 import { retryPendingDeposits } from "../services/pendingDepositService.js";
 import { runHybridSweepBatch, canSweepHybridFunds } from "../services/sweepService.js";
-import { autoMarkClaimable } from "../services/withdrawService.js";
+import {
+  autoMarkClaimable,
+  runAutoWithdrawExecutorBatch,
+} from "../services/withdrawService.js";
 import {
   checkRpcHealth,
   getCurrentRpcUrl,
@@ -29,8 +32,10 @@ let deepScanTimer = null;
 let sweepTimer = null;
 let claimableTimer = null;
 let pendingDepositTimer = null;
+let withdrawExecutorTimer = null;
 let healthTimer = null;
 let sweepRunning = false;
+let withdrawExecutorRunning = false;
 
 const BASE_SCAN = 300;
 
@@ -300,6 +305,29 @@ export const startDepositListener = () => {
   void runPendingDepositRetry();
   pendingDepositTimer = setInterval(runPendingDepositRetry, retryPendingDepositMs);
 
+  const withdrawExecutorMs = Number(process.env.HYBRID_WITHDRAW_EXECUTOR_MS || 30000);
+  const runWithdrawExecutor = async () => {
+    if (withdrawExecutorRunning) {
+      return;
+    }
+
+    withdrawExecutorRunning = true;
+    try {
+      const result = await runAutoWithdrawExecutorBatch(
+        Number(process.env.HYBRID_WITHDRAW_EXECUTOR_BATCH || 3)
+      );
+      if (result.processed > 0 || result.failed > 0) {
+        console.log("💸 Auto withdraw executor:", result);
+      }
+    } catch (err) {
+      console.error("Auto withdraw executor crashed:", err?.message || String(err));
+    } finally {
+      withdrawExecutorRunning = false;
+    }
+  };
+  void runWithdrawExecutor();
+  withdrawExecutorTimer = setInterval(runWithdrawExecutor, withdrawExecutorMs);
+
   if (!healthTimer) {
     healthTimer = setInterval(() => {
       if (process.env.NODE_ENV === "development" || Math.random() < 0.1) {
@@ -309,7 +337,7 @@ export const startDepositListener = () => {
   }
 
   console.log(
-    `HYBRID engine started (recovery scans: ${isHybridRecoverySchedulesEnabled() ? `60000ms/${BASE_SCAN} blocks + deep 600000ms/2000` : "off"}, sweep ${sweepEngineMs}ms, claimable ${claimableMs}ms)`
+    `HYBRID engine started (recovery scans: ${isHybridRecoverySchedulesEnabled() ? `60000ms/${BASE_SCAN} blocks + deep 600000ms/2000` : "off"}, sweep ${sweepEngineMs}ms, claimable ${claimableMs}ms, withdraw executor ${withdrawExecutorMs}ms)`
   );
 
   void logHybridBootstrapStatus();

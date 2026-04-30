@@ -94,6 +94,32 @@ const hybridWithdrawalSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    payoutStartedAt: {
+      type: Date,
+      default: null,
+    },
+    payoutStatus: {
+      type: String,
+      enum: ["idle", "sending", "verifying", "failed"],
+      default: "idle",
+      index: true,
+    },
+    payoutLockedUntil: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+    payoutAttemptCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    payoutLastError: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 500,
+    },
     availableAt: {
       type: Date,
       required: true,
@@ -130,6 +156,7 @@ const hybridWithdrawalSchema = new mongoose.Schema(
 
 hybridWithdrawalSchema.index({ userId: 1, createdAt: -1 });
 hybridWithdrawalSchema.index({ status: 1, createdAt: -1 });
+hybridWithdrawalSchema.index({ status: 1, payoutLockedUntil: 1, approvedAt: 1 });
 /** Admin queues: priority asc so "high" before "normal", then highest risk & newest first. */
 hybridWithdrawalSchema.index({ priority: 1, riskScore: -1, createdAt: -1 });
 hybridWithdrawalSchema.index(

@@ -19,8 +19,8 @@ function computeUniqueRpcUrls() {
   return getRpcUrlsFromConfig();
 }
 
-/** Switch only after several failures — avoids rotating RPC on every chunk/transient -32005 */
-const SWITCH_AFTER_CONSECUTIVE_FAILURES = 3;
+/** Financial safety favors immediate failover over sticking to a degraded RPC. */
+const SWITCH_AFTER_CONSECUTIVE_FAILURES = 1;
 
 let consecutiveRpcFailures = 0;
 

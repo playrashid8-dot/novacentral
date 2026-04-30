@@ -6,7 +6,6 @@ import HybridDeposit from "../hybrid/models/HybridDeposit.js";
 import HybridWithdrawal from "../hybrid/models/HybridWithdrawal.js";
 import {
   adminApproveHybridWithdrawal,
-  adminMarkHybridWithdrawalPaid,
   adminRejectHybridWithdrawal,
 } from "../hybrid/services/withdrawService.js";
 import { scanHybridDeposits } from "../hybrid/services/depositListener.js";
@@ -423,26 +422,11 @@ router.post("/hybrid/withdraw/approve", auth, isAdmin, async (req, res) => {
 });
 
 router.post("/hybrid/withdraw/pay", auth, isAdmin, async (req, res) => {
-  try {
-    const { withdrawalId, txHash } = req.body || {};
-    if (!withdrawalId || String(withdrawalId).trim() === "") {
-      return res.status(400).json({ success: false, msg: "Invalid ID", data: {} });
-    }
-    if (!txHash || String(txHash).trim() === "") {
-      return res.status(400).json({ success: false, msg: "txHash required", data: {} });
-    }
-    const data = await adminMarkHybridWithdrawalPaid(withdrawalId, txHash, req.user._id);
-    await writeAdminAudit({
-      adminId: req.user._id,
-      category: "withdraw",
-      action: "Withdrawal marked paid",
-      targetUserId: data?.withdrawal?.userId ?? data?.userId,
-      meta: { withdrawalId: String(withdrawalId), txHash: String(txHash).trim() },
-    });
-    return res.json({ success: true, msg: "Withdrawal marked as paid", data });
-  } catch (err) {
-    return sendAdminError(res, err, "ADMIN WITHDRAW PAY ERROR");
-  }
+  return res.status(410).json({
+    success: false,
+    msg: "Manual payout is disabled; approved withdrawals are paid by the auto executor",
+    data: null,
+  });
 });
 
 router.post("/hybrid/withdraw/reject", auth, isAdmin, async (req, res) => {

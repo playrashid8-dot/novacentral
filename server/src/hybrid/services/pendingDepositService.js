@@ -79,6 +79,7 @@ export async function retryPendingDeposits(limit = 25) {
 
       if (["credited", "swept"].includes(existing?.status)) {
         await markPendingDepositCredited(item.txHash);
+        credited += 1;
         continue;
       }
 

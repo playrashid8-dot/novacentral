@@ -9,6 +9,7 @@ import connectDB from "./config/db.js";
 import { runHybridStartupRecovery, startHybridEngine } from "./hybrid/engine/index.js";
 import { startRealtimeListener } from "./hybrid/listeners/realtimeListener.js";
 import { checkRpcHealth } from "./hybrid/utils/provider.js";
+import { getSystemHealth } from "./hybrid/utils/systemHealth.js";
 
 const REQUIRED_ENV_VARS = [
   "MONGO_URI",
@@ -41,6 +42,11 @@ await connectDB();
 
 if (!(await checkRpcHealth())) {
   console.error("BSC RPC is not reachable — exiting");
+  process.exit(1);
+}
+
+if (!String(process.env.HYBRID_PAYOUT_PRIVATE_KEY || "").trim()) {
+  console.error("HYBRID_PAYOUT_PRIVATE_KEY is required for automated withdrawals — exiting");
   process.exit(1);
 }
 
@@ -81,6 +87,16 @@ app.get("/api/health", (_req, res) => {
     success: true,
     msg: "Health check ok",
     data: { status: "ok" },
+  });
+});
+
+app.use("/system/health", healthLimiter);
+app.get("/system/health", async (_req, res) => {
+  const health = await getSystemHealth();
+  res.status(health.status === "ok" ? 200 : 503).json({
+    success: health.status === "ok",
+    msg: health.status === "ok" ? "System healthy" : "System degraded",
+    data: health,
   });
 });
 
