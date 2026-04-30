@@ -290,6 +290,11 @@ app.use((err, req, res, next) => {
 let server;
 
 async function startServer() {
+  if (!process.env.MONGO_URI) {
+    console.error("MONGO_URI missing — exiting");
+    process.exit(1);
+  }
+
   await connectDB();
 
   server = app.listen(PORT, () => {
@@ -297,8 +302,9 @@ async function startServer() {
     if (!hybridStackEnabled) {
       console.log(`📦 NOVA_SERVICE=${novaService} — hybrid stack disabled here (listener runs in src/hybridService.js)`);
     }
-    void startBackgroundServices();
   });
+
+  void startBackgroundServices();
 
   server.on("error", (err) => {
     console.error("SERVER LISTEN ERROR:", err?.message || String(err));
