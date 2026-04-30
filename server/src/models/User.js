@@ -303,5 +303,12 @@ userSchema.methods.toJSON = function () {
 //
 userSchema.index({ createdAt: -1 });
 userSchema.index({ referredBy: 1, createdAt: -1 });
+userSchema.index(
+  { walletAddress: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { walletAddress: { $type: "string", $ne: "" } },
+  }
+);
 
 export default mongoose.model("User", userSchema);

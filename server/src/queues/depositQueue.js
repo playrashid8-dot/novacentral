@@ -3,6 +3,7 @@ import { getRedis, isRedisReady } from "../config/redis.js";
 
 const connection = getRedis();
 let queueErrorLogged = false;
+const WORKER_HEARTBEAT_KEY = "depositQueue:worker:heartbeat";
 
 /** Shared BullMQ worker / queue tuning: max jobs started per duration (global per queue in Redis). */
 export const DEPOSIT_QUEUE_LIMITER = {
@@ -77,6 +78,20 @@ export function toSerializableTransferLog(log) {
 export async function enqueueDepositJob({ log, blockNumber }) {
   const redis = getRedis();
   if (!redis || redis.status !== "ready" || !depositQueue) {
+    return null;
+  }
+
+  try {
+    const heartbeat = await redis.get(WORKER_HEARTBEAT_KEY);
+    if (!heartbeat) {
+      if (!queueErrorLogged) {
+        queueErrorLogged = true;
+        console.warn("⚠️ Deposit worker heartbeat missing — using direct deposit processing");
+      }
+      return null;
+    }
+  } catch (err) {
+    console.warn("⚠️ Deposit queue heartbeat check failed:", err?.message || String(err));
     return null;
   }
 

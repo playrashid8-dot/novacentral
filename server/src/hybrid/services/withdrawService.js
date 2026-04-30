@@ -17,6 +17,22 @@ import { getSpendableHybridBalance, splitHybridBalance } from "./balanceService.
 
 const getMonthlyLimit = (level) => WITHDRAW_MONTHLY_LIMITS[Math.min(Number(level || 0), 3)] || 0;
 
+export const allowedWithdrawTransitions = {
+  pending: ["approved", "rejected"],
+  approved: ["paid"],
+  rejected: [],
+  paid: [],
+};
+
+const assertWithdrawTransition = (currentStatus, nextStatus) => {
+  const current = String(currentStatus || "");
+  const allowed = allowedWithdrawTransitions[current] || [];
+
+  if (!allowed.includes(nextStatus)) {
+    throw adminClientError(`Invalid withdrawal transition: ${current || "unknown"} → ${nextStatus}`);
+  }
+};
+
 const getMonthKey = (value) => {
   const date = new Date(value);
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
@@ -121,7 +137,7 @@ export const requestHybridWithdrawal = async (
       }).session(session);
       const rapidPattern = priorHourCount >= 3;
       const isSuspicious = Boolean(user.adminFraudFlag) || rapidPattern;
-      const initialStatus = isSuspicious ? "review" : "pending";
+      const initialStatus = "pending";
 
       let riskScore = 0;
       if (priorHourCount > 3) riskScore += 2;
@@ -297,8 +313,8 @@ export const requestHybridWithdrawal = async (
 };
 
 /**
- * User "claim" only moves pending → claimable after the lock window.
- * Funds stay in pendingWithdraw until admin marks the withdrawal paid.
+ * User "claim" is now a lock-window readiness check only.
+ * Strict financial states stay pending → approved → paid or pending → rejected.
  */
 export const claimHybridWithdrawal = async (userId, withdrawalId) => {
   const session = await mongoose.startSession();
@@ -317,10 +333,10 @@ export const claimHybridWithdrawal = async (userId, withdrawalId) => {
       throw new Error("Withdrawal not found");
     }
 
-    if (withdrawal.status === "claimable") {
+    if (withdrawal.status === "approved" || withdrawal.status === "paid") {
       result = {
         withdrawalId: withdrawal._id,
-        status: "claimable",
+        status: withdrawal.status,
         netAmount: Number(withdrawal.netAmount || 0),
         feeAmount: Number(withdrawal.feeAmount || 0),
       };
@@ -328,43 +344,19 @@ export const claimHybridWithdrawal = async (userId, withdrawalId) => {
       return result;
     }
 
-    if (withdrawal.status === "review") {
-      throw new Error("Withdrawal is under fraud review — wait for admin clearance");
-    }
-
     if (withdrawal.status !== "pending") {
-      throw new Error("Withdrawal cannot be marked claimable in its current state");
+      throw new Error("Withdrawal cannot be claimed in its current state");
     }
 
     if (new Date(withdrawal.availableAt).getTime() > Date.now()) {
       throw new Error("Withdrawal is still locked for 96 hours");
     }
 
-    const updated = await HybridWithdrawal.findOneAndUpdate(
-      {
-        _id: withdrawal._id,
-        userId,
-        status: "pending",
-        availableAt: { $lte: new Date() },
-      },
-      {
-        $set: { status: "claimable" },
-      },
-      {
-        new: true,
-        session,
-      }
-    );
-
-    if (!updated) {
-      throw new Error("Unable to mark withdrawal as claimable");
-    }
-
     result = {
-      withdrawalId: updated._id,
-      status: "claimable",
-      netAmount: Number(updated.netAmount || 0),
-      feeAmount: Number(updated.feeAmount || 0),
+      withdrawalId: withdrawal._id,
+      status: withdrawal.status,
+      netAmount: Number(withdrawal.netAmount || 0),
+      feeAmount: Number(withdrawal.feeAmount || 0),
     };
 
     await session.commitTransaction();
@@ -481,25 +473,9 @@ export const verifyPayoutTx = async (txHash, expectedAmount, userAddress) => {
   }
 };
 
-/** Moves time-unlocked pending withdrawals to claimable without a user call (cron). */
+/** Strict state machine: no automatic state changes before admin approval. */
 export const autoMarkClaimable = async () => {
-  try {
-    const res = await HybridWithdrawal.updateMany(
-      {
-        status: "pending",
-        availableAt: { $lte: new Date() },
-      },
-      {
-        $set: { status: "claimable" },
-      }
-    );
-
-    if (res.modifiedCount > 0) {
-      console.log(`✅ ${res.modifiedCount} withdrawals moved to claimable`);
-    }
-  } catch (err) {
-    console.error("Auto claimable error:", err);
-  }
+  return { modifiedCount: 0 };
 };
 
 export const adminApproveHybridWithdrawal = async (withdrawalId, adminId = null) => {
@@ -517,16 +493,19 @@ export const adminApproveHybridWithdrawal = async (withdrawalId, adminId = null)
       throw adminClientError("Withdrawal not found", 404);
     }
 
-    if (withdrawal.status !== "pending" && withdrawal.status !== "review" && withdrawal.status !== "claimable") {
-      throw adminClientError("Already processed");
-    }
+    assertWithdrawTransition(withdrawal.status, "approved");
 
     if (new Date(withdrawal.availableAt).getTime() > Date.now()) {
       throw adminClientError("Withdrawal lock period (96h) is still active");
     }
 
     const updated = await HybridWithdrawal.findOneAndUpdate(
-      { _id: withdrawalId, status: { $in: ["review", "pending", "claimable"] } },
+      {
+        _id: withdrawalId,
+        status: "pending",
+        approvedAt: null,
+        paidAt: null,
+      },
       {
         $set: {
           status: "approved",
@@ -564,6 +543,7 @@ export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash, adminI
   if (head.status === "paid") {
     throw adminClientError("Withdrawal already paid");
   }
+  assertWithdrawTransition(head.status, "paid");
 
   const preCheck = await HybridWithdrawal.findOne({
     _id: withdrawalId,
@@ -594,10 +574,6 @@ export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash, adminI
 
     if (!withdrawal) {
       throw adminClientError("Withdrawal not found or not approved");
-    }
-
-    if (withdrawal.status === "paid") {
-      throw adminClientError("Withdrawal already paid");
     }
 
     const userBeforePay = await User.findById(withdrawal.userId)
@@ -725,14 +701,7 @@ export const adminRejectHybridWithdrawal = async (withdrawalId) => {
       throw adminClientError("Withdrawal not found", 404);
     }
 
-    if (
-      withdrawal.status !== "pending" &&
-      withdrawal.status !== "review" &&
-      withdrawal.status !== "claimable" &&
-      withdrawal.status !== "approved"
-    ) {
-      throw adminClientError("Already processed");
-    }
+    assertWithdrawTransition(withdrawal.status, "rejected");
 
     const rewardBack = Number(withdrawal.sourceRewardAmount || 0);
     const depositBack = Number(withdrawal.sourceDepositAmount || 0);
@@ -747,7 +716,12 @@ export const adminRejectHybridWithdrawal = async (withdrawalId) => {
     }
 
     const updatedWithdrawal = await HybridWithdrawal.findOneAndUpdate(
-      { _id: withdrawalId, status: { $in: ["review", "pending", "claimable", "approved"] } },
+      {
+        _id: withdrawalId,
+        status: "pending",
+        approvedAt: null,
+        paidAt: null,
+      },
       { $set: { status: "rejected" } },
       { new: true, session }
     );

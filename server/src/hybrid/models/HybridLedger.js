@@ -15,7 +15,7 @@ const hybridLedgerSchema = new mongoose.Schema(
     },
     balanceType: {
       type: String,
-      enum: ["depositBalance", "rewardBalance", "pendingWithdraw"],
+      enum: ["balance", "depositBalance", "rewardBalance", "pendingWithdraw"],
       required: true,
     },
     amount: {

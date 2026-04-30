@@ -10,6 +10,10 @@ import {
 import { BSC_USDT_ABI, HYBRID_TOKEN, MIN_HYBRID_DEPOSIT } from "../utils/constants.js";
 import { getProvider, getRpcUrls, withProviderRetry } from "../utils/provider.js";
 import {
+  markPendingDepositCredited,
+  recordPendingDepositFailure,
+} from "./pendingDepositService.js";
+import {
   describeHybridEarnDisabledReason,
   isHybridEarnEnabled,
   warnIfHybridEarnEnvInvalid,
@@ -17,6 +21,7 @@ import {
 
 /** Canonical Transfer event topic — avoids mismatched hard-coded hashes */
 const TRANSFER_TOPIC = id("Transfer(address,address,uint256)");
+const transferIface = new Interface(BSC_USDT_ABI);
 const MIN_DEPOSIT_AMOUNT = MIN_HYBRID_DEPOSIT;
 /** Initial lookback capped to reduce pruned-RPC / oversized range failures */
 const SAFE_LOOKBACK_BLOCKS = 3000;
@@ -98,7 +103,7 @@ const saveLastProcessedBlock = async (blockNumber) => {
  * Single-log processing (sequential await per log — no in-memory batch accumulation).
  * @returns {{ creditFailure: boolean, processedDelta: number }}
  */
-export async function processDepositLog(log, iface, usersByWallet) {
+export async function processDepositLog(log, iface, usersByWallet, options = {}) {
   const txHash = String(log.transactionHash || "").toLowerCase();
   const toAddress = decodeTopicAddress(log.topics?.[2]).toLowerCase();
   /** Alias for deposit skip debug (matches realtime listener wording). */
@@ -128,7 +133,7 @@ export async function processDepositLog(log, iface, usersByWallet) {
     .select("_id status")
     .lean();
 
-  if (existing) {
+  if (["credited", "swept"].includes(existing?.status)) {
     devLog("Duplicate tx skipped:", shortTx(txHash));
     return { creditFailure: false, processedDelta: 0 };
   }
@@ -170,7 +175,8 @@ export async function processDepositLog(log, iface, usersByWallet) {
     block: log.blockNumber,
   });
 
-  try {
+  const serializedLog = toSerializableTransferLog(log);
+  const creditDirectly = async () => {
     await creditHybridDeposit({
       userId: matchedUser._id,
       walletAddress: toAddress,
@@ -180,8 +186,74 @@ export async function processDepositLog(log, iface, usersByWallet) {
       fromAddress,
       tokenAddress: String(process.env.HYBRID_USDT_CONTRACT || "").trim(),
     });
+    await markPendingDepositCredited(txHash);
+  };
+
+  if (options?.skipQueue !== true) {
+    let job = null;
+    try {
+      job = serializedLog
+        ? await enqueueDepositJob({
+            log: serializedLog,
+            blockNumber: serializedLog.blockNumber,
+          })
+        : null;
+    } catch (err) {
+      console.error("❌ Deposit enqueue failed:", err?.message || String(err));
+    }
+
+    if (job) {
+      return { creditFailure: false, holdCheckpoint: true, processedDelta: 0, queued: true };
+    }
+
+    console.error("❌ Deposit queue unavailable — crediting directly and holding checkpoint:", shortTx(txHash));
+    await recordPendingDepositFailure({
+      txHash,
+      userId: matchedUser._id,
+      walletAddress: toAddress,
+      amount,
+      blockNumber: log.blockNumber,
+      fromAddress,
+      tokenAddress: String(process.env.HYBRID_USDT_CONTRACT || "").trim(),
+      serializedLog,
+      error: new Error("Deposit queue unavailable"),
+    });
+
+    try {
+      await creditDirectly();
+      return { creditFailure: false, holdCheckpoint: true, processedDelta: 1 };
+    } catch (err) {
+      console.error("❌ ERROR:", err?.message || String(err));
+      await recordPendingDepositFailure({
+        txHash,
+        userId: matchedUser._id,
+        walletAddress: toAddress,
+        amount,
+        blockNumber: log.blockNumber,
+        fromAddress,
+        tokenAddress: String(process.env.HYBRID_USDT_CONTRACT || "").trim(),
+        serializedLog,
+        error: err,
+      });
+      return { creditFailure: true, processedDelta: 0 };
+    }
+  }
+
+  try {
+    await creditDirectly();
   } catch (err) {
     console.error("❌ ERROR:", err?.message || String(err));
+    await recordPendingDepositFailure({
+      txHash,
+      userId: matchedUser._id,
+      walletAddress: toAddress,
+      amount,
+      blockNumber: log.blockNumber,
+      fromAddress,
+      tokenAddress: String(process.env.HYBRID_USDT_CONTRACT || "").trim(),
+      serializedLog,
+      error: err,
+    });
     return { creditFailure: true, processedDelta: 0 };
   }
 
@@ -380,7 +452,6 @@ async function executeDepositScan(
         });
       }
 
-      const pendingEnqueue = [];
       for (const log of logs) {
         const toAddress = decodeTopicAddress(log.topics?.[2]).toLowerCase();
         const matchedUser = usersByWallet.get(toAddress);
@@ -389,14 +460,6 @@ async function executeDepositScan(
           continue;
         }
 
-        const sLog = toSerializableTransferLog(log);
-        if (!sLog) {
-          console.warn(
-            "⚠️ Scan path: cannot serialize Transfer log for enqueue:",
-            shortTx(log.transactionHash)
-          );
-          continue;
-        }
         const txHash = String(log.transactionHash || "").trim().toLowerCase();
         if (!txHash) continue;
         if (seenTx.has(txHash)) {
@@ -406,28 +469,14 @@ async function executeDepositScan(
         if (seenTx.size > 20000) {
           seenTx.clear();
         }
-        pendingEnqueue.push({ sLog });
-      }
 
-      const ENQUEUE_BATCH = 50;
-      for (let i = 0; i < pendingEnqueue.length; i += ENQUEUE_BATCH) {
-        const slice = pendingEnqueue.slice(i, i + ENQUEUE_BATCH);
-        const outcomes = await Promise.all(
-          slice.map(async ({ sLog }) => {
-            try {
-              const job = await enqueueDepositJob({
-                log: sLog,
-                blockNumber: sLog.blockNumber,
-              });
-              return job ? 1 : 0;
-            } catch (err) {
-              console.error("❌ Queue failure:", err?.message || String(err));
-              chunkHadCreditFailure = true;
-              return 0;
-            }
-          }),
-        );
-        processed += outcomes.reduce((acc, n) => acc + n, 0);
+        const result = await processDepositLog(log, transferIface, usersByWallet);
+        processed += Number(result.processedDelta) || 0;
+        if (result.creditFailure || result.holdCheckpoint) {
+          seenTx.delete(txHash);
+          chunkHadCreditFailure = true;
+          break;
+        }
       }
     } else if (!quiet) {
       devLog("Deposit listener found no recipient addresses");
@@ -455,7 +504,8 @@ async function executeDepositScan(
     }
 
     if (!isManualRescan) {
-      if (toBlock > latestBlock) {
+      const checkpointHasConfirmationDepth = chainTip >= toBlock + CONFIRMATIONS;
+      if (toBlock > latestBlock || !checkpointHasConfirmationDepth) {
         if (!quiet) {
           devLog("Skipping invalid block range (checkpoint)");
         }

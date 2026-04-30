@@ -15,13 +15,13 @@ const getEligibleLevel = (user) => {
     }
   }
 
-  return Math.max(level, Number(user.level || 0));
+  return Math.max(level, Number(user.level || 0), Number(user.vipLevel || 0));
 };
 
 export const syncUserLevel = async (userId, session = null) => {
   const user = await User.findById(userId)
     .select(
-      "depositBalance directCount teamCount level levelBonusStage rewardBalance totalEarnings"
+      "depositBalance directCount teamCount level vipLevel levelBonusStage rewardBalance totalEarnings"
     )
     .session(session);
 
@@ -39,6 +39,7 @@ export const syncUserLevel = async (userId, session = null) => {
   const update = {
     $set: {
       level: nextLevel,
+      vipLevel: nextLevel,
       levelBonusStage: Math.max(currentBonusStage, nextLevel),
     },
   };

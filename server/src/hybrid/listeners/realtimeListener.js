@@ -25,6 +25,11 @@ import {
   isHybridEarnEnabled,
   warnIfHybridEarnEnvInvalid,
 } from "../utils/hybridEarnEnv.js";
+import { creditHybridDeposit } from "../services/depositService.js";
+import {
+  markPendingDepositCredited,
+  recordPendingDepositFailure,
+} from "../services/pendingDepositService.js";
 
 const TRANSFER_TOPIC = id("Transfer(address,address,uint256)");
 const transferIface = new Interface(BSC_USDT_ABI);
@@ -141,13 +146,14 @@ async function dispatchRealtimeDeposit(log, provider) {
     return;
   }
 
+  let amountNum = 0;
   try {
     const parsed = transferIface.parseLog({
       address: logAddr || expectedContract,
       topics: log.topics,
       data: log.data,
     });
-    const amountNum = Number(formatUnits(parsed.args.value, HYBRID_TOKEN.decimals));
+    amountNum = Number(formatUnits(parsed.args.value, HYBRID_TOKEN.decimals));
     if (
       amountNum == null ||
       !Number.isFinite(Number(amountNum)) ||
@@ -176,14 +182,41 @@ async function dispatchRealtimeDeposit(log, provider) {
       return;
     }
 
-    await enqueueDepositJob({
-      log: sLog,
+    const fromAddress = `0x${String(log.topics?.[1] || "").slice(-40).toLowerCase()}`;
+    await creditHybridDeposit({
+      userId: user._id,
+      walletAddress: to,
+      txHash: txKey,
+      amount: amountNum,
       blockNumber: sLog.blockNumber,
+      fromAddress,
+      tokenAddress: expectedContract,
     });
+    await markPendingDepositCredited(txKey);
+
+    try {
+      await enqueueDepositJob({
+        log: sLog,
+        blockNumber: sLog.blockNumber,
+      });
+    } catch (queueErr) {
+      console.warn("⚠️ Deposit queue unavailable after direct credit:", queueErr?.message || String(queueErr));
+    }
     setTimeout(() => processedTx.delete(log.transactionHash), 300000);
   } catch (err) {
+    await recordPendingDepositFailure({
+      txHash: txKey,
+      userId: user._id,
+      walletAddress: to,
+      amount: amountNum,
+      blockNumber: log.blockNumber,
+      fromAddress: `0x${String(log.topics?.[1] || "").slice(-40).toLowerCase()}`,
+      tokenAddress: expectedContract,
+      serializedLog: toSerializableTransferLog(log),
+      error: err,
+    });
     processedTx.delete(log.transactionHash);
-    console.error("❌ Queue failure:", err?.message || String(err));
+    console.error("❌ Direct deposit credit failure:", err?.message || String(err));
     throw err;
   }
 }

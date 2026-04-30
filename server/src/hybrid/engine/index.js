@@ -1,4 +1,5 @@
 import { scanHybridDeposits } from "../services/depositListener.js";
+import { retryPendingDeposits } from "../services/pendingDepositService.js";
 import { runHybridSweepBatch, canSweepHybridFunds } from "../services/sweepService.js";
 import { autoMarkClaimable } from "../services/withdrawService.js";
 import {
@@ -27,6 +28,7 @@ let hybridTimer = null;
 let deepScanTimer = null;
 let sweepTimer = null;
 let claimableTimer = null;
+let pendingDepositTimer = null;
 let healthTimer = null;
 let sweepRunning = false;
 
@@ -211,6 +213,7 @@ export async function runHybridStartupRecovery(options = {}) {
       skipProbe: true,
       blocks: startupBackupBlocks,
     });
+    await retryPendingDeposits(50);
   } catch (err) {
     console.error("Recovery crash prevented:", err?.message || String(err));
   }
@@ -282,6 +285,20 @@ export const startDepositListener = () => {
   };
   void runAutoClaimable();
   claimableTimer = setInterval(runAutoClaimable, claimableMs);
+
+  const retryPendingDepositMs = Number(process.env.HYBRID_PENDING_DEPOSIT_RETRY_MS || 60000);
+  const runPendingDepositRetry = async () => {
+    try {
+      const result = await retryPendingDeposits(25);
+      if (result.credited > 0 || result.failed > 0) {
+        console.log("🛟 Pending deposit retry:", result);
+      }
+    } catch (err) {
+      console.error("Pending deposit retry failed:", err?.message || String(err));
+    }
+  };
+  void runPendingDepositRetry();
+  pendingDepositTimer = setInterval(runPendingDepositRetry, retryPendingDepositMs);
 
   if (!healthTimer) {
     healthTimer = setInterval(() => {

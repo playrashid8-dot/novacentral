@@ -22,7 +22,11 @@ async function processSerializedDepositLog(serializedLog) {
     console.log(`⚙️ Processing job: ${normalized}`);
   }
 
-  if (await HybridDeposit.exists({ txHash: normalized })) {
+  const existingDeposit = await HybridDeposit.findOne({ txHash: normalized })
+    .select("_id status")
+    .lean();
+
+  if (["credited", "swept"].includes(existingDeposit?.status)) {
     return { outcome: "duplicate", txHash: normalized, processedDelta: 0 };
   }
 
@@ -99,7 +103,7 @@ async function processSerializedDepositLog(serializedLog) {
     ],
   ]);
 
-  const r = await processDepositLog(log, iface, usersByWallet);
+  const r = await processDepositLog(log, iface, usersByWallet, { skipQueue: true });
 
   if (r.creditFailure) {
     console.error("❌ Worker error: credit failed", normalized);

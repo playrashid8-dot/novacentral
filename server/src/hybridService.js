@@ -8,6 +8,23 @@ import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import connectDB from "./config/db.js";
 import { runHybridStartupRecovery, startHybridEngine } from "./hybrid/engine/index.js";
 import { startRealtimeListener } from "./hybrid/listeners/realtimeListener.js";
+import { checkRpcHealth } from "./hybrid/utils/provider.js";
+
+const REQUIRED_ENV_VARS = [
+  "MONGO_URI",
+  "JWT_SECRET",
+  "HYBRID_ADMIN_WALLET",
+  "HYBRID_PRIVATE_KEY_ENCRYPTION_SECRET",
+];
+
+const missingRequiredEnv = REQUIRED_ENV_VARS.filter(
+  (key) => !String(process.env[key] || "").trim()
+);
+
+if (missingRequiredEnv.length > 0) {
+  console.error(`Missing required env var(s): ${missingRequiredEnv.join(", ")} — exiting`);
+  process.exit(1);
+}
 
 const _hybridWs = String(
   process.env.HYBRID_BSC_WS_URL || process.env.BSC_WS_URL || ""
@@ -21,6 +38,11 @@ if (!_hybridWs) {
 }
 
 await connectDB();
+
+if (!(await checkRpcHealth())) {
+  console.error("BSC RPC is not reachable — exiting");
+  process.exit(1);
+}
 
 try {
   await startRealtimeListener();

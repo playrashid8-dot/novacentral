@@ -5,6 +5,12 @@ import { withProviderRetry } from "../utils/provider.js";
 import { addHybridLedgerEntries } from "./ledgerService.js";
 import { distributeHybridReferralRewards } from "./referralService.js";
 import { syncUserLevel } from "./levelService.js";
+import {
+  completeIdempotency,
+  failIdempotency,
+  getCompletedIdempotency,
+  markIdempotencyProcessing,
+} from "./idempotencyService.js";
 export const creditHybridDeposit = async ({
   userId,
   walletAddress,
@@ -22,6 +28,14 @@ export const creditHybridDeposit = async ({
     throw new Error("Invalid deposit payload");
   }
 
+  const storedResponse = await getCompletedIdempotency("deposit", normalizedTxHash);
+  if (storedResponse?.depositId) {
+    const storedDeposit = await HybridDeposit.findById(storedResponse.depositId);
+    if (storedDeposit && ["credited", "swept"].includes(storedDeposit.status)) {
+      return storedDeposit;
+    }
+  }
+
   const session = await mongoose.startSession();
 
   try {
@@ -29,6 +43,8 @@ export const creditHybridDeposit = async ({
     let creditedNew = false;
 
     await session.withTransaction(async () => {
+      await markIdempotencyProcessing("deposit", normalizedTxHash, session);
+
       const creditedDeposit = await HybridDeposit.findOne({
         txHash: normalizedTxHash,
         status: { $in: ["credited", "swept"] },
@@ -36,6 +52,16 @@ export const creditHybridDeposit = async ({
 
       if (creditedDeposit) {
         deposit = creditedDeposit;
+        await completeIdempotency(
+          "deposit",
+          normalizedTxHash,
+          {
+            depositId: String(creditedDeposit._id),
+            status: creditedDeposit.status,
+            amount: Number(creditedDeposit.amount || 0),
+          },
+          session
+        );
         return;
       }
 
@@ -144,6 +170,17 @@ export const creditHybridDeposit = async ({
         depositTxHash: normalizedTxHash,
       });
       await syncUserLevel(userId, session);
+
+      await completeIdempotency(
+        "deposit",
+        normalizedTxHash,
+        {
+          depositId: String(deposit._id),
+          status: deposit.status,
+          amount: numericAmount,
+        },
+        session
+      );
     });
 
     if (creditedNew && deposit) {
@@ -161,6 +198,7 @@ export const creditHybridDeposit = async ({
       }
     }
 
+    await failIdempotency("deposit", normalizedTxHash, error);
     throw error;
   } finally {
     session.endSession();

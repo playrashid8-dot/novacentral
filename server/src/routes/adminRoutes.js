@@ -10,6 +10,7 @@ import {
   adminRejectHybridWithdrawal,
 } from "../hybrid/services/withdrawService.js";
 import { scanHybridDeposits } from "../hybrid/services/depositListener.js";
+import { addHybridLedgerEntries } from "../hybrid/services/ledgerService.js";
 import { getProvider } from "../hybrid/utils/provider.js";
 import { getHybridAdminSystemStatus } from "../hybrid/utils/adminSystemStatus.js";
 import { getReadyRedis } from "../config/redis.js";
@@ -683,7 +684,7 @@ router.post("/set-vip", auth, isAdmin, async (req, res) => {
     const nextLevel = Math.floor(level);
     const user = await User.findByIdAndUpdate(
       id,
-      { $set: { vipLevel: nextLevel } },
+      { $set: { vipLevel: nextLevel, level: nextLevel } },
       { new: true }
     ).select("-password");
     if (!user) {
@@ -695,7 +696,7 @@ router.post("/set-vip", auth, isAdmin, async (req, res) => {
       category: "admin",
       action: `VIP set to ${nextLevel}`,
       targetUserId: id,
-      meta: { vipLevel: nextLevel },
+      meta: { vipLevel: nextLevel, level: nextLevel },
     });
     return res.json({
       success: true,
@@ -759,37 +760,111 @@ router.post("/unblock/:id", auth, isAdmin, async (req, res) => {
 
 // 💰 reset wallet (dangerous → admin only)
 router.post("/reset-wallet/:id", auth, isAdmin, async (req, res) => {
+  const session = await mongoose.startSession();
   try {
     const { id } = req.params;
     if (!id || String(id).trim() === "") {
       return res.status(400).json({ success: false, msg: "Invalid ID", data: {} });
     }
 
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      {
-        balance: 0,
-        totalEarnings: 0,
-        totalWithdraw: 0,
-        depositBalance: 0,
-        rewardBalance: 0,
-        pendingWithdraw: 0,
-      },
-      { new: true }
-    );
+    let user = null;
+    let beforeBalances = null;
+
+    await session.withTransaction(async () => {
+      const existing = await User.findById(req.params.id)
+        .select("balance totalEarnings totalWithdraw depositBalance rewardBalance pendingWithdraw")
+        .session(session);
+
+      if (!existing) {
+        return;
+      }
+
+      beforeBalances = {
+        balance: Number(existing.balance || 0),
+        totalEarnings: Number(existing.totalEarnings || 0),
+        totalWithdraw: Number(existing.totalWithdraw || 0),
+        depositBalance: Number(existing.depositBalance || 0),
+        rewardBalance: Number(existing.rewardBalance || 0),
+        pendingWithdraw: Number(existing.pendingWithdraw || 0),
+      };
+
+      const ledgerEntries = [];
+      if (beforeBalances.balance > 0) {
+        ledgerEntries.push({
+          userId: existing._id,
+          entryType: "debit",
+          balanceType: "balance",
+          amount: beforeBalances.balance,
+          source: "admin_reset",
+          referenceId: existing._id,
+          meta: { adminId: String(req.user._id) },
+        });
+      }
+      if (beforeBalances.depositBalance > 0) {
+        ledgerEntries.push({
+          userId: existing._id,
+          entryType: "debit",
+          balanceType: "depositBalance",
+          amount: beforeBalances.depositBalance,
+          source: "admin_reset",
+          referenceId: existing._id,
+          meta: { adminId: String(req.user._id) },
+        });
+      }
+      if (beforeBalances.rewardBalance > 0) {
+        ledgerEntries.push({
+          userId: existing._id,
+          entryType: "debit",
+          balanceType: "rewardBalance",
+          amount: beforeBalances.rewardBalance,
+          source: "admin_reset",
+          referenceId: existing._id,
+          meta: { adminId: String(req.user._id) },
+        });
+      }
+      if (beforeBalances.pendingWithdraw > 0) {
+        ledgerEntries.push({
+          userId: existing._id,
+          entryType: "debit",
+          balanceType: "pendingWithdraw",
+          amount: beforeBalances.pendingWithdraw,
+          source: "admin_reset",
+          referenceId: existing._id,
+          meta: { adminId: String(req.user._id) },
+        });
+      }
+
+      await addHybridLedgerEntries(ledgerEntries, session);
+
+      user = await User.findByIdAndUpdate(
+        req.params.id,
+        {
+          $inc: {
+            balance: -beforeBalances.balance,
+            depositBalance: -beforeBalances.depositBalance,
+            rewardBalance: -beforeBalances.rewardBalance,
+            pendingWithdraw: -beforeBalances.pendingWithdraw,
+          },
+        },
+        { new: true, session }
+      );
+    });
+
     if (!user) {
       return res.status(404).json({ success: false, msg: "User not found", data: null });
     }
     await writeAdminAudit({
       adminId: req.user._id,
       category: "admin",
-      action: "Wallet reset by admin",
+      action: "Wallet reset by admin with ledger adjustment",
       targetUserId: id,
-      meta: {},
+      meta: { beforeBalances },
     });
     res.json({ success: true, msg: "Wallet reset", data: null });
   } catch (err) {
     sendAdminError(res, err, "ADMIN RESET WALLET ERROR");
+  } finally {
+    session.endSession();
   }
 });
 

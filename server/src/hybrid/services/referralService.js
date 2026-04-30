@@ -1,4 +1,5 @@
 import User from "../../models/User.js";
+import HybridDeposit from "../models/HybridDeposit.js";
 import HybridLedger from "../models/HybridLedger.js";
 import { REFERRAL_RATES } from "../utils/constants.js";
 import { addHybridLedgerEntries } from "./ledgerService.js";
@@ -18,6 +19,15 @@ export const distributeHybridReferralRewards = async (
     .session(session);
 
   if (!sourceUser) {
+    return [];
+  }
+
+  const qualifiedDepositCount = await HybridDeposit.countDocuments({
+    userId,
+    status: "credited",
+  }).session(session);
+
+  if (qualifiedDepositCount !== 1) {
     return [];
   }
 

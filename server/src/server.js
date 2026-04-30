@@ -12,7 +12,7 @@ import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 
 // 🔥 DB
 import connectDB from "./config/db.js";
-import { connectRedisInBackground } from "./config/redis.js";
+import { connectRedisInBackground, isRedisReady } from "./config/redis.js";
 
 // 🔥 ROUTES
 import authRoutes from "./routes/authRoutes.js";
@@ -26,6 +26,7 @@ import historyRoutes from "./routes/historyRoutes.js";
 import { roiRoutes, salaryRoutes, stakingRoutes, withdrawRoutes, hybridDepositRoutes } from "./hybrid/routes/index.js";
 import { startHybridEngine, runHybridStartupRecovery } from "./hybrid/engine/index.js";
 import { startRealtimeListener } from "./hybrid/listeners/realtimeListener.js";
+import { checkRpcHealth } from "./hybrid/utils/provider.js";
 
 process.on("uncaughtException", (err) => {
   console.error("CRASH:", err?.message || String(err));
@@ -35,8 +36,20 @@ process.on("unhandledRejection", (err) => {
   console.error("REJECTION:", err?.message || String(err));
 });
 
-if (!process.env.JWT_SECRET) {
-  console.error("JWT_SECRET missing");
+const REQUIRED_ENV_VARS = [
+  "MONGO_URI",
+  "JWT_SECRET",
+  "HYBRID_ADMIN_WALLET",
+  "HYBRID_PRIVATE_KEY_ENCRYPTION_SECRET",
+];
+
+const missingRequiredEnv = REQUIRED_ENV_VARS.filter(
+  (key) => !String(process.env[key] || "").trim()
+);
+
+if (missingRequiredEnv.length > 0) {
+  console.error(`Missing required env var(s): ${missingRequiredEnv.join(", ")} — exiting`);
+  process.exit(1);
 }
 
 const app = express();
@@ -169,6 +182,7 @@ app.get("/api/health", (req, res) => {
  */
 const novaService = (process.env.NOVA_SERVICE ?? "all").trim().toLowerCase();
 const hybridStackEnabled = novaService !== "api" && novaService !== "hybrid";
+const WORKER_HEARTBEAT_KEY = "depositQueue:worker:heartbeat";
 
 /* ==============================
    🔐 GLOBAL SECURITY
@@ -300,13 +314,48 @@ app.use((err, req, res, next) => {
 ============================== */
 let server;
 
-async function startServer() {
-  if (!process.env.MONGO_URI) {
-    console.error("MONGO_URI missing — exiting");
-    process.exit(1);
+async function validateBootRequirements() {
+  const requireRedis = String(process.env.REQUIRE_REDIS || "").toLowerCase() === "true";
+  const requireDepositWorker =
+    String(process.env.REQUIRE_DEPOSIT_WORKER || "").toLowerCase() === "true";
+  const redis = await connectRedisInBackground();
+  const redisReady = isRedisReady(redis);
+
+  if (!redisReady) {
+    if (requireRedis || requireDepositWorker) {
+      throw new Error("Redis is required but not connected");
+    }
+    console.warn("⚠️ Redis not connected — direct deposit processing mode active");
   }
 
+  if (requireDepositWorker) {
+    const heartbeat = await redis.get(WORKER_HEARTBEAT_KEY);
+    if (!heartbeat) {
+      throw new Error("Deposit worker heartbeat missing");
+    }
+  } else if (redisReady) {
+    const heartbeat = await redis.get(WORKER_HEARTBEAT_KEY);
+    if (!heartbeat) {
+      console.warn("⚠️ Deposit worker heartbeat missing — queue disabled, direct deposit mode active");
+    }
+  }
+
+  if (hybridStackEnabled) {
+    const rpcReady = await checkRpcHealth();
+    if (!rpcReady) {
+      throw new Error("BSC RPC is not reachable");
+    }
+  }
+}
+
+async function startServer() {
   await connectDB();
+  try {
+    await validateBootRequirements();
+  } catch (err) {
+    console.error("Boot validation failed:", err?.message || String(err));
+    process.exit(1);
+  }
 
   server = app.listen(PORT, () => {
     console.log(`Server running on ${PORT}`);
