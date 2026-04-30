@@ -3,7 +3,8 @@ import mongoose from "mongoose";
 const connectDB = async () => {
   try {
     if (!process.env.MONGO_URI) {
-      throw new Error("❌ MONGO_URI not defined in .env");
+      console.error("MONGO_URI missing — exiting");
+      process.exit(1);
     }
 
     mongoose.set("strictQuery", true); // 🔒 safer queries
@@ -17,8 +18,8 @@ const connectDB = async () => {
     return conn;
 
   } catch (error) {
-    console.error("❌ MongoDB Error:", error.message);
-    return null;
+    console.error("MongoDB required — shutting down");
+    process.exit(1);
   }
 };
 

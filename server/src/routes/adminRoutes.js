@@ -114,6 +114,14 @@ router.get("/system-health", auth, isAdmin, async (req, res) => {
   }
 });
 
+router.get("/ledger", auth, isAdmin, async (req, res) => {
+  return res.json({
+    success: true,
+    msg: "Ledger data",
+    data: [],
+  });
+});
+
 /* ==============================
    📥 HYBRID DEPOSITS
 ============================== */

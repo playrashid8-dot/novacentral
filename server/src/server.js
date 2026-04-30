@@ -28,11 +28,11 @@ import { startHybridEngine, runHybridStartupRecovery } from "./hybrid/engine/ind
 import { startRealtimeListener } from "./hybrid/listeners/realtimeListener.js";
 
 process.on("uncaughtException", (err) => {
-  console.error("CRASH:", err?.stack || err);
+  console.error("CRASH:", err?.message || String(err));
 });
 
 process.on("unhandledRejection", (err) => {
-  console.error("REJECTION:", err?.stack || err);
+  console.error("REJECTION:", err?.message || String(err));
 });
 
 if (!process.env.JWT_SECRET) {
@@ -110,6 +110,19 @@ const corsOptions = {
 ============================== */
 app.set("trust proxy", 1);
 
+const healthLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  message: {
+    success: false,
+    msg: "Too many requests, try again later ❌",
+    data: null,
+  },
+});
+
 /* ==============================
    🧪 IMMEDIATE HEALTH CHECKS
 ============================== */
@@ -129,6 +142,7 @@ app.get("/api", (req, res) => {
   });
 });
 
+app.use("/api/health", healthLimiter);
 app.get("/api/health", (req, res) => {
   res.json({
     success: true,
@@ -162,6 +176,7 @@ app.use(csrfProtection);
 // ✅ HELMET (SECURITY HEADERS)
 app.use(helmet());
 
+app.use("/api/csrf-token", healthLimiter);
 app.get("/api/csrf-token", (req, res) => {
   const token = req.csrfToken();
 
@@ -258,7 +273,7 @@ app.use((err, req, res, next) => {
       data: null,
     });
   }
-  console.error("❌ Server Error:", err?.stack || err?.message || String(err));
+  console.error("Server error:", err?.message || String(err));
 
   if (!err.statusCode) err.statusCode = 500;
 
@@ -272,20 +287,31 @@ app.use((err, req, res, next) => {
 /* ==============================
    🚀 START SERVER
 ============================== */
-const server = app.listen(PORT, () => {
-  console.log(`Server running on ${PORT}`);
-  if (!hybridStackEnabled) {
-    console.log(`📦 NOVA_SERVICE=${novaService} — hybrid stack disabled here (listener runs in src/hybridService.js)`);
-  }
-  void startBackgroundServices();
-});
+let server;
 
-server.on("error", (err) => {
-  console.error("SERVER LISTEN ERROR:", err?.stack || err);
-});
+async function startServer() {
+  await connectDB();
+
+  server = app.listen(PORT, () => {
+    console.log(`Server running on ${PORT}`);
+    if (!hybridStackEnabled) {
+      console.log(`📦 NOVA_SERVICE=${novaService} — hybrid stack disabled here (listener runs in src/hybridService.js)`);
+    }
+    void startBackgroundServices();
+  });
+
+  server.on("error", (err) => {
+    console.error("SERVER LISTEN ERROR:", err?.message || String(err));
+  });
+}
+
+await startServer();
 
 process.on("SIGTERM", () => {
   console.log("SIGTERM received, closing server");
+  if (!server) {
+    process.exit(0);
+  }
   server.close(() => {
     console.log("Server closed");
     process.exit(0);
@@ -294,11 +320,6 @@ process.on("SIGTERM", () => {
 
 async function startBackgroundServices() {
   void connectRedisInBackground();
-
-  const db = await connectDB();
-  if (!db) {
-    console.error("Startup continuing without MongoDB connection");
-  }
 
   if (!hybridStackEnabled) {
     return;
