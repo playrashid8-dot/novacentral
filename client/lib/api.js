@@ -190,9 +190,4 @@ export function getApiErrorMessage(error, fallback = "Something went wrong") {
   );
 }
 
-/** Axios no longer surfaces global toasts; catch handlers always show when appropriate. */
-export function suppressDuplicateCatchToast(_error) {
-  return false;
-}
-
 export default API;

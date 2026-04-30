@@ -89,11 +89,7 @@ export default function Referral() {
 
     try {
       setSalaryLoading(true);
-      const result = (await claimHybridSalary()) as {
-        msg?: string;
-        amount?: number;
-        stage?: number;
-      } | null;
+      await claimHybridSalary();
       showToast("success", "Salary reward claimed");
       const [hybridData, salaryData] = await Promise.all([
         fetchHybridSummary().catch(() => null),

@@ -10,7 +10,7 @@ export type VipToastPayload = { type: VipToastType; message: string };
 type Listener = (state: VipToastPayload | null) => void;
 
 let listener: Listener | null = null;
-let dismissTimer: ReturnType<typeof setTimeout> | null = null;
+let dismissTimer: number | null = null;
 
 const DISMISS_MS = 3600;
 
