@@ -1,4 +1,5 @@
 import { scanHybridDeposits } from "../services/depositListener.js";
+import { startDepositSafetyRescanInterval } from "../services/depositBackfill.js";
 import { retryPendingDeposits } from "../services/pendingDepositService.js";
 import { runHybridSweepBatch, canSweepHybridFunds } from "../services/sweepService.js";
 import {
@@ -182,11 +183,9 @@ const runSweepEngine = async () => {
 };
 
 /**
- * Full incremental scan from HybridSetting checkpoint → chain tip (shared with polling backup).
- * Called once after DB connects so restarts cannot miss credited blocks.
- * @param {{ blocks?: number }} [options] — extra tail window after checkpoint scan (default 1000).
+ * Retries pending deposit records after startup full recovery (scan runs in depositBackfill).
  */
-export async function runHybridStartupRecovery(options = {}) {
+export async function runHybridStartupRecovery(_options = {}) {
   if (!isHybridEarnEnabled()) {
     console.warn(
       "HYBRID startup recovery skipped:",
@@ -205,20 +204,7 @@ export async function runHybridStartupRecovery(options = {}) {
     console.warn("HYBRID startup recovery skipped:", "HYBRID_USDT_CONTRACT missing");
     return;
   }
-  const startupBackupBlocks = Number.isFinite(Number(options?.blocks))
-    ? Math.max(1, Number(options.blocks))
-    : 1000;
   try {
-    console.log("🔄 Missed deposit recovery (checkpoint → chain tip, capped window)...");
-    await scanHybridDeposits(null, null, { quiet: true, skipProbe: true });
-    console.log(
-      `🔄 Startup backup window (last ${startupBackupBlocks} confirmed blocks)...`
-    );
-    await scanHybridDeposits(null, null, {
-      quiet: true,
-      skipProbe: true,
-      blocks: startupBackupBlocks,
-    });
     await retryPendingDeposits(50);
   } catch (err) {
     console.error("Recovery crash prevented:", err?.message || String(err));
@@ -338,8 +324,10 @@ export const startDepositListener = () => {
     }, 60000);
   }
 
+  startDepositSafetyRescanInterval();
+
   console.log(
-    `HYBRID engine started (recovery scans: ${isHybridRecoverySchedulesEnabled() ? `60000ms/${BASE_SCAN} blocks + deep 600000ms/2000` : "off"}, sweep ${sweepEngineMs}ms, claimable ${claimableMs}ms, withdraw executor ${withdrawExecutorMs}ms)`
+    `HYBRID engine started (tail rescan 60000ms/20 blocks, recovery scans: ${isHybridRecoverySchedulesEnabled() ? `60000ms/${BASE_SCAN} blocks + deep 600000ms/2000` : "off"}, sweep ${sweepEngineMs}ms, claimable ${claimableMs}ms, withdraw executor ${withdrawExecutorMs}ms)`
   );
 
   void logHybridBootstrapStatus();

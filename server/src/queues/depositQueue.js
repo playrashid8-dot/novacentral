@@ -74,14 +74,25 @@ export function toSerializableTransferLog(log) {
 }
 
 /**
- * @param {{ log: object, blockNumber?: number }} payload
+ * @param {{ log: object, blockNumber?: number, skipWorkerHeartbeatCheck?: boolean }} payload
  * @returns {Promise<
  *   | { kind: "queued"; job: import("bullmq").Job | null }
  *   | { kind: "defer" }
  *   | { kind: "direct" }
  * >}
  */
-export async function enqueueDepositJob({ log, blockNumber }) {
+/**
+ * Enqueue-first deposit pipeline.
+ * - kind "queued": job added (or duplicate job id — still safe).
+ * - kind "defer": worker heartbeat missing / Redis read error — DO NOT credit from listener; retry later.
+ * - kind "direct": Redis or BullMQ queue unavailable — ONLY then may the listener credit in-process.
+ * When skipWorkerHeartbeatCheck is true (full checkpoint recovery), jobs are enqueued so backlog drains when the worker starts — never defer solely on heartbeat.
+ */
+export async function enqueueDepositJob({
+  log,
+  blockNumber,
+  skipWorkerHeartbeatCheck = false,
+}) {
   const redis = getRedis();
   if (!redis || redis.status !== "ready" || !depositQueue) {
     return { kind: "direct" };
@@ -94,15 +105,17 @@ export async function enqueueDepositJob({ log, blockNumber }) {
     return { kind: "direct" };
   }
 
-  try {
-    const heartbeat = await redis.get(WORKER_HEARTBEAT_KEY);
-    if (!heartbeat) {
-      console.warn("⏳ Queue warming up, skipping processing...");
+  if (!skipWorkerHeartbeatCheck) {
+    try {
+      const heartbeat = await redis.get(WORKER_HEARTBEAT_KEY);
+      if (!heartbeat) {
+        console.warn("⏳ Queue warming up, skipping processing...");
+        return { kind: "defer" };
+      }
+    } catch (err) {
+      console.warn("⚠️ Deposit queue heartbeat check failed:", err?.message || String(err));
       return { kind: "defer" };
     }
-  } catch (err) {
-    console.warn("⚠️ Deposit queue heartbeat check failed:", err?.message || String(err));
-    return { kind: "defer" };
   }
 
   const merged = {

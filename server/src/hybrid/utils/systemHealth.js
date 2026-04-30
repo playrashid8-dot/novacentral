@@ -4,12 +4,17 @@ import { depositQueue } from "../../queues/depositQueue.js";
 import { checkRpcHealth } from "./provider.js";
 import PendingDeposit from "../models/PendingDeposit.js";
 import HybridWithdrawal from "../models/HybridWithdrawal.js";
+import HybridSetting from "../models/HybridSetting.js";
 import { getHybridWithdrawExecutorStatus } from "../engine/index.js";
 
 const WORKER_HEARTBEAT_KEY = "depositQueue:worker:heartbeat";
 const WORKER_HEARTBEAT_MAX_AGE_MS = 120000;
 /** Stricter “worker responding” signal for ops (nested `worker.alive`). */
 const WORKER_ALIVE_MAX_AGE_MS = 60000;
+/** Warn when `hybridLastDetectedTxAt` is olderMs than this (deposit silence). */
+const DEPOSIT_DETECTION_STALE_MS = Number(
+  process.env.DEPOSIT_DETECTION_STALE_MS || 48 * 60 * 60 * 1000
+);
 
 export async function getSystemHealth() {
   const mongo = mongoose.connection.readyState === 1;
@@ -65,6 +70,40 @@ export async function getSystemHealth() {
     rpcOk = await checkRpcHealth();
   } catch (_) {
     rpcOk = false;
+  }
+
+  let lastProcessedBlock = null;
+  let lastDetectedTxTime = null;
+  /** @type {string | null} */
+  let depositDetectionWarning = null;
+
+  if (mongo) {
+    try {
+      const [blockDoc, detectedDoc] = await Promise.all([
+        HybridSetting.findOne({ key: "hybridLastProcessedBlock" }).lean(),
+        HybridSetting.findOne({ key: "hybridLastDetectedTxAt" }).lean(),
+      ]);
+      const bVal = blockDoc?.value;
+      if (bVal !== undefined && bVal !== null && bVal !== "") {
+        const n = Number(bVal);
+        if (Number.isFinite(n)) lastProcessedBlock = n;
+      }
+      const dVal = detectedDoc?.value;
+      if (dVal !== undefined && dVal !== null && dVal !== "") {
+        const ts = Number(dVal);
+        if (Number.isFinite(ts) && ts > 0) {
+          lastDetectedTxTime = ts;
+          const age = Date.now() - ts;
+          if (age > DEPOSIT_DETECTION_STALE_MS) {
+            depositDetectionWarning =
+              "No qualifying deposit events recorded recently — verify RPC, listener, and queue worker";
+          }
+        }
+      }
+    } catch (_) {
+      lastProcessedBlock = null;
+      lastDetectedTxTime = null;
+    }
   }
 
   let pendingDeposits = null;
@@ -156,5 +195,8 @@ export async function getSystemHealth() {
     failedPayouts,
     executor,
     workerHeartbeatAgeMs: heartbeatAgeMs,
+    lastProcessedBlock,
+    lastDetectedTxTime,
+    depositDetectionWarning,
   };
 }

@@ -10,6 +10,7 @@ import { runHybridStartupRecovery, startHybridEngine } from "./hybrid/engine/ind
 import { startRealtimeListener } from "./hybrid/listeners/realtimeListener.js";
 import { checkRpcHealth } from "./hybrid/utils/provider.js";
 import { getSystemHealth } from "./hybrid/utils/systemHealth.js";
+import { runDepositBackfillOnStartup } from "./hybrid/services/depositBackfill.js";
 
 const REQUIRED_ENV_VARS = [
   "MONGO_URI",
@@ -54,6 +55,12 @@ try {
   await startRealtimeListener();
 } catch (err) {
   console.error("Recovery crash prevented:", err?.message || String(err));
+}
+
+try {
+  await runDepositBackfillOnStartup();
+} catch (e) {
+  console.error("Deposit backfill startup failed:", e?.message || String(e));
 }
 
 try {

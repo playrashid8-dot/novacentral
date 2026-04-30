@@ -27,8 +27,6 @@ const MIN_DEPOSIT_AMOUNT = MIN_HYBRID_DEPOSIT;
 const SAFE_LOOKBACK_BLOCKS = 3000;
 /** BSC RPCs often reject eth_getLogs over large spans — keep chunks bounded */
 const CHUNK_SIZE = 200;
-/** Cap checkpoint→tip recovery window (blocks from chain tip) to avoid RPC/OOM */
-const MAX_SCAN_BLOCKS = 2000;
 /** Deduplicate scan-path enqueue across chunks / retries (in-memory only) */
 const seenTx = new Set();
 /** Reorg / fake-log safety: always ≥ 2 (see business rules) */
@@ -66,7 +64,7 @@ const shortTx = (hash) => {
   return `${s.slice(0, 10)}…`;
 };
 
-const getLastProcessedBlock = async () => {
+export async function getLastProcessedBlock() {
   const setting = await HybridSetting.findOne({ key: "hybridLastProcessedBlock" });
 
   if (setting?.value !== undefined && setting?.value !== null && setting?.value !== "") {
@@ -89,29 +87,57 @@ const getLastProcessedBlock = async () => {
   );
 
   return startBlock;
-};
+}
 
-const saveLastProcessedBlock = async (blockNumber) => {
+export async function saveLastProcessedBlock(blockNumber) {
   await HybridSetting.findOneAndUpdate(
     { key: "hybridLastProcessedBlock" },
     { $set: { value: Number(blockNumber) } },
     { upsert: true, new: true }
   );
-};
+}
 
 /**
  * Single-log processing (sequential await per log — no in-memory batch accumulation).
- * @returns {{ creditFailure: boolean, processedDelta: number }}
+ * Queue-first: only credits in-process when skipQueue or enqueue returns kind "direct".
+ * @returns {{ creditFailure: boolean, processedDelta: number, holdCheckpoint?: boolean, queued?: boolean }}
+ * @param {{ skipQueue?: boolean, fullRecovery?: boolean }} [options] — fullRecovery: enqueue without worker heartbeat gate (checkpoint scan only).
  */
 export async function processDepositLog(log, iface, usersByWallet, options = {}) {
   const txHash = String(log.transactionHash || "").toLowerCase();
-  const toAddress = decodeTopicAddress(log.topics?.[2]).toLowerCase();
-  /** Alias for deposit skip debug (matches realtime listener wording). */
-  const to = toAddress;
-  const fromAddress = decodeTopicAddress(log.topics?.[1]).toLowerCase();
 
-  if (!txHash || !toAddress || toAddress === "0x") {
-    devLog("Deposit skipped: invalid transfer log", { blockNumber: log.blockNumber });
+  if (!txHash) {
+    devLog("Deposit skipped: missing tx hash", { blockNumber: log.blockNumber });
+    return { creditFailure: false, processedDelta: 0 };
+  }
+
+  const usdtExpected = String(process.env.HYBRID_USDT_CONTRACT || "").trim().toLowerCase();
+  const logContract = String(log.address ?? "").trim().toLowerCase();
+  if (!usdtExpected || logContract !== usdtExpected) {
+    return { creditFailure: false, processedDelta: 0 };
+  }
+
+  let parsed;
+  try {
+    parsed = iface.parseLog(log);
+  } catch (parseErr) {
+    console.error(
+      "❌ Invalid log skipped:",
+      shortTx(txHash),
+      parseErr?.message || String(parseErr)
+    );
+    return { creditFailure: false, processedDelta: 0 };
+  }
+
+  if (parsed.name !== "Transfer") {
+    return { creditFailure: false, processedDelta: 0 };
+  }
+
+  const fromAddress = String(parsed.args.from).toLowerCase();
+  const toAddress = String(parsed.args.to).toLowerCase();
+
+  if (!toAddress || !fromAddress) {
+    devLog("Deposit skipped: invalid transfer addresses", { blockNumber: log.blockNumber });
     return { creditFailure: false, processedDelta: 0 };
   }
 
@@ -119,7 +145,7 @@ export async function processDepositLog(log, iface, usersByWallet, options = {})
 
   if (!matchedUser) {
     if (process.env.NODE_ENV !== "production") {
-      console.warn("No user found:", to);
+      console.warn("No user found:", shortAddr(toAddress));
     }
     return { creditFailure: false, processedDelta: 0 };
   }
@@ -138,17 +164,6 @@ export async function processDepositLog(log, iface, usersByWallet, options = {})
     return { creditFailure: false, processedDelta: 0 };
   }
 
-  let parsed;
-  try {
-    parsed = iface.parseLog(log);
-  } catch (parseErr) {
-    console.error(
-      "❌ Invalid Transfer log skipped:",
-      shortTx(txHash),
-      parseErr?.message || String(parseErr)
-    );
-    return { creditFailure: false, processedDelta: 0 };
-  }
   const amount = Number(formatUnits(parsed.args.value, HYBRID_TOKEN.decimals));
 
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -164,9 +179,20 @@ export async function processDepositLog(log, iface, usersByWallet, options = {})
     return { creditFailure: false, processedDelta: 0 };
   }
 
+  try {
+    await HybridSetting.findOneAndUpdate(
+      { key: "hybridLastDetectedTxAt" },
+      { $set: { value: Date.now() } },
+      { upsert: true, new: true }
+    );
+  } catch (_) {
+    /* non-fatal */
+  }
+
   console.log("📥 Deposit detected", {
     txHash,
-    userId: String(matchedUser._id),
+    from: fromAddress,
+    to: toAddress,
     amount,
     blockNumber: log.blockNumber,
   });
@@ -211,6 +237,7 @@ export async function processDepositLog(log, iface, usersByWallet, options = {})
         ? await enqueueDepositJob({
             log: serializedLog,
             blockNumber: serializedLog.blockNumber,
+            skipWorkerHeartbeatCheck: options.fullRecovery === true,
           })
         : null;
     } catch (err) {
@@ -244,15 +271,11 @@ export async function processDepositLog(log, iface, usersByWallet, options = {})
     }
 
     if (enqueueOutcome.kind === "direct") {
-      console.warn("⚠️ Redis unavailable — crediting deposit directly (fallback)", {
+      console.warn("⚠️ Redis/queue unavailable — direct credit (only allowed path without queue)", {
         txHash,
         userId: String(matchedUser._id),
         amount,
         blockNumber: log.blockNumber,
-      });
-      await recordPendingDepositFailure({
-        ...pendingFailurePayload,
-        error: new Error("Deposit queue unavailable (Redis down — direct credit path)"),
       });
       try {
         await creditDirectly();
@@ -375,14 +398,6 @@ async function executeDepositScan(
     fromBlock = Math.max(0, fromBlock - REORG_BUFFER);
   }
 
-  /** Unbounded checkpoint scan only — keeps manual / explicit ranges intact */
-  const isOpenEndedCheckpointScan =
-    fromBlockOverride === null && toBlockOverride === null && !manualExplicitRange;
-  if (isOpenEndedCheckpointScan) {
-    const floorFromTip = Math.max(0, latestBlock - MAX_SCAN_BLOCKS);
-    fromBlock = Math.max(fromBlock, floorFromTip);
-  }
-
   if (fromBlock > latestBlock) {
     if (!quiet) {
       devLog("Deposit listener up to date");
@@ -440,11 +455,6 @@ async function executeDepositScan(
       } catch (retryErr) {
         console.error("❌ ERROR:", retryErr?.message || String(retryErr));
       }
-    }
-
-    const DEPOSIT_SCAN_MAX_LOGS = 50;
-    if (logs.length > DEPOSIT_SCAN_MAX_LOGS) {
-      logs = logs.slice(0, DEPOSIT_SCAN_MAX_LOGS);
     }
 
     if (!quiet) {
@@ -511,7 +521,12 @@ async function executeDepositScan(
 
         const result = await processDepositLog(log, transferIface, usersByWallet);
         processed += Number(result.processedDelta) || 0;
-        if (result.creditFailure || result.holdCheckpoint) {
+        const deferOrFail =
+          result.creditFailure ||
+          (result.holdCheckpoint &&
+            result.processedDelta === 0 &&
+            result.queued !== true);
+        if (deferOrFail) {
           seenTx.delete(txHash);
           chunkHadCreditFailure = true;
           break;

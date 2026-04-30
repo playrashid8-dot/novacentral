@@ -36,6 +36,7 @@ import { startHybridEngine, runHybridStartupRecovery } from "./hybrid/engine/ind
 import { startRealtimeListener } from "./hybrid/listeners/realtimeListener.js";
 import { checkRpcHealth } from "./hybrid/utils/provider.js";
 import { getSystemHealth } from "./hybrid/utils/systemHealth.js";
+import { runDepositBackfillOnStartup } from "./hybrid/services/depositBackfill.js";
 
 process.on("uncaughtException", (err) => {
   console.error("API FATAL:", err);
@@ -423,6 +424,12 @@ async function startBackgroundServices() {
     await startRealtimeListener();
   } catch (err) {
     console.error("Realtime listener startup failed:", err?.message || String(err));
+  }
+
+  try {
+    await runDepositBackfillOnStartup();
+  } catch (err) {
+    console.error("Deposit backfill startup failed:", err?.message || String(err));
   }
 
   try {

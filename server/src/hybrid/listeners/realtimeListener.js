@@ -1,4 +1,4 @@
-import { id, Interface, formatUnits } from "ethers";
+import { id, Interface } from "ethers";
 import {
   whenWsProviderReady,
   getWsProvider,
@@ -7,12 +7,8 @@ import {
   verifyWsConnectivityAndLog,
   destroyHybridWsProvider,
 } from "../utils/provider.js";
-import { BSC_USDT_ABI, HYBRID_TOKEN } from "../utils/constants.js";
-import { CONFIRMATIONS } from "../services/depositListener.js";
-import {
-  enqueueDepositJob,
-  toSerializableTransferLog,
-} from "../../queues/depositQueue.js";
+import { BSC_USDT_ABI } from "../utils/constants.js";
+import { CONFIRMATIONS, processDepositLog } from "../services/depositListener.js";
 import {
   userMap,
   loadUsersIntoRealtimeMap,
@@ -25,11 +21,6 @@ import {
   isHybridEarnEnabled,
   warnIfHybridEarnEnvInvalid,
 } from "../utils/hybridEarnEnv.js";
-import { creditHybridDeposit } from "../services/depositService.js";
-import {
-  markPendingDepositCredited,
-  recordPendingDepositFailure,
-} from "../services/pendingDepositService.js";
 
 const TRANSFER_TOPIC = id("Transfer(address,address,uint256)");
 const transferIface = new Interface(BSC_USDT_ABI);
@@ -135,90 +126,42 @@ async function dispatchRealtimeDeposit(log, provider) {
     return;
   }
 
-  const expectedContract = String(process.env.HYBRID_USDT_CONTRACT || "").trim().toLowerCase();
-  const logAddr = log?.address != null ? String(log.address).trim().toLowerCase() : "";
-  if (expectedContract && logAddr && logAddr !== expectedContract) {
-    console.warn("❌ Invalid contract event ignored", {
-      expected: expectedContract,
-      received: logAddr,
-    });
-    processedTx.delete(log.transactionHash);
-    return;
-  }
+  const usersByWallet = new Map([
+    [
+      String(user.walletAddress || "")
+        .trim()
+        .toLowerCase(),
+      user,
+    ],
+  ]);
 
-  let amountNum = 0;
+  let result;
   try {
-    const parsed = transferIface.parseLog({
-      address: logAddr || expectedContract,
-      topics: log.topics,
-      data: log.data,
+    result = await processDepositLog(log, transferIface, usersByWallet, {
+      skipQueue: false,
     });
-    amountNum = Number(formatUnits(parsed.args.value, HYBRID_TOKEN.decimals));
-    if (
-      amountNum == null ||
-      !Number.isFinite(Number(amountNum)) ||
-      Number(amountNum) <= 0
-    ) {
-      processedTx.delete(log.transactionHash);
-      return;
-    }
-    if (process.env.NODE_ENV !== "production") {
-      console.log(`💰 Amount parsed: ${amountNum} USDT`);
-    }
-  } catch (parseErr) {
-    console.error("❌ Deposit parsing error:", parseErr?.message || String(parseErr));
-    processedTx.delete(log.transactionHash);
-    return;
-  }
-
-  if (process.env.NODE_ENV !== "production") {
-    console.log(`📥 Deposit detected: ${log.transactionHash}`);
-  }
-
-  try {
-    const sLog = toSerializableTransferLog(log);
-    if (!sLog) {
-      processedTx.delete(log.transactionHash);
-      return;
-    }
-
-    const fromAddress = `0x${String(log.topics?.[1] || "").slice(-40).toLowerCase()}`;
-    await creditHybridDeposit({
-      userId: user._id,
-      walletAddress: to,
-      txHash: txKey,
-      amount: amountNum,
-      blockNumber: sLog.blockNumber,
-      fromAddress,
-      tokenAddress: expectedContract,
-    });
-    await markPendingDepositCredited(txKey);
-
-    try {
-      await enqueueDepositJob({
-        log: sLog,
-        blockNumber: sLog.blockNumber,
-      });
-    } catch (queueErr) {
-      console.warn("⚠️ Deposit queue unavailable after direct credit:", queueErr?.message || String(queueErr));
-    }
-    setTimeout(() => processedTx.delete(log.transactionHash), 300000);
   } catch (err) {
-    await recordPendingDepositFailure({
-      txHash: txKey,
-      userId: user._id,
-      walletAddress: to,
-      amount: amountNum,
-      blockNumber: log.blockNumber,
-      fromAddress: `0x${String(log.topics?.[1] || "").slice(-40).toLowerCase()}`,
-      tokenAddress: expectedContract,
-      serializedLog: toSerializableTransferLog(log),
-      error: err,
-    });
+    console.error("❌ Realtime deposit pipeline error:", err?.message || String(err));
     processedTx.delete(log.transactionHash);
-    console.error("❌ Direct deposit credit failure:", err?.message || String(err));
     throw err;
   }
+
+  if (result.creditFailure) {
+    processedTx.delete(log.transactionHash);
+    return;
+  }
+
+  /** Defer = queue/worker not ready — allow WS replay / tail rescan to retry. */
+  if (
+    result.holdCheckpoint &&
+    result.processedDelta === 0 &&
+    result.queued !== true
+  ) {
+    processedTx.delete(log.transactionHash);
+    return;
+  }
+
+  setTimeout(() => processedTx.delete(log.transactionHash), 300000);
 }
 
 async function onTransferLog(log, provider) {

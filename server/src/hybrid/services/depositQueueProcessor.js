@@ -18,15 +18,14 @@ async function processSerializedDepositLog(serializedLog) {
     return { outcome: "skip", reason: "missing_tx", processedDelta: 0 };
   }
 
-  if (process.env.NODE_ENV !== "production") {
-    console.log(`⚙️ Processing job: ${normalized}`);
-  }
+  console.log("⚙️ Processing deposit", { txHash: normalized });
 
   const existingDeposit = await HybridDeposit.findOne({ txHash: normalized })
     .select("_id status")
     .lean();
 
   if (["credited", "swept"].includes(existingDeposit?.status)) {
+    console.log("⚠️ Duplicate/skipped deposit", { txHash: normalized });
     return { outcome: "duplicate", txHash: normalized, processedDelta: 0 };
   }
 

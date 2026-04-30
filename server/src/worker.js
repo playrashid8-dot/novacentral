@@ -15,6 +15,24 @@ process.on("unhandledRejection", (err) => {
 });
 
 await connectDB();
+
+if (
+  String(process.env.HYBRID_WORKER_FULL_RECOVERY_ON_START || "")
+    .toLowerCase() === "true"
+) {
+  try {
+    const { runFullRecoveryScan } = await import(
+      "./hybrid/services/depositBackfill.js"
+    );
+    await runFullRecoveryScan();
+  } catch (err) {
+    console.error(
+      "Worker startup full recovery failed:",
+      err?.message || String(err)
+    );
+  }
+}
+
 await connectRedisInBackground();
 
 const connection = getRedis();
@@ -44,10 +62,6 @@ if (!isRedisReady(connection)) {
   const worker = new Worker(
     "depositQueue",
     async (job) => {
-      const txHash = String(job?.data?.log?.transactionHash || job?.id || "")
-        .trim()
-        .toLowerCase();
-      console.log("⚙️ Processing deposit", { txHash });
       const { processDepositJob } = await import("./hybrid/services/depositService.js");
       return processDepositJob(job.data);
     },
