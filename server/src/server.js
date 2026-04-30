@@ -227,8 +227,16 @@ app.use("/api/hybrid/deposit", hybridDepositRoutes);
 app.get("/", (req, res) => {
   res.json({
     success: true,
-    msg: "🚀 NovaCentral API running",
-    data: { time: new Date() },
+    msg: "API running",
+    data: null,
+  });
+});
+
+app.get("/api", (req, res) => {
+  res.json({
+    success: true,
+    msg: "API working",
+    data: null,
   });
 });
 
@@ -273,7 +281,7 @@ if (hybridStackEnabled) {
 }
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`Server running on ${PORT}`);
   if (!hybridStackEnabled) {
     console.log(`📦 NOVA_SERVICE=${novaService} — hybrid stack disabled here (listener runs in src/hybridService.js)`);
   }

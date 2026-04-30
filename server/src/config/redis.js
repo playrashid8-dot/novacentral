@@ -12,11 +12,13 @@ export function getRedis() {
   if (!client) {
     client = new Redis(process.env.REDIS_URL, {
       enableReadyCheck: false,
-      keepAlive: 30000,
+      enableOfflineQueue: true,
       maxRetriesPerRequest: null,
+      keepAlive: 30000,
+      connectTimeout: 10000,
       lazyConnect: true,
       reconnectOnError: () => true,
-      retryStrategy: (times) => Math.min(1000 * 2 ** Math.max(times - 1, 0), 30000),
+      retryStrategy: (times) => Math.min(1000 * 2 ** times, 30000),
     });
 
     client.on("connect", () => {
@@ -24,13 +26,14 @@ export function getRedis() {
     });
 
     client.on("error", () => {});
+    client.on("end", () => console.warn("Redis disconnected"));
+    client.on("reconnecting", () => console.log("Redis reconnecting"));
   }
 
   return client;
 }
 
 setInterval(() => {
-  if (client?.status === "ready") {
-    client.ping().catch(() => {});
-  }
+  const redis = getRedis();
+  if (redis) redis.ping().catch(() => {});
 }, REDIS_KEEP_ALIVE_INTERVAL_MS);
