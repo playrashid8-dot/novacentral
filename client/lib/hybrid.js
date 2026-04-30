@@ -7,12 +7,19 @@ export const fetchHybridSummary = async () => {
   return data && typeof data === "object" && Object.keys(data).length ? data : null;
 };
 
-/** Hybrid ledger entries only (deposits, withdrawals, ROI, referral, salary). */
+/** Hybrid ledger entries only (deposits, withdrawals, ROI, referral, salary). Authenticated: GET /api/hybrid/ledger */
 export const fetchHybridLedger = async () => {
-  const res = await API.get("/hybrid/ledger");
+  const res = await API.get("/hybrid/ledger", { withCredentials: true });
   const response = normalize(res.data);
+  if (response.success !== true) {
+    const msg = response.msg || "Could not load ledger";
+    throw new Error(msg);
+  }
   const entries = response.data?.entries;
-  return Array.isArray(entries) ? entries : [];
+  if (!Array.isArray(entries)) {
+    throw new Error(response.msg || "Invalid ledger response");
+  }
+  return entries;
 };
 
 /** Fresh direct/team counts for stage-based salary milestones (since last salary claim). */

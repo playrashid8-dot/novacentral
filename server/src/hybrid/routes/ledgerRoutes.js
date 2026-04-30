@@ -109,12 +109,14 @@ function ledgerRowToDisplay(doc) {
 
 router.get("/", auth, async (req, res) => {
   try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 50);
+
     const rows = await HybridLedger.find({
       userId: req.user._id,
       $or: LEDGER_OR,
     })
       .sort({ createdAt: -1 })
-      .limit(500)
+      .limit(limit)
       .lean();
 
     const entries = rows.map(ledgerRowToDisplay);

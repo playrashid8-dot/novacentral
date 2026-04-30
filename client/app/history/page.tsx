@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { fetchHybridLedger } from "../../lib/hybrid";
-import { logout } from "../../lib/auth";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import GlassCard from "../../components/GlassCard";
 import PageSkeleton from "../../components/Skeleton";
@@ -47,14 +46,19 @@ export default function History() {
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [activeTab, setActiveTab] = useState("all");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadHistory = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
     try {
       const rows = await fetchHybridLedger();
       setEntries(rows as LedgerEntry[]);
     } catch (err: unknown) {
-      showToast("error", getMessage(err, "Could not load history"));
-      logout("silent");
+      setEntries([]);
+      const msg = getMessage(err, "Could not load history");
+      setLoadError(msg);
+      showToast("error", msg);
     } finally {
       setLoading(false);
     }
@@ -128,10 +132,27 @@ export default function History() {
         </GlassCard>
 
         <div className="mt-6">
-          {filtered.length === 0 ? (
+          {loadError ? (
+            <div
+              role="alert"
+              className="rounded-2xl border border-rose-500/35 bg-[#111827]/90 px-6 py-8 text-center ring-1 ring-rose-500/15"
+            >
+              <p className="text-sm font-semibold text-rose-100">Could not load history</p>
+              <p className="mt-2 text-sm text-gray-400">{loadError}</p>
+              <button
+                type="button"
+                onClick={() => void loadHistory()}
+                className="mt-6 min-h-[44px] w-full max-w-[240px] rounded-2xl border border-emerald-500/40 bg-emerald-500/15 px-4 py-3 text-xs font-bold text-emerald-100 transition hover:bg-emerald-500/25 active:scale-[0.98]"
+              >
+                Try again
+              </button>
+            </div>
+          ) : filtered.length === 0 && entries.length === 0 ? (
+            <EmptyState title="No transactions yet" text="Your hybrid ledger activity will appear here." />
+          ) : filtered.length === 0 ? (
             <EmptyState
-              title="Nothing here yet"
-              text={`No ${tabDef.key === "all" ? "" : tabDef.label.toLowerCase() + " "}ledger entries yet`}
+              title="No transactions yet"
+              text={`No ${tabDef.key === "all" ? "" : `${tabDef.label.toLowerCase()} `}transactions in this view`}
             />
           ) : (
             <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#111827]/70 ring-1 ring-white/[0.05]">

@@ -14,6 +14,7 @@ import { showToast, getMessage } from "../../lib/vipToast";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import PageWrapper from "../../components/PageWrapper";
 import LiveRefreshIndicator from "../../components/LiveRefreshIndicator";
+import RewardNotification from "../../components/dashboard/RewardNotification";
 
 const CARD = "rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl";
 
@@ -109,6 +110,8 @@ export default function Dashboard() {
             </div>
             <LiveRefreshIndicator lastUpdatedAt={lastUpdatedAt} className="sm:pt-1" />
           </header>
+
+          <RewardNotification />
 
           {loadingStats ? (
             <StatTilesSkeleton cardClassName={CARD} />
