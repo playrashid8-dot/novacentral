@@ -150,7 +150,7 @@ export default function Home() {
             Security
           </h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <SecurityCard label="httpOnly cookies" icon="cookie" />
+            <SecurityCard label="httpOnly cookies" icon="lock" />
             <SecurityCard label="Withdrawal review" icon="shield" />
             <SecurityCard label="BEP20 USDT rails" icon="chain" />
           </div>
