@@ -10,8 +10,7 @@ import GlassCard from "../../components/GlassCard";
 import ProgressBar from "../../components/ProgressBar";
 import CountdownTimer from "../../components/CountdownTimer";
 import { claimHybridStake, createHybridStake, fetchHybridSummary, fetchHybridStakes } from "../../lib/hybrid";
-import { getApiErrorMessage } from "../../lib/api";
-import { showToast } from "../../lib/vipToast";
+import { showToast, getMessage } from "../../lib/vipToast";
 import PageSkeleton from "../../components/Skeleton";
 
 export default function Investment() {
@@ -82,7 +81,7 @@ export default function Investment() {
       setStakes(stakeData || []);
 
     } catch (err: unknown) {
-      showToast("error", getApiErrorMessage(err, "Something went wrong"));
+      showToast("error", getMessage(err, "Something went wrong"));
     } finally {
       setLoadingPlan(null);
     }
@@ -109,7 +108,7 @@ export default function Investment() {
       if (hybridData) setHybrid(hybridData);
       setStakes(stakeData || []);
     } catch (err: unknown) {
-      showToast("error", getApiErrorMessage(err, "Stake is not ready to claim"));
+      showToast("error", getMessage(err, "Stake is not ready to claim"));
     } finally {
       setClaimingStake(null);
     }

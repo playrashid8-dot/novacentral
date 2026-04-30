@@ -4,14 +4,13 @@ import useSWR from "swr";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { getApiErrorMessage } from "../../lib/api";
 import { claimHybridRoi } from "../../lib/hybrid";
 import {
   fetchDashboardMainBundleSWR,
   DASHBOARD_MAIN_BUNDLE_KEY,
   hybridDashboardSWRConfig,
 } from "../../lib/swr-fetch";
-import { showToast } from "../../lib/vipToast";
+import { showToast, getMessage } from "../../lib/vipToast";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import PageWrapper from "../../components/PageWrapper";
 import LiveRefreshIndicator from "../../components/LiveRefreshIndicator";
@@ -85,7 +84,7 @@ export default function Dashboard() {
       showToast("success", "ROI claimed successfully");
       await mutateDashboardBundle();
     } catch (err: any) {
-      const raw = getApiErrorMessage(err, "Could not claim ROI");
+      const raw = getMessage(err, "Could not claim ROI");
       const msg =
         err?.response?.status === 403 || /not allowed|forbidden/i.test(raw)
           ? "Action not allowed"

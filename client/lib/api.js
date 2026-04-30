@@ -1,6 +1,7 @@
 import axios from "axios";
 
 import { devWarn } from "./devWarn";
+import { getMessage } from "./vipToast";
 
 axios.defaults.withCredentials = true;
 
@@ -157,7 +158,7 @@ API.interceptors.response.use(
         isRedirecting = true;
 
         import("./auth").then(({ logout }) => {
-          logout("Session expired. Please sign in again.");
+          logout("session_expired");
         });
       }
       return Promise.reject(error);
@@ -175,19 +176,7 @@ API.interceptors.response.use(
 );
 
 export function getApiErrorMessage(error, fallback = "Something went wrong") {
-  if (error == null) return fallback;
-  if (!error?.response) {
-    if (error?.code === "ECONNABORTED" || error?.code === "TIMEOUT") {
-      return "Request timed out. Try again.";
-    }
-    return "Network error, try again";
-  }
-
-  return (
-    error.response?.data?.msg ||
-    error.response?.data?.message ||
-    fallback
-  );
+  return getMessage(error, fallback);
 }
 
 export default API;

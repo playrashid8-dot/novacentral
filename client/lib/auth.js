@@ -30,8 +30,18 @@ export const checkAdminSession = async () => {
   }
 };
 
+/** @param {unknown} [reason] — 'session_expired' | 'silent' | 'user'; undefined = silent (no accidental success on bare logout()). Objects (e.g. React click events) ⇒ user ⇒ success toast. */
+function logoutMode(reason) {
+  if (reason === undefined || reason === null) return "silent";
+  if (reason === "session_expired") return "session_expired";
+  if (reason === "silent") return "silent";
+  if (reason === "user") return "user";
+  if (typeof reason === "object") return "user";
+  return "silent";
+}
+
 // 🚪 LOGOUT
-export const logout = (message) => {
+export const logout = (reason) => {
   if (typeof window === "undefined") return;
 
   if (isLoggingOut) return;
@@ -41,8 +51,12 @@ export const logout = (message) => {
     // No-op: local cleanup + redirect should still complete.
   });
 
-  if (message) {
-    showToast("error", message);
+  const mode = logoutMode(reason);
+
+  if (mode === "session_expired") {
+    showToast("error", "Session expired. Please sign in again.");
+  } else if (mode === "user") {
+    showToast("success", "Logout successful");
   }
 
   setTimeout(() => {

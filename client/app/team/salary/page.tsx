@@ -9,8 +9,7 @@ import LiveRefreshIndicator from "../../../components/LiveRefreshIndicator";
 import { fetchCurrentUser } from "../../../lib/session";
 import { logout } from "../../../lib/auth";
 import { claimHybridSalary, fetchSalaryProgress } from "../../../lib/hybrid";
-import { getApiErrorMessage } from "../../../lib/api";
-import { showToast } from "../../../lib/vipToast";
+import { showToast, getMessage } from "../../../lib/vipToast";
 
 const CARD = "rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl";
 const GLOW = "shadow-[0_0_25px_rgba(16,185,129,0.35)]";
@@ -42,7 +41,8 @@ export default function TeamSalaryPage() {
       setSalaryPayload(sal);
       setSyncedAt(Date.now());
     } catch (err: any) {
-      logout(getApiErrorMessage(err, "Session expired. Please sign in again."));
+      showToast("error", getMessage(err, "Session expired. Please sign in again."));
+      logout("silent");
     } finally {
       setLoading(false);
     }
@@ -117,7 +117,7 @@ export default function TeamSalaryPage() {
       showToast("success", "Salary reward claimed");
       await load();
     } catch (err: any) {
-      const raw = getApiErrorMessage(err, "Claim failed");
+      const raw = getMessage(err, "Claim failed");
       const msg =
         err?.response?.status === 403 || /not allowed|forbidden/i.test(raw)
           ? "Action not allowed"

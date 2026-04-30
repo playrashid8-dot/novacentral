@@ -5,12 +5,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import API, {
-  getApiErrorMessage,
   initCSRF,
 } from "../../lib/api";
 
 import PrimaryButton from "../../components/PrimaryButton";
-import { showToast } from "../../lib/vipToast";
+import { showToast, getMessage } from "../../lib/vipToast";
 
 /* ==============================
    🔥 WRAPPER (FIX BUILD ERROR)
@@ -95,7 +94,7 @@ function SignupInner() {
       }, 800);
 
     } catch (err: any) {
-      showToast("error", getApiErrorMessage(err, "Signup failed"));
+      showToast("error", getMessage(err, "Signup failed"));
     } finally {
       setLoading(false);
     }

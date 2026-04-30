@@ -10,8 +10,7 @@ import { fetchHybridSummary } from "../../lib/hybrid";
 import GlassCard from "../../components/GlassCard";
 import PageWrapper from "../../components/PageWrapper";
 import { copyToClipboard, maskAddress } from "../../lib/helpers";
-import { getApiErrorMessage } from "../../lib/api";
-import { showToast } from "../../lib/vipToast";
+import { showToast, getMessage } from "../../lib/vipToast";
 import VipBadge from "../../components/ui/VipBadge";
 
 export default function Profile() {
@@ -58,14 +57,14 @@ export default function Profile() {
       setPwdBusy(true);
       const res = await updateUserPassword(cur, neu);
       if (!res.success) {
-        showToast("error", res.msg || "Could not update password");
+        showToast("error", getMessage(res.msg, "Could not update password"));
         return;
       }
-      showToast("success", res.msg || "Password updated");
+      showToast("success", getMessage(res.msg, "Password updated"));
       setCurrentPassword("");
       setNewPassword("");
     } catch (e: any) {
-      showToast("error", getApiErrorMessage(e, "Password update failed"));
+      showToast("error", getMessage(e, "Password update failed"));
     } finally {
       setPwdBusy(false);
     }

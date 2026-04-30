@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import API, { getApiErrorMessage, normalize } from "../../lib/api";
+import API, { normalize } from "../../lib/api";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import PageWrapper from "../../components/PageWrapper";
 import { fetchCurrentUser } from "../../lib/session";
-import { showToast } from "../../lib/vipToast";
+import { showToast, getMessage } from "../../lib/vipToast";
 import { claimHybridSalary, fetchHybridSummary, fetchSalaryProgress } from "../../lib/hybrid";
 import GradientButton from "../../components/GradientButton";
 
@@ -46,7 +46,7 @@ export default function Referral() {
         setHybrid(hybridData);
         setSalaryProgress(salaryData);
       } catch (err: any) {
-        showToast("error", getApiErrorMessage(err, "Could not load referral data"));
+        showToast("error", getMessage(err, "Could not load referral data"));
       } finally {
         setPageLoading(false);
       }
@@ -98,7 +98,7 @@ export default function Referral() {
       if (hybridData) setHybrid(hybridData);
       if (salaryData) setSalaryProgress(salaryData);
     } catch (err: any) {
-      const raw = getApiErrorMessage(err, "Could not claim salary");
+      const raw = getMessage(err, "Could not claim salary");
       const msg =
         err?.response?.status === 403 || /not allowed|forbidden/i.test(raw)
           ? "Action not allowed"

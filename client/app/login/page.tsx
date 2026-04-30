@@ -4,12 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Image from "next/image";
-import API, {
-  getApiErrorMessage,
-  initCSRF,
-} from "../../lib/api";
+import API, { initCSRF } from "../../lib/api";
 import { resetLogoutState } from "../../lib/auth";
-import { showToast } from "../../lib/vipToast";
+import { showToast, getMessage } from "../../lib/vipToast";
 import PrimaryButton from "../../components/PrimaryButton";
 
 export default function Login() {
@@ -33,7 +30,7 @@ export default function Login() {
     if (status === 429 || lower.includes("too many login")) {
       return msg || "Too many attempts. Try again later.";
     }
-    return getApiErrorMessage(err, "Invalid username or password");
+    return getMessage(err, "Invalid username or password");
   }
 
   const handleLogin = async () => {
