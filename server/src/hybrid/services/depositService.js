@@ -51,6 +51,10 @@ export const creditHybridDeposit = async ({
       }).session(session);
 
       if (creditedDeposit) {
+        console.warn(
+          "🚨 DUPLICATE SAFETY: finalized HybridDeposit — idempotent return (no double credit)",
+          { txHash: normalizedTxHash, status: creditedDeposit.status }
+        );
         deposit = creditedDeposit;
         await completeIdempotency(
           "deposit",

@@ -6,7 +6,11 @@ import "dotenv/config";
 import express from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import connectDB from "./config/db.js";
-import { connectRedisInBackground } from "./config/redis.js";
+import {
+  connectRedisInBackground,
+  getReadyRedis,
+  isRedisReady,
+} from "./config/redis.js";
 import { runHybridStartupRecovery, startHybridEngine } from "./hybrid/engine/index.js";
 import { startRealtimeListener } from "./hybrid/listeners/realtimeListener.js";
 import { checkRpcHealth } from "./hybrid/utils/provider.js";
@@ -62,6 +66,27 @@ try {
   await connectRedisInBackground();
 } catch (e) {
   console.error("Redis connect (hybrid service):", e?.message || String(e));
+}
+
+try {
+  const r = getReadyRedis();
+  if (r && isRedisReady(r)) {
+    const heartbeat = await r.get("depositQueue:worker:heartbeat");
+    const hbNum = Number(heartbeat);
+    const workerAliveWithin60s =
+      Number.isFinite(hbNum) &&
+      hbNum > 0 &&
+      Date.now() - hbNum <= 60_000;
+    if (!workerAliveWithin60s) {
+      console.error("❌ WORKER NOT RUNNING — deposits will stall");
+      if (String(process.env.FAIL_API_ON_WORKER_DOWN || "").toLowerCase() === "true") {
+        console.error("FAIL_API_ON_WORKER_DOWN set — exiting hybrid service");
+        process.exit(1);
+      }
+    }
+  }
+} catch (e) {
+  console.error("Worker heartbeat probe (hybrid service):", e?.message || String(e));
 }
 
 try {

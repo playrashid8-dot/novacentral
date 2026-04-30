@@ -353,17 +353,25 @@ async function validateBootRequirements() {
     console.warn("⚠️ Redis not connected — direct deposit processing mode active");
   }
 
-  if (requireDepositWorker) {
-    const heartbeat = await redis.get(WORKER_HEARTBEAT_KEY);
-    if (!heartbeat) {
-      throw new Error("Deposit worker heartbeat missing");
-    }
-  } else if (redisReady) {
-    const heartbeat = await redis.get(WORKER_HEARTBEAT_KEY);
-    if (!heartbeat) {
-      console.warn(
-        "⏳ Deposit worker heartbeat not yet present — deposits defer until the worker is warm (not switching to direct mode)",
-      );
+  if (redisReady) {
+    if (hybridStackEnabled || requireDepositWorker) {
+      const heartbeat = await redis.get(WORKER_HEARTBEAT_KEY);
+      const hbNum = Number(heartbeat);
+      const workerAliveWithin60s =
+        Number.isFinite(hbNum) &&
+        hbNum > 0 &&
+        Date.now() - hbNum <= 60_000;
+
+      if (requireDepositWorker && !workerAliveWithin60s) {
+        throw new Error("Deposit worker heartbeat missing or older than 60s");
+      }
+
+      if (!requireDepositWorker && !workerAliveWithin60s) {
+        console.error("❌ WORKER NOT RUNNING — deposits will stall");
+        if (String(process.env.FAIL_API_ON_WORKER_DOWN || "").toLowerCase() === "true") {
+          throw new Error("FAIL_API_ON_WORKER_DOWN: worker heartbeat missing or stale (>60s)");
+        }
+      }
     }
   }
 

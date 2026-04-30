@@ -149,26 +149,30 @@ export async function runFullRecoveryScan() {
 
   await connectRedisInBackground().catch(() => null);
   const redis = getRedis();
-  if (!redis || !isRedisReady(redis)) {
-    console.error(
-      "❌ Full recovery skipped: Redis unavailable — distributed lock required"
+  const redisConnected = redis && isRedisReady(redis);
+  /** Without Redis there is no distributed lock — still run recovery (duplicate-safe > missed deposits). */
+  let lockHeld = false;
+  let useRedisLock = false;
+
+  if (redisConnected) {
+    const lockAcquired = await redis.set(
+      DEPOSIT_RECOVERY_LOCK_KEY,
+      "1",
+      "NX",
+      "EX",
+      RECOVERY_LOCK_TTL_SEC
     );
-    return;
+    if (lockAcquired !== "OK") {
+      console.log("⏭️ Recovery already running — skipping");
+      return;
+    }
+    lockHeld = true;
+    useRedisLock = true;
+  } else {
+    console.warn(
+      "⚠️ Running recovery without Redis lock"
+    );
   }
-
-  const lockAcquired = await redis.set(
-    DEPOSIT_RECOVERY_LOCK_KEY,
-    "1",
-    "NX",
-    "EX",
-    RECOVERY_LOCK_TTL_SEC
-  );
-  if (lockAcquired !== "OK") {
-    console.log("⏭️ Recovery already running — skipping");
-    return;
-  }
-
-  let lockHeld = true;
 
   try {
     const BATCH_SIZE = Math.max(
@@ -194,12 +198,14 @@ export async function runFullRecoveryScan() {
       const now = Date.now();
       if (now - lastProgressTime > RECOVERY_STALL_MS) {
         console.error(
-          "❌ Recovery stalled — exiting loop (no checkpoint progress)"
+          "🚨 Recovery stalled — exiting loop (no checkpoint progress)"
         );
         break;
       }
 
-      await touchRecoveryLockAndHeartbeat(redis);
+      if (useRedisLock && redisConnected) {
+        await touchRecoveryLockAndHeartbeat(redis);
+      }
 
       const chainTip = await withProviderRetry((p) => p.getBlockNumber());
       const latest = Math.max(0, chainTip - CONFIRMATIONS);
@@ -305,7 +311,16 @@ export async function runFullRecoveryScan() {
         break;
       }
 
-      await redis.set(DEPOSIT_RECOVERY_LAST_CHECKPOINT_KEY, String(to));
+      if (useRedisLock && redisConnected) {
+        try {
+          await redis.set(DEPOSIT_RECOVERY_LAST_CHECKPOINT_KEY, String(to));
+        } catch (e) {
+          console.error(
+            "⚠️ Recovery Redis checkpoint telemetry failed:",
+            e?.message || String(e)
+          );
+        }
+      }
 
       const span = Math.max(1, latest - startBlock);
       const done = Math.min(Math.max(0, to - startBlock), span);
@@ -323,18 +338,17 @@ export async function runFullRecoveryScan() {
   } catch (err) {
     console.error("❌ Recovery crashed:", err?.message || String(err));
   } finally {
-    try {
-      await redis.set(
-        DEPOSIT_RECOVERY_LAST_RUN_AT_KEY,
-        String(Date.now())
-      );
-    } catch (e) {
-      console.error(
-        "❌ Recovery telemetry (lastRunAt) failed:",
-        e?.message || String(e)
-      );
+    if (useRedisLock && redisConnected) {
+      try {
+        await redis.set(DEPOSIT_RECOVERY_LAST_RUN_AT_KEY, String(Date.now()));
+      } catch (e) {
+        console.error(
+          "❌ Recovery telemetry (lastRunAt) failed:",
+          e?.message || String(e)
+        );
+      }
     }
-    if (lockHeld) {
+    if (lockHeld && useRedisLock && redisConnected) {
       try {
         await redis.del(DEPOSIT_RECOVERY_LOCK_KEY);
       } catch (e) {

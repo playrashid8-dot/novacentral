@@ -144,9 +144,12 @@ export async function processDepositLog(log, iface, usersByWallet, options = {})
   const matchedUser = usersByWallet.get(toAddress);
 
   if (!matchedUser) {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn("No user found:", shortAddr(toAddress));
-    }
+    console.error("❌ Deposit ignored — wallet not registered", {
+      to: toAddress,
+      txHash,
+      registeredWalletsLoadedInChunk: usersByWallet.size,
+      walletMapSize: usersByWallet.size,
+    });
     return { creditFailure: false, processedDelta: 0 };
   }
 
@@ -155,12 +158,13 @@ export async function processDepositLog(log, iface, usersByWallet, options = {})
     devLog("🎯 Target wallet matched");
   }
 
-  const existing = await HybridDeposit.findOne({ txHash })
-    .select("_id status")
-    .lean();
+  const existing = await HybridDeposit.findOne({ txHash }).select("_id status").lean();
 
-  if (["credited", "swept"].includes(existing?.status)) {
-    devLog("Duplicate tx skipped:", shortTx(txHash));
+  if (existing && ["credited", "swept"].includes(String(existing.status))) {
+    console.warn("🚨 DUPLICATE SAFETY: skip — HybridDeposit already finalized for txHash", {
+      txHash,
+      status: existing.status,
+    });
     return { creditFailure: false, processedDelta: 0 };
   }
 

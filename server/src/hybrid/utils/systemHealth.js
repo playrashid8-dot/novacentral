@@ -7,15 +7,32 @@ import HybridWithdrawal from "../models/HybridWithdrawal.js";
 import HybridSetting from "../models/HybridSetting.js";
 import { getHybridWithdrawExecutorStatus } from "../engine/index.js";
 import { getDepositRecoveryHealth } from "../services/depositBackfill.js";
+import { isHybridEarnEnabled } from "./hybridEarnEnv.js";
 
 const WORKER_HEARTBEAT_KEY = "depositQueue:worker:heartbeat";
 const WORKER_HEARTBEAT_MAX_AGE_MS = 120000;
 /** Stricter “worker responding” signal for ops (nested `worker.alive`). */
 const WORKER_ALIVE_MAX_AGE_MS = 60000;
+/** Deposit reliability: heartbeat must be newer than this (ms). Same as WORKER_ALIVE_MAX_AGE_MS. */
+const WORKER_RELIABILITY_MAX_AGE_MS = WORKER_ALIVE_MAX_AGE_MS;
 /** Warn when `hybridLastDetectedTxAt` is olderMs than this (deposit silence). */
 const DEPOSIT_DETECTION_STALE_MS = Number(
   process.env.DEPOSIT_DETECTION_STALE_MS || 48 * 60 * 60 * 1000
 );
+
+const HEALTH_ALERT_COOLDOWN_MS = 120_000;
+/** @type {Map<string, number>} */
+const healthAlertCooldown = new Map();
+
+function throttledHealthAlert(reason, emit) {
+  const now = Date.now();
+  const last = healthAlertCooldown.get(reason) ?? 0;
+  if (now - last < HEALTH_ALERT_COOLDOWN_MS) {
+    return;
+  }
+  healthAlertCooldown.set(reason, now);
+  emit();
+}
 
 export async function getSystemHealth() {
   const mongo = mongoose.connection.readyState === 1;
@@ -108,11 +125,6 @@ export async function getSystemHealth() {
   }
 
   const recovery = await getDepositRecoveryHealth(lastProcessedBlock);
-  if (recovery.warning) {
-    depositDetectionWarning = depositDetectionWarning
-      ? `${depositDetectionWarning}; ${recovery.warning}`
-      : recovery.warning;
-  }
 
   let pendingDeposits = null;
   let failedPayouts = null;
@@ -159,6 +171,57 @@ export async function getSystemHealth() {
       heartbeatAgeMs != null && heartbeatAgeMs < WORKER_ALIVE_MAX_AGE_MS,
   };
 
+  const monitorDeposits =
+    isHybridEarnEnabled() &&
+    (process.env.NOVA_SERVICE ?? "all").trim().toLowerCase() !== "api";
+
+  /** @type {"SAFE"|"NOT_SAFE"} */
+  let depositReliability = "SAFE";
+  const depositReliabilityFailures = [];
+
+  if (monitorDeposits && redisOk) {
+    const hbAge =
+      Number.isFinite(workerHeartbeat) && workerHeartbeat > 0
+        ? Date.now() - workerHeartbeat
+        : null;
+    if (hbAge == null || hbAge > WORKER_RELIABILITY_MAX_AGE_MS) {
+      depositReliability = "NOT_SAFE";
+      depositReliabilityFailures.push("worker_heartbeat_stale_or_missing");
+      throttledHealthAlert("worker_down", () => {
+        console.error(
+          "🚨 Worker down — deposit heartbeat missing or stale (>60s)"
+        );
+      });
+    }
+  }
+
+  if (monitorDeposits && recovery.warning) {
+    depositReliability = "NOT_SAFE";
+    depositReliabilityFailures.push("recovery_stuck_or_stale_heartbeat");
+    throttledHealthAlert("recovery_stalled", () => {
+      console.error("🚨 Recovery stalled —", recovery.warning);
+    });
+  }
+
+  const failedDepositJobs =
+    redisOk && depositQueueStats ? Number(depositQueueStats.failed || 0) : 0;
+  if (monitorDeposits && redisOk && failedDepositJobs > 0) {
+    depositReliability = "NOT_SAFE";
+    depositReliabilityFailures.push("deposit_queue_has_failed_jobs");
+    throttledHealthAlert("deposit_queue_failed", () => {
+      console.error(
+        "🚨 Deposit missed risk — BullMQ deposit queue has failed jobs",
+        { failed: failedDepositJobs }
+      );
+    });
+  }
+
+  if (monitorDeposits && depositDetectionWarning) {
+    throttledHealthAlert("deposit_miss_signal", () => {
+      console.error("🚨 Deposit missed risk —", depositDetectionWarning);
+    });
+  }
+
   const criticalFailures = [
     !mongo ? "mongo" : null,
     !rpcOk ? "rpc" : null,
@@ -167,9 +230,15 @@ export async function getSystemHealth() {
     requireWorker && !workerOk ? "worker" : null,
   ].filter(Boolean);
 
+  const degradedForDeposits =
+    depositReliability === "NOT_SAFE" && monitorDeposits;
+
   return {
-    status: criticalFailures.length > 0 ? "degraded" : "ok",
+    status:
+      criticalFailures.length > 0 || degradedForDeposits ? "degraded" : "ok",
     criticalFailures,
+    depositReliability,
+    depositReliabilityFailures,
     redis: {
       ok: redisOk,
       required: requireRedis,
