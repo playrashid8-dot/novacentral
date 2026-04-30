@@ -7,11 +7,12 @@ import Image from "next/image";
 import axios from "axios";
 import GlassCard from "../components/GlassCard";
 import StatCard from "../components/StatCard";
+import { BASE_URL } from "../lib/api";
 
 type PlatformStats = {
-  totalUsers?: number;
-  totalDeposits?: number;
-  totalWithdrawals?: number;
+  users?: number;
+  deposits?: number;
+  withdrawn?: number;
 };
 
 export default function Home() {
@@ -21,31 +22,61 @@ export default function Home() {
   const [statsError, setStatsError] = useState(false);
 
   useEffect(() => {
-    const baseURL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-    axios
-      .get(`${baseURL}/public/platform-stats`, {
-        withCredentials: true,
-        validateStatus: (s) => s === 200,
-      })
-      .then((res) => {
-        const payload = res.data?.stats ?? res.data?.data?.stats;
-        if (payload && typeof payload === "object") {
-          setStats(payload as PlatformStats);
-          setStatsError(false);
-        } else {
+    const fetchStats = async () => {
+      setStatsLoading(true);
+      setStatsError(false);
+      try {
+        const res = await axios.get(`${BASE_URL}/public/platform-stats`, {
+          withCredentials: true,
+          validateStatus: (s) => s === 200,
+        });
+
+        const root = res.data?.data ?? res.data;
+        const block = root?.stats ?? root;
+        const totalUsers = block?.totalUsers;
+        const totalDeposits = block?.totalDeposits;
+        const totalWithdrawals = block?.totalWithdrawals;
+
+        const allNumbers =
+          Number.isFinite(totalUsers) &&
+          Number.isFinite(totalDeposits) &&
+          Number.isFinite(totalWithdrawals);
+
+        if (!allNumbers) {
           setStats(null);
           setStatsError(true);
+          return;
         }
-      })
-      .catch(() => {
+
+        setStats({
+          users: totalUsers,
+          deposits: totalDeposits,
+          withdrawn: totalWithdrawals,
+        });
+      } catch (err) {
+        console.error("Stats error", err);
         setStats(null);
         setStatsError(true);
-      })
-      .finally(() => setStatsLoading(false));
+      } finally {
+        setStatsLoading(false);
+      }
+    };
+
+    fetchStats();
   }, []);
 
+  const statLoading = (
+    <span className="inline-flex items-center justify-center gap-2" aria-busy="true">
+      <span
+        className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/25 border-t-white"
+        aria-hidden
+      />
+      <span className="font-black text-gray-200">…</span>
+    </span>
+  );
+
   const statDisplay = (value: unknown) => {
-    if (statsLoading) return "…";
+    if (statsLoading) return statLoading;
     if (statsError || value === undefined || value === null) return "—";
     return Number(value).toLocaleString();
   };
@@ -100,23 +131,41 @@ export default function Home() {
           </GlassCard>
         </motion.div>
 
+        {/* CTA above live stats */}
+        <div className="mb-6 flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => router.push("/signup")}
+            className="px-5 py-2.5 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium shadow-lg shadow-purple-500/35 ring-1 ring-white/15 transition hover:scale-105 hover:shadow-[0_0_28px_rgba(139,92,246,0.55)] active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60"
+          >
+            Create Account
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push("/login")}
+            className="px-5 py-2.5 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium shadow-lg shadow-purple-500/35 ring-1 ring-white/15 transition hover:scale-105 hover:shadow-[0_0_28px_rgba(139,92,246,0.55)] active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60"
+          >
+            Login
+          </button>
+        </div>
+
         {/* Live stats */}
         <section className="mb-8" aria-labelledby="live-stats-heading">
           <h2 id="live-stats-heading" className="mb-3 text-[10px] font-bold uppercase tracking-[0.28em] text-purple-300/80">
             Live platform stats
           </h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <StatCard title="Total Users" value={statDisplay(stats?.totalUsers)} tone="purple" className="p-4 text-center" />
-            <StatCard title="Total Deposits" value={statDisplay(stats?.totalDeposits)} tone="cyan" className="p-4 text-center" />
+            <StatCard title="Total Users" value={statDisplay(stats?.users)} tone="purple" className="p-4 text-center" />
+            <StatCard title="Total Deposits" value={statDisplay(stats?.deposits)} tone="cyan" className="p-4 text-center" />
             <StatCard
               title="Total Withdrawn"
-              value={statDisplay(stats?.totalWithdrawals)}
+              value={statDisplay(stats?.withdrawn)}
               tone="green"
               className="p-4 text-center"
             />
           </div>
           {statsError && !statsLoading && (
-            <p className="mt-2 text-center text-[11px] text-gray-500">Stats could not be loaded. Please try again later.</p>
+            <p className="mt-3 text-center text-xs text-amber-200/90">Stats temporarily unavailable</p>
           )}
         </section>
 
