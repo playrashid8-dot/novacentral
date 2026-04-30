@@ -19,13 +19,18 @@ export const claimRoi = async (req, res) => {
 /** Optional: read-only hint for dashboards (claim still enforces server-side). */
 export const getRoiClaimStatus = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select("lastDailyClaim").lean();
+    const user = await User.findById(req.user._id)
+      .select("lastDailyClaim depositBalance level")
+      .lean();
     if (!user) {
       return sendError(res, 404, "User not found", null);
     }
     const last = user.lastDailyClaim ? new Date(user.lastDailyClaim).getTime() : null;
     const now = Date.now();
-    const canClaim = !last || now - last >= ONE_DAY_MS;
+    const lastClaimPassed = !last || now - last >= ONE_DAY_MS;
+    const hasDeposit = Number(user.depositBalance || 0) > 0;
+    const isVipEligible = Number(user.level || 0) >= 1;
+    const canClaim = hasDeposit && isVipEligible && lastClaimPassed;
     const nextClaimAvailableAt =
       !canClaim && last ? new Date(last + ONE_DAY_MS).toISOString() : null;
     return sendSuccess(res, "ROI claim status", { canClaim, nextClaimAvailableAt });

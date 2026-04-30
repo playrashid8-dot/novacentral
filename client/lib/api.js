@@ -153,7 +153,10 @@ API.interceptors.response.use(
       csrfToken = null;
     }
 
-    if (status === 401) {
+    const url = String(cfg.url || "");
+    const isAuthCheck = url.includes("/user/me");
+
+    if (status === 401 && isAuthCheck) {
       if (typeof window !== "undefined" && !isRedirecting) {
         isRedirecting = true;
 

@@ -190,9 +190,10 @@ export async function processDepositLog(log, iface, usersByWallet, options = {})
   };
 
   if (options?.skipQueue !== true) {
-    let job = null;
+    /** @type {{ kind: string; job?: unknown } | null} */
+    let enqueueOutcome = null;
     try {
-      job = serializedLog
+      enqueueOutcome = serializedLog
         ? await enqueueDepositJob({
             log: serializedLog,
             blockNumber: serializedLog.blockNumber,
@@ -202,8 +203,12 @@ export async function processDepositLog(log, iface, usersByWallet, options = {})
       console.error("❌ Deposit enqueue failed:", err?.message || String(err));
     }
 
-    if (job) {
+    if (enqueueOutcome?.kind === "queued") {
       return { creditFailure: false, holdCheckpoint: true, processedDelta: 0, queued: true };
+    }
+
+    if (enqueueOutcome?.kind === "defer") {
+      return { creditFailure: false, holdCheckpoint: true, processedDelta: 0 };
     }
 
     console.error("❌ Deposit queue unavailable — crediting directly and holding checkpoint:", shortTx(txHash));

@@ -5,11 +5,13 @@ import { Worker } from "bullmq";
 import { connectRedisInBackground, getRedis, isRedisReady } from "./config/redis.js";
 
 process.on("uncaughtException", (err) => {
-  console.error("WORKER CRASH PREVENTED:", err?.message || String(err));
+  console.error("WORKER FATAL:", err);
+  process.exit(1);
 });
 
 process.on("unhandledRejection", (err) => {
-  console.error("WORKER REJECTION PREVENTED:", err?.message || String(err));
+  console.error("WORKER FATAL:", err);
+  process.exit(1);
 });
 
 await connectDB();

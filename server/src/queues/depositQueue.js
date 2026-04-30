@@ -2,7 +2,6 @@ import { Queue } from "bullmq";
 import { getRedis, isRedisReady } from "../config/redis.js";
 
 const connection = getRedis();
-let queueErrorLogged = false;
 const WORKER_HEARTBEAT_KEY = "depositQueue:worker:heartbeat";
 
 /** Shared BullMQ worker / queue tuning: max jobs started per duration (global per queue in Redis). */
@@ -29,13 +28,15 @@ function createDepositQueue() {
 
 export const depositQueue = createDepositQueue();
 
+let depositQueueErrorLogged = false;
+
 depositQueue?.on("error", (err) => {
   if (!isRedisReady(connection)) {
     return;
   }
 
-  if (!queueErrorLogged) {
-    queueErrorLogged = true;
+  if (!depositQueueErrorLogged) {
+    depositQueueErrorLogged = true;
     console.error("❌ Deposit queue unavailable:", err?.message || String(err));
   }
 });
@@ -74,25 +75,34 @@ export function toSerializableTransferLog(log) {
 
 /**
  * @param {{ log: object, blockNumber?: number }} payload
+ * @returns {Promise<
+ *   | { kind: "queued"; job: import("bullmq").Job | null }
+ *   | { kind: "defer" }
+ *   | { kind: "direct" }
+ * >}
  */
 export async function enqueueDepositJob({ log, blockNumber }) {
   const redis = getRedis();
   if (!redis || redis.status !== "ready" || !depositQueue) {
-    return null;
+    return { kind: "direct" };
+  }
+
+  const redisAvailable = await redis.ping().catch(() => null);
+
+  if (!redisAvailable) {
+    console.warn("⚠️ Redis DOWN → using direct deposit mode");
+    return { kind: "direct" };
   }
 
   try {
     const heartbeat = await redis.get(WORKER_HEARTBEAT_KEY);
     if (!heartbeat) {
-      if (!queueErrorLogged) {
-        queueErrorLogged = true;
-        console.warn("⚠️ Deposit worker heartbeat missing — using direct deposit processing");
-      }
-      return null;
+      console.warn("⏳ Queue warming up, skipping processing...");
+      return { kind: "defer" };
     }
   } catch (err) {
     console.warn("⚠️ Deposit queue heartbeat check failed:", err?.message || String(err));
-    return null;
+    return { kind: "defer" };
   }
 
   const merged = {
@@ -120,10 +130,10 @@ export async function enqueueDepositJob({ log, blockNumber }) {
     if (process.env.NODE_ENV !== "production") {
       console.log("📦 Job queued:", txHash);
     }
-    return job;
+    return { kind: "queued", job };
   } catch (err) {
     if (!redis || redis.status !== "ready") {
-      return null;
+      return { kind: "direct" };
     }
 
     const msg = err?.message || String(err);
@@ -131,7 +141,7 @@ export async function enqueueDepositJob({ log, blockNumber }) {
       if (process.env.NODE_ENV !== "production") {
         console.log("📦 Duplicate job skipped (queue):", txHash);
       }
-      return null;
+      return { kind: "queued", job: null };
     }
     console.error("❌ Queue error:", msg);
     throw err;

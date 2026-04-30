@@ -50,6 +50,7 @@ const REQUIRED_ENV_VARS = [
   "JWT_SECRET",
   "HYBRID_ADMIN_WALLET",
   "HYBRID_PRIVATE_KEY_ENCRYPTION_SECRET",
+  "HYBRID_MNEMONIC",
 ];
 
 const missingRequiredEnv = REQUIRED_ENV_VARS.filter(
@@ -357,7 +358,9 @@ async function validateBootRequirements() {
   } else if (redisReady) {
     const heartbeat = await redis.get(WORKER_HEARTBEAT_KEY);
     if (!heartbeat) {
-      console.warn("⚠️ Deposit worker heartbeat missing — queue disabled, direct deposit mode active");
+      console.warn(
+        "⏳ Deposit worker heartbeat not yet present — deposits defer until the worker is warm (not switching to direct mode)",
+      );
     }
   }
 

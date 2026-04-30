@@ -35,8 +35,11 @@ export const getHybridDepositDashboard = async (req, res) => {
 
     const lastClaimMs = user.lastDailyClaim ? new Date(user.lastDailyClaim).getTime() : null;
     const nowMs = Date.now();
-    const canClaimRoi =
-      !lastClaimMs || nowMs - lastClaimMs >= ONE_DAY_MS;
+    const lastClaimPassed = !lastClaimMs || nowMs - lastClaimMs >= ONE_DAY_MS;
+    const hasDeposit = Number(user.depositBalance || 0) > 0;
+    const isVipEligible = Number(user.level || 0) >= 1;
+
+    const canClaimRoi = hasDeposit && isVipEligible && lastClaimPassed;
     const nextRoiClaimAt =
       !canClaimRoi && lastClaimMs
         ? new Date(lastClaimMs + ONE_DAY_MS).toISOString()

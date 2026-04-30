@@ -9,7 +9,7 @@ export const fetchHybridSummary = async () => {
 
 /**
  * Hybrid ledger (protected). Path `/hybrid/ledger` on the API client (base URL must end with `/api`).
- * Uses API instance so interceptors handle 401 → logout("session_expired") and cookies are sent.
+ * Uses API instance so interceptors handle 401 on session checks (e.g. `/user/me`) → logout and cookies are sent.
  */
 export const fetchHybridLedger = async () => {
   const res = await API.get("/hybrid/ledger", { withCredentials: true });
