@@ -2,7 +2,11 @@ import "dotenv/config";
 
 import connectDB from "./config/db.js";
 import { Worker } from "bullmq";
-import { connectRedisInBackground, getRedis, isRedisReady } from "./config/redis.js";
+import {
+  connectRedisInBackground,
+  getRedis,
+  isRedisReady,
+} from "./config/redis.js";
 
 process.on("uncaughtException", (err) => {
   console.error("WORKER FATAL:", err);
@@ -16,10 +20,23 @@ process.on("unhandledRejection", (err) => {
 
 await connectDB();
 
-if (
+try {
+  await connectRedisInBackground();
+} catch (err) {
+  console.error("Worker Redis connect:", err?.message || String(err));
+}
+
+const workerRecoveryExplicitOff =
   String(process.env.HYBRID_WORKER_FULL_RECOVERY_ON_START || "")
-    .toLowerCase() === "true"
-) {
+    .trim()
+    .toLowerCase() === "false";
+const skipWorkerFullRecovery =
+  String(process.env.HYBRID_WORKER_SKIP_FULL_RECOVERY_ON_START || "")
+    .trim()
+    .toLowerCase() === "true" || workerRecoveryExplicitOff;
+
+if (!skipWorkerFullRecovery) {
+  console.log("🔁 Worker: full checkpoint recovery (all blocks from checkpoint → tip)…");
   try {
     const { runFullRecoveryScan } = await import(
       "./hybrid/services/depositBackfill.js"
@@ -32,8 +49,6 @@ if (
     );
   }
 }
-
-await connectRedisInBackground();
 
 const connection = getRedis();
 const WORKER_HEARTBEAT_KEY = "depositQueue:worker:heartbeat";

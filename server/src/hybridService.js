@@ -6,6 +6,7 @@ import "dotenv/config";
 import express from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import connectDB from "./config/db.js";
+import { connectRedisInBackground } from "./config/redis.js";
 import { runHybridStartupRecovery, startHybridEngine } from "./hybrid/engine/index.js";
 import { startRealtimeListener } from "./hybrid/listeners/realtimeListener.js";
 import { checkRpcHealth } from "./hybrid/utils/provider.js";
@@ -55,6 +56,12 @@ try {
   await startRealtimeListener();
 } catch (err) {
   console.error("Recovery crash prevented:", err?.message || String(err));
+}
+
+try {
+  await connectRedisInBackground();
+} catch (e) {
+  console.error("Redis connect (hybrid service):", e?.message || String(e));
 }
 
 try {

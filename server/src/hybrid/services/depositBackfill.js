@@ -134,6 +134,7 @@ export async function runFullRecoveryScan() {
     for (const log of logs) {
       const result = await processDepositLog(log, transferIface, usersByWallet, {
         skipQueue: false,
+        fullRecovery: true,
       });
       if (shouldAbortRecoveryChunk(result)) {
         chunkAborted = true;

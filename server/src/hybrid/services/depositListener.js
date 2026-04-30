@@ -189,13 +189,15 @@ export async function processDepositLog(log, iface, usersByWallet, options = {})
     /* non-fatal */
   }
 
-  console.log("📥 Deposit detected", {
-    txHash,
-    from: fromAddress,
-    to: toAddress,
-    amount,
-    blockNumber: log.blockNumber,
-  });
+  if (!options.fullRecovery) {
+    console.log("📥 Deposit detected", {
+      txHash,
+      from: fromAddress,
+      to: toAddress,
+      amount,
+      blockNumber: log.blockNumber,
+    });
+  }
   devLog("📥 Checking deposits for:", userWalletLower);
   devLog("📥 Deposit detail:", {
     txHash: shortTx(txHash),

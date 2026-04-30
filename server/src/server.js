@@ -414,10 +414,15 @@ process.on("SIGTERM", () => {
 });
 
 async function startBackgroundServices() {
-  void connectRedisInBackground();
-
   if (!hybridStackEnabled) {
+    void connectRedisInBackground();
     return;
+  }
+
+  try {
+    await connectRedisInBackground();
+  } catch (err) {
+    console.error("Redis connect (hybrid startup):", err?.message || String(err));
   }
 
   try {
