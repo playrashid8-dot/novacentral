@@ -12,11 +12,22 @@ export const API_BASE = BASE_URL;
 
 let adminCsrfToken = null;
 
+function readCookie(name) {
+  if (typeof document === "undefined") return null;
+
+  const encodedName = `${encodeURIComponent(name)}=`;
+  const cookie = document.cookie
+    .split("; ")
+    .find((entry) => entry.startsWith(encodedName));
+
+  return cookie ? decodeURIComponent(cookie.slice(encodedName.length)) : null;
+}
+
 const ensureAdminCsrf = async () => {
   if (adminCsrfToken) return adminCsrfToken;
   const r = await fetch(`${API_BASE}/csrf-token`, { credentials: "include" });
   const payload = await r.json().catch(() => ({}));
-  adminCsrfToken = payload?.data?.csrfToken || null;
+  adminCsrfToken = payload?.data?.csrfToken || readCookie("XSRF-TOKEN");
   return adminCsrfToken;
 };
 

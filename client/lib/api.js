@@ -30,12 +30,26 @@ const API = axios.create({
 
 let csrfToken = null;
 
+function readCookie(name) {
+  if (typeof document === "undefined") return null;
+
+  const encodedName = `${encodeURIComponent(name)}=`;
+  const cookie = document.cookie
+    .split("; ")
+    .find((entry) => entry.startsWith(encodedName));
+
+  return cookie ? decodeURIComponent(cookie.slice(encodedName.length)) : null;
+}
+
 async function getCSRF(force = false) {
   if (force) csrfToken = null;
   if (csrfToken) return csrfToken;
 
   const res = await API.get("/csrf-token");
-  csrfToken = res.data?.data?.csrfToken ?? res.data?.csrfToken ?? null;
+  csrfToken =
+    res.data?.data?.csrfToken ??
+    res.data?.csrfToken ??
+    readCookie("XSRF-TOKEN");
 
   return csrfToken;
 }

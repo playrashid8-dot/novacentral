@@ -192,9 +192,9 @@ app.get("/api/csrf-token", (req, res) => {
   const token = req.csrfToken();
 
   res.cookie("XSRF-TOKEN", token, {
-    httpOnly: true,
+    httpOnly: false,
     secure: isProd,
-    sameSite: crossSiteSameSite,
+    sameSite: "none",
     path: "/",
   });
 
