@@ -4,6 +4,9 @@
   "description": "NovaCentral Backend API (Auth + ROI + Referral)",
   "main": "src/server.js",
   "type": "module",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "nodemon --exec node --expose-gc --max-old-space-size=1024 src/server.js",
     "start": "node src/server.js",

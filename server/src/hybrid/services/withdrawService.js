@@ -397,7 +397,10 @@ const adminClientError = (message, statusCode = 400) => {
 
 const wrapAdminClientError = (error, fallback) => {
   const wrapped = new Error(error?.message || fallback);
-  wrapped.statusCode = error?.statusCode && error.statusCode < 500 ? error.statusCode : 400;
+  wrapped.statusCode = error?.statusCode;
+  if (!wrapped.statusCode) {
+    wrapped.statusCode = 500;
+  }
   return wrapped;
 };
 

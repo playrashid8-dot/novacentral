@@ -30,6 +30,7 @@ export function getRedis() {
 }
 
 setInterval(() => {
-  const redis = getRedis();
-  if (redis) redis.ping().catch(() => {});
+  if (client?.status === "ready") {
+    client.ping().catch(() => {});
+  }
 }, REDIS_KEEP_ALIVE_INTERVAL_MS);

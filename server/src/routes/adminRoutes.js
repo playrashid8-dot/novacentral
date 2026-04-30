@@ -26,7 +26,7 @@ import {
 const router = express.Router();
 const sendAdminError = (res, err, context) => {
   console.error(`${context}:`, err.message);
-  if (err.statusCode && err.statusCode < 500) {
+  if (err.statusCode < 500) {
     return res.status(err.statusCode).json({
       success: false,
       msg: err.message,
@@ -34,7 +34,11 @@ const sendAdminError = (res, err, context) => {
     });
   }
 
-  return res.status(500).json({ success: false, msg: "Internal server error", data: null });
+  return res.status(500).json({
+    success: false,
+    msg: "Internal server error",
+    data: null,
+  });
 };
 
 /** Legacy withdrawals may omit risk fields — keep admin UI stable. */
@@ -93,7 +97,8 @@ router.get("/system-health", auth, isAdmin, async (req, res) => {
         queue = await depositQueue.getJobCounts();
       }
     } catch (err) {
-      queue = { error: err?.message || String(err) };
+      console.error("ADMIN SYSTEM HEALTH QUEUE ERROR:", err?.message || String(err));
+      queue = { error: "Queue unavailable" };
     }
     return res.json({
       success: true,

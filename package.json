@@ -8,6 +8,9 @@
     "dev:server": "npm run dev --prefix server",
     "dev:client": "npm run dev --prefix client"
   },
+  "engines": {
+    "node": "20.x"
+  },
   "devDependencies": {
     "concurrently": "^9.1.2"
   }
