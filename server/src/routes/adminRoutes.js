@@ -12,7 +12,7 @@ import {
 import { scanHybridDeposits } from "../hybrid/services/depositListener.js";
 import { getProvider } from "../hybrid/utils/provider.js";
 import { getHybridAdminSystemStatus } from "../hybrid/utils/adminSystemStatus.js";
-import { getRedis } from "../config/redis.js";
+import { getReadyRedis } from "../config/redis.js";
 import { depositQueue } from "../queues/depositQueue.js";
 import { writeAdminAudit } from "../utils/adminAudit.js";
 import {
@@ -93,7 +93,7 @@ router.get("/system-health", auth, isAdmin, async (req, res) => {
   try {
     let queue = null;
     try {
-      if (depositQueue) {
+      if (getReadyRedis() && depositQueue) {
         queue = await depositQueue.getJobCounts();
       }
     } catch (err) {
@@ -104,7 +104,7 @@ router.get("/system-health", auth, isAdmin, async (req, res) => {
       success: true,
       msg: "System health",
       data: {
-        redis: !!getRedis(),
+        redis: !!getReadyRedis(),
         queue,
         uptime: process.uptime(),
       },

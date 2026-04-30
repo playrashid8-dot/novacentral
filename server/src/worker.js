@@ -2,18 +2,31 @@ import "dotenv/config";
 
 import connectDB from "./config/db.js";
 import { Worker } from "bullmq";
-import { getRedis } from "./config/redis.js";
+import { connectRedisInBackground, getRedis, isRedisReady } from "./config/redis.js";
+
+process.on("uncaughtException", (err) => {
+  console.error("WORKER CRASH PREVENTED:", err?.message || String(err));
+});
+
+process.on("unhandledRejection", (err) => {
+  console.error("WORKER REJECTION PREVENTED:", err?.message || String(err));
+});
 
 await connectDB();
+await connectRedisInBackground();
 
 const connection = getRedis();
 const WORKER_HEARTBEAT_KEY = "depositQueue:worker:heartbeat";
 const WORKER_HEARTBEAT_TTL_SECONDS = 90;
 
-if (!connection) {
+if (!isRedisReady(connection)) {
   console.warn("⚠️ Redis missing — worker idle");
 } else {
   const writeWorkerHeartbeat = async () => {
+    if (!isRedisReady(connection)) {
+      return;
+    }
+
     try {
       await connection.set(
         WORKER_HEARTBEAT_KEY,

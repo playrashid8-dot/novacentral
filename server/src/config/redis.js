@@ -1,7 +1,6 @@
 import Redis from "ioredis";
 
 let client;
-const MAX_REDIS_RECONNECT_ATTEMPTS = 5;
 let redisErrorLogged = false;
 
 export function getRedis() {
@@ -19,8 +18,8 @@ export function getRedis() {
         connectTimeout: 10000,
         lazyConnect: true,
         retryStrategy: (times) => {
-          if (times > MAX_REDIS_RECONNECT_ATTEMPTS) return null;
-          return Math.min(times * 1000, 5000);
+          if (times > 5) return null;
+          return Math.min(times * 500, 3000);
         },
       });
     } catch (err) {
@@ -40,10 +39,34 @@ export function getRedis() {
       }
     });
     client.on("end", () => {});
-    client.on("reconnecting", () => {
-      redisErrorLogged = false;
-    });
   }
 
   return client;
+}
+
+export function isRedisReady(redis = client) {
+  return Boolean(redis && redis.status === "ready");
+}
+
+export function getReadyRedis() {
+  const redis = getRedis();
+  return isRedisReady(redis) ? redis : null;
+}
+
+export async function connectRedisInBackground() {
+  const redis = getRedis();
+  if (!redis || isRedisReady(redis) || redis.status === "connecting") {
+    return redis;
+  }
+
+  try {
+    await redis.connect();
+  } catch (err) {
+    if (!redisErrorLogged) {
+      redisErrorLogged = true;
+      console.error("❌ Redis unavailable:", err?.message || String(err));
+    }
+  }
+
+  return redis;
 }

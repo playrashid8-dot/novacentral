@@ -1,7 +1,8 @@
 import { Queue } from "bullmq";
-import { getRedis } from "../config/redis.js";
+import { getRedis, isRedisReady } from "../config/redis.js";
 
 const connection = getRedis();
+let queueErrorLogged = false;
 
 /** Shared BullMQ worker / queue tuning: max jobs started per duration (global per queue in Redis). */
 export const DEPOSIT_QUEUE_LIMITER = {
@@ -9,15 +10,33 @@ export const DEPOSIT_QUEUE_LIMITER = {
   duration: 1000,
 };
 
-export const depositQueue = connection
-  ? new Queue("depositQueue", {
+function createDepositQueue() {
+  if (!connection) {
+    return null;
+  }
+
+  try {
+    return new Queue("depositQueue", {
       connection,
       limiter: DEPOSIT_QUEUE_LIMITER,
-    })
-  : null;
+    });
+  } catch (err) {
+    console.error("❌ Deposit queue init failed:", err?.message || String(err));
+    return null;
+  }
+}
+
+export const depositQueue = createDepositQueue();
 
 depositQueue?.on("error", (err) => {
-  console.error("❌ Deposit queue unavailable:", err?.message || String(err));
+  if (!isRedisReady(connection)) {
+    return;
+  }
+
+  if (!queueErrorLogged) {
+    queueErrorLogged = true;
+    console.error("❌ Deposit queue unavailable:", err?.message || String(err));
+  }
 });
 
 /** Shared BullMQ options for deposit jobs (retries / backoff / idempotent jobId = txHash). */
@@ -56,7 +75,8 @@ export function toSerializableTransferLog(log) {
  * @param {{ log: object, blockNumber?: number }} payload
  */
 export async function enqueueDepositJob({ log, blockNumber }) {
-  if (!getRedis() || !depositQueue) {
+  const redis = getRedis();
+  if (!redis || redis.status !== "ready" || !depositQueue) {
     return null;
   }
 
@@ -87,6 +107,10 @@ export async function enqueueDepositJob({ log, blockNumber }) {
     }
     return job;
   } catch (err) {
+    if (!redis || redis.status !== "ready") {
+      return null;
+    }
+
     const msg = err?.message || String(err);
     if (/already exists|duplicate|JobId/i.test(msg)) {
       if (process.env.NODE_ENV !== "production") {
@@ -94,7 +118,7 @@ export async function enqueueDepositJob({ log, blockNumber }) {
       }
       return null;
     }
-    console.error("❌ Queue failure:", msg);
+    console.error("❌ Queue error:", msg);
     throw err;
   }
 }

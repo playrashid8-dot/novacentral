@@ -20,6 +20,7 @@ import {
 } from "../listeners/realtimeListener.js";
 import { userMap } from "../services/userMap.js";
 import hybridConfig from "../../config/hybridConfig.js";
+import { getReadyRedis } from "../../config/redis.js";
 import { Wallet, parseEther, formatEther } from "ethers";
 
 let hybridTimer = null;
@@ -45,7 +46,7 @@ const logHybridBootstrapStatus = async () => {
   let gasOk = false;
   let queueOk = false;
 
-  if (depositQueue) {
+  if (getReadyRedis() && depositQueue) {
     try {
       await depositQueue.getJobCounts();
       queueOk = true;

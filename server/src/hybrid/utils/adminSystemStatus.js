@@ -6,7 +6,7 @@ import {
 } from "../listeners/realtimeListener.js";
 import { userMap } from "../services/userMap.js";
 import { depositQueue } from "../../queues/depositQueue.js";
-import { getRedis } from "../../config/redis.js";
+import { getReadyRedis } from "../../config/redis.js";
 
 const WORKER_HEARTBEAT_KEY = "depositQueue:worker:heartbeat";
 const WORKER_HEARTBEAT_MAX_AGE_MS = 120000;
@@ -19,7 +19,7 @@ export async function getHybridAdminSystemStatus() {
   const mongodb = mongoose.connection.readyState === 1;
 
   let redisOk = false;
-  const redis = getRedis();
+  const redis = getReadyRedis();
   if (redis) {
     try {
       const pong = await redis.ping();
@@ -42,7 +42,7 @@ export async function getHybridAdminSystemStatus() {
 
   let queueWorking = false;
   let workerActive = false;
-  if (depositQueue) {
+  if (redis && depositQueue) {
     try {
       await depositQueue.getJobCounts();
       queueWorking = true;

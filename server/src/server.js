@@ -12,6 +12,7 @@ import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 
 // 🔥 DB
 import connectDB from "./config/db.js";
+import { connectRedisInBackground } from "./config/redis.js";
 
 // 🔥 ROUTES
 import authRoutes from "./routes/authRoutes.js";
@@ -87,7 +88,7 @@ const corsOptions = {
     console.error("❌ Blocked by CORS:", origin);
 
     const err = new Error("CORS not allowed");
-    err.status = 403;
+    err.statusCode = 403;
     return callback(err);
   },
   credentials: true,
@@ -116,7 +117,7 @@ app.get("/", (req, res) => {
   res.json({
     success: true,
     msg: "API running",
-    data: { status: "ok" },
+    data: null,
   });
 });
 
@@ -124,7 +125,7 @@ app.get("/api", (req, res) => {
   res.json({
     success: true,
     msg: "API working",
-    data: { status: "ok" },
+    data: null,
   });
 });
 
@@ -257,11 +258,13 @@ app.use((err, req, res, next) => {
       data: null,
     });
   }
-  console.error("❌ Server Error:", err.stack);
+  console.error("❌ Server Error:", err?.stack || err?.message || String(err));
 
-  res.status(err.status || 500).json({
+  if (!err.statusCode) err.statusCode = 500;
+
+  res.status(err.statusCode).json({
     success: false,
-    msg: err.status && err.status < 500 ? err.message : "Internal server error",
+    msg: err.statusCode < 500 ? err.message : "Internal server error",
     data: null,
   });
 });
@@ -290,6 +293,8 @@ process.on("SIGTERM", () => {
 });
 
 async function startBackgroundServices() {
+  void connectRedisInBackground();
+
   const db = await connectDB();
   if (!db) {
     console.error("Startup continuing without MongoDB connection");

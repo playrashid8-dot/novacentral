@@ -1,7 +1,7 @@
 import express from "express";
 import mongoose from "mongoose";
 import auth from "../middleware/auth.js";
-import { getRedis } from "../config/redis.js";
+import { getReadyRedis } from "../config/redis.js";
 import User from "../models/User.js";
 import HybridDeposit from "../hybrid/models/HybridDeposit.js";
 import HybridWithdrawal from "../hybrid/models/HybridWithdrawal.js";
@@ -16,7 +16,7 @@ router.get("/", auth, async (req, res) => {
   try {
     const userId = req.user._id;
     const oid = userId instanceof mongoose.Types.ObjectId ? userId : new mongoose.Types.ObjectId(userId);
-    const redis = getRedis();
+    const redis = getReadyRedis();
     const cacheKey = `dashboard-route:${String(userId)}`;
 
     if (redis) {
