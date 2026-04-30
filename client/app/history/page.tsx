@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import axios from "axios";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { fetchHybridLedger } from "../../lib/hybrid";
@@ -9,7 +10,8 @@ import GlassCard from "../../components/GlassCard";
 import PageSkeleton from "../../components/Skeleton";
 import EmptyState from "../../components/EmptyState";
 import StatusBadge, { resolveStatusTier } from "../../components/StatusBadge";
-import { showToast, getMessage } from "../../lib/vipToast";
+import { getMessage } from "../../lib/vipToast";
+import { logout } from "../../lib/auth";
 
 type LedgerEntry = {
   _id: string;
@@ -55,10 +57,15 @@ export default function History() {
       const rows = await fetchHybridLedger();
       setEntries(rows as LedgerEntry[]);
     } catch (err: unknown) {
+      console.log("Ledger error:", axios.isAxiosError(err) ? err.response ?? err : err);
+
+      if (axios.isAxiosError(err) && err.response?.status === 401) {
+        logout("session_expired");
+        return;
+      }
+
       setEntries([]);
-      const msg = getMessage(err, "Could not load history");
-      setLoadError(msg);
-      showToast("error", msg);
+      setLoadError(getMessage(err, "Unable to load history"));
     } finally {
       setLoading(false);
     }
@@ -73,6 +80,49 @@ export default function History() {
       <ProtectedRoute>
         <div className="w-full px-3 pb-24 pt-2 sm:px-6" aria-busy aria-label="Loading history">
           <PageSkeleton />
+        </div>
+      </ProtectedRoute>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <ProtectedRoute>
+        <div className="relative w-full max-w-full overflow-x-hidden pb-24 text-white">
+          <div className="flex flex-col gap-3 px-3 pt-2 sm:flex-row sm:items-start sm:justify-between sm:px-6">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-indigo-300/80">
+                Ledger
+              </p>
+              <h1 className="mt-1 bg-gradient-to-r from-white via-indigo-100 to-indigo-300 bg-clip-text text-2xl font-black text-transparent">
+                History
+              </h1>
+            </div>
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard")}
+              className="w-full rounded-2xl border border-white/[0.1] bg-[#111827] px-4 py-2.5 text-sm font-semibold text-gray-300 shadow-md transition hover:scale-[1.02] sm:w-auto"
+            >
+              Back
+            </button>
+          </div>
+
+          <div className="mt-8 px-3 sm:px-6">
+            <div
+              role="alert"
+              className="rounded-2xl border border-rose-500/35 bg-[#111827]/90 px-6 py-8 text-center ring-1 ring-rose-500/15"
+            >
+              <p className="text-sm font-semibold text-rose-100">Unable to load history</p>
+              <p className="mt-2 text-sm text-gray-400">{loadError}</p>
+              <button
+                type="button"
+                onClick={() => void loadHistory()}
+                className="mt-6 min-h-[44px] w-full max-w-[240px] rounded-2xl border border-emerald-500/40 bg-emerald-500/15 px-4 py-3 text-xs font-bold text-emerald-100 transition hover:bg-emerald-500/25 active:scale-[0.98]"
+              >
+                Try again
+              </button>
+            </div>
+          </div>
         </div>
       </ProtectedRoute>
     );
@@ -132,22 +182,7 @@ export default function History() {
         </GlassCard>
 
         <div className="mt-6">
-          {loadError ? (
-            <div
-              role="alert"
-              className="rounded-2xl border border-rose-500/35 bg-[#111827]/90 px-6 py-8 text-center ring-1 ring-rose-500/15"
-            >
-              <p className="text-sm font-semibold text-rose-100">Could not load history</p>
-              <p className="mt-2 text-sm text-gray-400">{loadError}</p>
-              <button
-                type="button"
-                onClick={() => void loadHistory()}
-                className="mt-6 min-h-[44px] w-full max-w-[240px] rounded-2xl border border-emerald-500/40 bg-emerald-500/15 px-4 py-3 text-xs font-bold text-emerald-100 transition hover:bg-emerald-500/25 active:scale-[0.98]"
-              >
-                Try again
-              </button>
-            </div>
-          ) : filtered.length === 0 && entries.length === 0 ? (
+          {filtered.length === 0 && entries.length === 0 ? (
             <EmptyState title="No transactions yet" text="Your hybrid ledger activity will appear here." />
           ) : filtered.length === 0 ? (
             <EmptyState

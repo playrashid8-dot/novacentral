@@ -7,7 +7,10 @@ export const fetchHybridSummary = async () => {
   return data && typeof data === "object" && Object.keys(data).length ? data : null;
 };
 
-/** Hybrid ledger entries only (deposits, withdrawals, ROI, referral, salary). Authenticated: GET /api/hybrid/ledger */
+/**
+ * Hybrid ledger (protected). Path `/hybrid/ledger` on the API client (base URL must end with `/api`).
+ * Uses API instance so interceptors handle 401 → logout("session_expired") and cookies are sent.
+ */
 export const fetchHybridLedger = async () => {
   const res = await API.get("/hybrid/ledger", { withCredentials: true });
   const response = normalize(res.data);

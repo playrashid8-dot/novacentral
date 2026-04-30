@@ -51,7 +51,7 @@ export default function RewardNotification() {
                 Reward System
               </h2>
               <p className="mt-1.5 text-[11px] leading-relaxed text-gray-400 sm:text-xs">
-                Informational only — not a real payout. Rewards are subject to program rules.
+              Fast & Secure Trusted Platform
               </p>
             </div>
 
