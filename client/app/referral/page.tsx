@@ -102,7 +102,12 @@ export default function Referral() {
       if (hybridData) setHybrid(hybridData);
       if (salaryData) setSalaryProgress(salaryData);
     } catch (err: any) {
-      showToast(getApiErrorMessage(err, "Failed to claim salary reward"));
+      const raw = getApiErrorMessage(err, "Could not claim salary");
+      const msg =
+        err?.response?.status === 403 || /not allowed|forbidden/i.test(raw)
+          ? "Action not allowed"
+          : raw;
+      showToast("error", msg);
     } finally {
       setSalaryLoading(false);
     }

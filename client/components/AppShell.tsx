@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import AppNavbar from "./AppNavbar";
 import AppSidebar from "./AppSidebar";
 import BottomNav from "./BottomNav";
-import MobileStickyBalance from "./MobileStickyBalance";
 import VipToastHost from "./ui/VipToast";
 
 const NO_CHROME = new Set(["/", "/login", "/signup", "/admin"]);
@@ -33,8 +32,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       <AppNavbar />
-
-      <MobileStickyBalance />
 
       <div className="relative z-10 flex min-h-[calc(100vh-3.5rem)] w-full max-w-[100vw] overflow-x-hidden">
         <AppSidebar />
