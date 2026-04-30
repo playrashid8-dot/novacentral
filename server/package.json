@@ -18,7 +18,9 @@
     "pm2:prod": "pm2 start ecosystem.config.cjs",
     "verify:redis": "node scripts/verifyRedis.mjs",
     "wallet:normalize": "node scripts/walletNormalizationFix.mjs",
-    "withdraw:backfill-risk": "node scripts/backfillWithdrawRisk.js"
+    "withdraw:backfill-risk": "node scripts/backfillWithdrawRisk.js",
+    "ledger:reconcile": "node scripts/reconcileHybridLedger.js",
+    "test:p0-financial-safety": "node scripts/p0FinancialSafetySimulation.js"
   },
   "keywords": [
     "nova",

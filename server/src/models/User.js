@@ -158,6 +158,12 @@ const userSchema = new mongoose.Schema(
       min: 0,
     },
 
+    hasQualifiedDeposit: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
     level: {
       type: Number,
       default: 0,

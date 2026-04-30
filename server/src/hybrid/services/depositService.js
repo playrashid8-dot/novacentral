@@ -66,19 +66,12 @@ export const creditHybridDeposit = async ({
       }
 
       const user = await User.findById(userId)
-        .select("depositBalance")
+        .select("depositBalance hasQualifiedDeposit")
         .session(session);
 
       if (!user) {
         throw new Error("User not found");
       }
-
-      const qualifiedDepositCount = await HybridDeposit.countDocuments({
-        userId,
-        status: { $in: ["credited", "swept"] },
-      }).session(session);
-
-      const isFirstQualifiedDeposit = qualifiedDepositCount === 0;
 
       const existing = await HybridDeposit.findOne({
         txHash: normalizedTxHash,
@@ -147,6 +140,24 @@ export const creditHybridDeposit = async ({
           session,
         }
       );
+
+      const qualifiedMarker = await User.findOneAndUpdate(
+        {
+          _id: userId,
+          hasQualifiedDeposit: { $ne: true },
+        },
+        {
+          $set: {
+            hasQualifiedDeposit: true,
+          },
+        },
+        {
+          new: true,
+          session,
+        }
+      );
+
+      const isFirstQualifiedDeposit = Boolean(qualifiedMarker);
 
       await addHybridLedgerEntries(
         [

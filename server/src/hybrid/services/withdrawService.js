@@ -18,6 +18,7 @@ import {
   completeIdempotency,
   failIdempotency,
   getCompletedIdempotency,
+  getIdempotencyRecord,
   markIdempotencyProcessing,
   releaseIdempotentAction,
 } from "./idempotencyService.js";
@@ -441,17 +442,21 @@ const getPayoutPrivateKey = () =>
 export const canAutoExecuteWithdrawals = () =>
   Boolean(getPayoutPrivateKey() && hybridConfig.usdtContract);
 
-const getPayoutContract = () => {
+const getPayoutSigner = (provider = getProvider()) => {
   const payoutKey = getPayoutPrivateKey();
   if (!payoutKey) {
     throw new Error("HYBRID_PAYOUT_PRIVATE_KEY missing");
   }
+
+  return new Wallet(payoutKey, provider);
+};
+
+const getPayoutContract = (signer = null) => {
   if (!hybridConfig.usdtContract) {
     throw new Error("USDT contract not configured");
   }
 
-  const signer = new Wallet(payoutKey, getProvider());
-  return new Contract(hybridConfig.usdtContract, BSC_USDT_ABI, signer);
+  return new Contract(hybridConfig.usdtContract, BSC_USDT_ABI, signer || getPayoutSigner());
 };
 
 /**
@@ -529,7 +534,11 @@ export const verifyPayoutTx = async (txHash, expectedAmount, userAddress) => {
   }
 };
 
-const storePayoutFailure = async (withdrawalId, error) => {
+const getPayoutBackoffMs = (withdrawal) =>
+  Math.min(5 * 60 * 1000, (Number(withdrawal?.payoutAttemptCount || 1)) * 30000);
+
+const storePayoutFailure = async (withdrawalId, error, withdrawal = null) => {
+  const backoffMs = getPayoutBackoffMs(withdrawal);
   await HybridWithdrawal.findOneAndUpdate(
     {
       _id: withdrawalId,
@@ -538,84 +547,187 @@ const storePayoutFailure = async (withdrawalId, error) => {
     {
       $set: {
         payoutLastError: String(error?.message || error || "Payout failed").slice(0, 500),
-        payoutLockedUntil: null,
+        payoutLockedUntil: new Date(Date.now() + backoffMs),
         payoutStatus: "failed",
       },
     }
   );
 };
 
-export const executeApprovedWithdrawalPayout = async (withdrawalId = null) => {
-  const now = new Date();
-  const lockUntil = new Date(now.getTime() + PAYOUT_LOCK_MS);
+const findPayoutTxHashByNonce = async (withdrawal, provider, payoutWallet) => {
+  const payoutNonce = Number(withdrawal?.payoutNonce);
+  const fromExpected = String(payoutWallet || withdrawal?.payoutWallet || "").toLowerCase();
+  const tokenExpected = String(hybridConfig.usdtContract || "").toLowerCase();
+  const toExpected = String(withdrawal?.walletAddress || "").toLowerCase();
 
-  const withdrawal = await HybridWithdrawal.findOneAndUpdate(
-    {
-      ...(withdrawalId ? { _id: withdrawalId } : {}),
-      status: "approved",
-      paidAt: null,
-      $or: [
-        { payoutLockedUntil: null },
-        { payoutLockedUntil: { $exists: false } },
-        { payoutLockedUntil: { $lte: now } },
-      ],
-    },
-    {
-      $set: {
-        payoutLockedUntil: lockUntil,
-        payoutStartedAt: now,
-        payoutLastError: "",
-        payoutStatus: "sending",
-      },
-      $inc: {
-        payoutAttemptCount: 1,
-      },
-    },
-    {
-      new: true,
-      sort: { approvedAt: 1, createdAt: 1 },
-    }
-  );
-
-  if (!withdrawal) {
-    return { processed: false, reason: "none_available" };
+  if (
+    !Number.isInteger(payoutNonce) ||
+    !fromExpected ||
+    !tokenExpected ||
+    !toExpected ||
+    !provider?.getBlockNumber
+  ) {
+    return null;
   }
 
-  const payoutKey = `withdrawal:${String(withdrawal._id)}`;
-  let txHash = normalizeTxHash(withdrawal.txHash);
+  const latestBlock = await provider.getBlockNumber();
+  const scanDepth = Math.max(1, Number(process.env.HYBRID_PAYOUT_NONCE_SCAN_BLOCKS || 500));
+  const minBlock = Math.max(0, latestBlock - scanDepth);
+  const minWei = parseUnits(String(withdrawal.netAmount), HYBRID_TOKEN.decimals);
 
-  try {
-    if (txHash) {
-      const result = await markHybridWithdrawalPaidAfterAutoVerification(withdrawal._id, txHash);
-      return { processed: true, ...result };
+  for (let blockNumber = latestBlock; blockNumber >= minBlock; blockNumber -= 1) {
+    const block = await provider.getBlock(blockNumber, true);
+    const txs = block?.prefetchedTransactions || block?.transactions || [];
+
+    for (const item of txs) {
+      const tx = typeof item === "string" && provider.getTransaction
+        ? await provider.getTransaction(item)
+        : item;
+
+      if (!tx) {
+        continue;
+      }
+
+      if (
+        String(tx.from || "").toLowerCase() !== fromExpected ||
+        Number(tx.nonce) !== payoutNonce ||
+        String(tx.to || "").toLowerCase() !== tokenExpected
+      ) {
+        continue;
+      }
+
+      try {
+        const parsed = transferEventIface.parseTransaction({
+          data: tx.data,
+          value: tx.value || 0,
+        });
+
+        if (
+          parsed?.name === "transfer" &&
+          String(parsed.args?.[0] || parsed.args?.to || "").toLowerCase() === toExpected &&
+          BigInt(parsed.args?.[1]?.toString?.() || parsed.args?.value?.toString?.() || 0) >= minWei
+        ) {
+          return normalizeTxHash(tx.hash);
+        }
+      } catch {
+        // Different contract method or malformed transaction data.
+      }
     }
+  }
 
-    const storedResponse = await getCompletedIdempotency("payout", payoutKey);
-    if (storedResponse?.txHash) {
-      const result = await markHybridWithdrawalPaidAfterAutoVerification(
-        withdrawal._id,
-        storedResponse.txHash
-      );
-      return { processed: true, ...result };
-    }
+  return null;
+};
 
-    await markIdempotencyProcessing("payout", payoutKey);
+const verifyAndMarkPaid = async (withdrawal, knownTxHash = null, runtime = {}) => {
+  const txHash = normalizeTxHash(knownTxHash || withdrawal?.txHash);
+  if (txHash) {
+    const result = await runtime.markPaid(withdrawal._id, txHash);
+    console.log("✅ Paid", { withdrawalId: String(withdrawal._id) });
+    return { processed: true, ...result };
+  }
 
-    const token = getPayoutContract();
-    const amountWei = parseUnits(String(withdrawal.netAmount), HYBRID_TOKEN.decimals);
-    const tx = await token.transfer(withdrawal.walletAddress, amountWei);
-    txHash = normalizeTxHash(tx.hash);
+  const provider = runtime.getProvider();
+  const recoveredTxHash = await runtime.findPayoutTxHashByNonce(
+    withdrawal,
+    provider,
+    withdrawal.payoutWallet
+  );
 
-    if (!txHash) {
-      throw new Error("Payout transaction hash missing after broadcast");
-    }
+  if (!recoveredTxHash) {
+    return { processed: false, reason: "nonce_used_tx_not_found" };
+  }
 
-    const stored = await HybridWithdrawal.findOneAndUpdate(
+  const result = await runtime.markPaid(withdrawal._id, recoveredTxHash);
+  console.log("✅ Paid", { withdrawalId: String(withdrawal._id) });
+  return { processed: true, ...result };
+};
+
+const recoverNonceUsedPayout = async (withdrawal, runtime) => {
+  const payoutNonce = Number(withdrawal?.payoutNonce);
+  const payoutWallet = String(withdrawal?.payoutWallet || "").toLowerCase();
+
+  if (!Number.isInteger(payoutNonce) || !payoutWallet) {
+    return null;
+  }
+
+  const provider = runtime.getProvider();
+  const chainNonce = await provider.getTransactionCount(payoutWallet);
+
+  if (chainNonce <= payoutNonce) {
+    return { processed: false, reason: "nonce_not_used" };
+  }
+
+  console.log("⚠️ Tx already broadcast (nonce used)");
+  return verifyAndMarkPaid(withdrawal, null, runtime);
+};
+
+const createPayoutRuntime = (overrides = {}) => ({
+  findWithdrawalById: (id) => HybridWithdrawal.findById(id).lean(),
+  findApprovedWithTxHash: () =>
+    HybridWithdrawal.findOne({
+      status: "approved",
+      paidAt: null,
+      txHash: { $type: "string", $ne: "" },
+    })
+      .sort({ approvedAt: 1, createdAt: 1 })
+      .lean(),
+  findNonceRecoveryWithdrawal: () =>
+    HybridWithdrawal.findOne({
+      status: "approved",
+      paidAt: null,
+      txHash: { $in: [null, ""] },
+      payoutNonce: { $exists: true },
+      payoutWallet: { $type: "string", $ne: "" },
+    })
+      .sort({ payoutStartedAt: 1, approvedAt: 1, createdAt: 1 })
+      .lean(),
+  claimWithdrawal: (withdrawalId, now, lockUntil) =>
+    HybridWithdrawal.findOneAndUpdate(
       {
-        _id: withdrawal._id,
+        ...(withdrawalId ? { _id: withdrawalId } : {}),
         status: "approved",
         paidAt: null,
-        $or: [{ txHash: null }, { txHash: "" }],
+        payoutStatus: { $ne: "sending" },
+        $or: [
+          { payoutLockedUntil: null },
+          { payoutLockedUntil: { $exists: false } },
+          { payoutLockedUntil: { $lte: now } },
+        ],
+      },
+      {
+        $set: {
+          payoutLockedUntil: lockUntil,
+          payoutStartedAt: now,
+          payoutLastError: "",
+          payoutStatus: "sending",
+        },
+        $inc: {
+          payoutAttemptCount: 1,
+        },
+      },
+      {
+        new: true,
+        sort: { approvedAt: 1, createdAt: 1 },
+      }
+    ).lean(),
+  lockPayoutNonce: (withdrawalId, nonce, payoutWallet) =>
+    HybridWithdrawal.findOneAndUpdate(
+      { _id: withdrawalId, payoutNonce: { $exists: false } },
+      {
+        $set: {
+          payoutNonce: nonce,
+          payoutWallet,
+        },
+      },
+      { new: true }
+    ).lean(),
+  storePayoutTxHash: (withdrawalId, txHash) =>
+    HybridWithdrawal.findOneAndUpdate(
+      {
+        _id: withdrawalId,
+        status: "approved",
+        paidAt: null,
+        $or: [{ txHash: null }, { txHash: "" }, { txHash: { $exists: false } }],
       },
       {
         $set: {
@@ -624,7 +736,128 @@ export const executeApprovedWithdrawalPayout = async (withdrawalId = null) => {
         },
       },
       { new: true }
-    );
+    ).lean(),
+  getIdempotencyRecord,
+  getCompletedIdempotency,
+  markIdempotencyProcessing,
+  completeIdempotency,
+  releaseIdempotentAction,
+  storePayoutFailure,
+  getProvider,
+  getPayoutSigner,
+  getPayoutContract,
+  findPayoutTxHashByNonce,
+  verifyReceipt: verifyPayoutTransferInReceipt,
+  markPaid: markHybridWithdrawalPaidAfterAutoVerification,
+  now: () => new Date(),
+  ...overrides,
+});
+
+export const executeApprovedWithdrawalPayout = async (withdrawalId = null, runtimeOverrides = {}) => {
+  const runtime = createPayoutRuntime(runtimeOverrides);
+  const now = new Date();
+  const lockUntil = new Date(now.getTime() + PAYOUT_LOCK_MS);
+
+  if (withdrawalId) {
+    const existingWithdrawal = await runtime.findWithdrawalById(withdrawalId);
+    if (existingWithdrawal?.status === "paid") {
+      return { processed: false, reason: "already_paid" };
+    }
+    const existingTxHash = normalizeTxHash(existingWithdrawal?.txHash);
+    if (existingTxHash) {
+      console.log("💸 Payout start", { withdrawalId: String(withdrawalId) });
+      return verifyAndMarkPaid(existingWithdrawal, existingTxHash, runtime);
+    }
+
+    const nonceRecovery = await recoverNonceUsedPayout(existingWithdrawal, runtime);
+    if (nonceRecovery) {
+      console.log("💸 Payout start", { withdrawalId: String(withdrawalId) });
+      return nonceRecovery;
+    }
+  } else {
+    const recoverable = await runtime.findApprovedWithTxHash();
+    if (recoverable) {
+      console.log("💸 Payout start", { withdrawalId: String(recoverable._id) });
+      return verifyAndMarkPaid(recoverable, recoverable.txHash, runtime);
+    }
+
+    const nonceRecoverable = await runtime.findNonceRecoveryWithdrawal();
+    const nonceRecovery = await recoverNonceUsedPayout(nonceRecoverable, runtime);
+    if (nonceRecovery) {
+      console.log("💸 Payout start", { withdrawalId: String(nonceRecoverable._id) });
+      return nonceRecovery;
+    }
+  }
+
+  let withdrawal = await runtime.claimWithdrawal(withdrawalId, now, lockUntil);
+
+  if (!withdrawal) {
+    return { processed: false, reason: "none_available" };
+  }
+
+  console.log("💸 Payout start", { withdrawalId: String(withdrawal._id) });
+
+  const payoutKey = `withdrawal:${String(withdrawal._id)}`;
+  let txHash = normalizeTxHash(withdrawal.txHash);
+  let signer = null;
+  let provider = null;
+
+  try {
+    if (txHash) {
+      return verifyAndMarkPaid(withdrawal, txHash, runtime);
+    }
+
+    const idempotencyRecord = await runtime.getIdempotencyRecord("payout", payoutKey);
+    if (idempotencyRecord?.status === "completed" && idempotencyRecord?.response?.txHash) {
+      return verifyAndMarkPaid(withdrawal, idempotencyRecord.response.txHash, runtime);
+    }
+
+    if (idempotencyRecord?.status === "processing") {
+      console.log("⚠️ Payout idempotency processing; recovery only", {
+        withdrawalId: String(withdrawal._id),
+      });
+      return verifyAndMarkPaid(withdrawal, null, runtime);
+    }
+
+    provider = runtime.getProvider();
+    signer = runtime.getPayoutSigner(provider);
+    let payoutNonce = Number(withdrawal.payoutNonce);
+
+    if (!Number.isInteger(payoutNonce)) {
+      payoutNonce = await signer.getNonce();
+      console.log("🔢 Nonce", { nonce: payoutNonce });
+
+      const nonceLocked = await runtime.lockPayoutNonce(
+        withdrawal._id,
+        payoutNonce,
+        String(signer.address || "").toLowerCase()
+      );
+
+      withdrawal = nonceLocked || (await runtime.findWithdrawalById(withdrawal._id));
+    } else {
+      console.log("🔢 Nonce", { nonce: payoutNonce });
+    }
+
+    const chainNonce = await provider.getTransactionCount(signer.address);
+    if (chainNonce > Number(withdrawal.payoutNonce)) {
+      console.log("⚠️ Tx already broadcast (nonce used)");
+      return verifyAndMarkPaid(withdrawal, null, runtime);
+    }
+
+    await runtime.markIdempotencyProcessing("payout", payoutKey);
+
+    const token = runtime.getPayoutContract(signer);
+    const amountWei = parseUnits(String(withdrawal.netAmount), HYBRID_TOKEN.decimals);
+    const tx = await token.transfer(withdrawal.walletAddress, amountWei);
+    txHash = normalizeTxHash(tx.hash);
+
+    if (!txHash) {
+      throw new Error("Payout transaction hash missing after broadcast");
+    }
+
+    console.log("📤 Broadcast", { txHash });
+
+    const stored = await runtime.storePayoutTxHash(withdrawal._id, txHash);
 
     if (!stored) {
       throw new Error("Unable to store payout transaction hash");
@@ -632,9 +865,9 @@ export const executeApprovedWithdrawalPayout = async (withdrawalId = null) => {
 
     await tx.wait(1);
 
-    await verifyPayoutTransferInReceipt(txHash, withdrawal.walletAddress, withdrawal.netAmount);
-    const result = await markHybridWithdrawalPaidAfterAutoVerification(withdrawal._id, txHash);
-    await completeIdempotency(
+    await runtime.verifyReceipt(txHash, withdrawal.walletAddress, withdrawal.netAmount);
+    const result = await verifyAndMarkPaid(withdrawal, txHash, runtime);
+    await runtime.completeIdempotency(
       "payout",
       payoutKey,
       {
@@ -643,12 +876,13 @@ export const executeApprovedWithdrawalPayout = async (withdrawalId = null) => {
         status: "paid",
       }
     );
-    return { processed: true, ...result };
+    return result;
   } catch (error) {
-    if (!txHash) {
-      await releaseIdempotentAction("payout", payoutKey);
+    console.error("❌ Payout error", { error: error?.message || String(error) });
+    if (!txHash && !Number.isInteger(Number(withdrawal?.payoutNonce))) {
+      await runtime.releaseIdempotentAction("payout", payoutKey);
     }
-    await storePayoutFailure(withdrawal._id, error);
+    await runtime.storePayoutFailure(withdrawal._id, error, withdrawal);
     throw error;
   }
 };

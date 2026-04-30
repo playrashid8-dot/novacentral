@@ -94,6 +94,16 @@ const hybridWithdrawalSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    payoutNonce: {
+      type: Number,
+      index: true,
+    },
+    payoutWallet: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      index: true,
+    },
     payoutStartedAt: {
       type: Date,
       default: null,

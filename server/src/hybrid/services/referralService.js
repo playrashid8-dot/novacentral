@@ -1,5 +1,4 @@
 import User from "../../models/User.js";
-import HybridDeposit from "../models/HybridDeposit.js";
 import HybridLedger from "../models/HybridLedger.js";
 import { REFERRAL_RATES } from "../utils/constants.js";
 import { addHybridLedgerEntries } from "./ledgerService.js";
@@ -13,21 +12,26 @@ export const distributeHybridReferralRewards = async (
   session = null,
   options = {}
 ) => {
-  const { depositTxHash } = options || {};
+  const { depositTxHash, isFirstQualifiedDeposit = false } = options || {};
   const sourceUser = await User.findById(userId)
-    .select("referredBy referrer")
+    .select("referredBy referrer hasQualifiedDeposit")
     .session(session);
 
   if (!sourceUser) {
     return [];
   }
 
-  const qualifiedDepositCount = await HybridDeposit.countDocuments({
-    userId,
-    status: "credited",
+  if (sourceUser.hasQualifiedDeposit !== true || !isFirstQualifiedDeposit) {
+    return [];
+  }
+
+  const alreadyRewarded = await HybridLedger.findOne({
+    source: "referral_bonus",
+    "meta.firstDeposit": true,
+    "meta.fromUserId": String(userId),
   }).session(session);
 
-  if (qualifiedDepositCount !== 1) {
+  if (alreadyRewarded) {
     return [];
   }
 
@@ -107,6 +111,7 @@ export const distributeHybridReferralRewards = async (
           depth: item.depth,
           fromUserId: String(userId),
           depositTxHash,
+          firstDeposit: true,
         },
       })),
       session

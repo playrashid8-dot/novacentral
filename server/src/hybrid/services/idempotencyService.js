@@ -14,6 +14,25 @@ const failedIdempotencyError = (row) => {
   return err;
 };
 
+const FAILED_RETRY_MS = 30000;
+
+export const isFailedIdempotencyExpired = (existing, nowMs = Date.now()) =>
+  existing?.status === "failed" &&
+  nowMs - new Date(existing.updatedAt).getTime() > FAILED_RETRY_MS;
+
+const clearExpiredFailedIdempotency = async (existing, session = null) => {
+  if (existing?.status !== "failed") {
+    return false;
+  }
+
+  if (!isFailedIdempotencyExpired(existing)) {
+    throw failedIdempotencyError(existing);
+  }
+
+  await Idempotency.deleteOne({ _id: existing._id }).session(session);
+  return true;
+};
+
 export async function beginIdempotentAction(type, key) {
   const normalized = normalizeKey(key);
   if (!normalized) {
@@ -23,14 +42,12 @@ export async function beginIdempotentAction(type, key) {
   const existing = await Idempotency.findOne({ type, key: normalized }).lean();
   if (existing) {
     if (existing.status === "failed") {
-      throw failedIdempotencyError(existing);
-    }
-
-    if (existing.status === "completed") {
+      await clearExpiredFailedIdempotency(existing);
+    } else if (existing.status === "completed") {
       return { key: normalized, existing, shouldProcess: false };
+    } else {
+      throw conflictError("Request is already being processed");
     }
-
-    throw conflictError("Request is already being processed");
   }
 
   try {
@@ -46,7 +63,8 @@ export async function beginIdempotentAction(type, key) {
 
     const raced = await Idempotency.findOne({ type, key: normalized }).lean();
     if (raced?.status === "failed") {
-      throw failedIdempotencyError(raced);
+      await clearExpiredFailedIdempotency(raced);
+      return beginIdempotentAction(type, normalized);
     }
 
     if (raced?.status === "completed") {
@@ -69,7 +87,7 @@ export async function completeIdempotentAction(type, key, response, session = nu
     .session(session)
     .lean();
   if (existing?.status === "failed") {
-    throw failedIdempotencyError(existing);
+    await clearExpiredFailedIdempotency(existing, session);
   }
 
   return Idempotency.findOneAndUpdate(
@@ -133,7 +151,8 @@ export async function getCompletedIdempotency(type, key) {
   }).lean();
 
   if (row?.status === "failed") {
-    throw failedIdempotencyError(row);
+    await clearExpiredFailedIdempotency(row);
+    return null;
   }
 
   if (row?.status !== "completed") {
@@ -153,7 +172,7 @@ export async function markIdempotencyProcessing(type, key, session = null) {
     .session(session)
     .lean();
   if (existing?.status === "failed") {
-    throw failedIdempotencyError(existing);
+    await clearExpiredFailedIdempotency(existing, session);
   }
   if (existing?.status === "completed") {
     return existing;
@@ -182,7 +201,8 @@ export async function markIdempotencyProcessing(type, key, session = null) {
       .session(session)
       .lean();
     if (raced?.status === "failed") {
-      throw failedIdempotencyError(raced);
+      await clearExpiredFailedIdempotency(raced, session);
+      return markIdempotencyProcessing(type, normalized, session);
     }
     if (raced?.status === "completed") {
       return raced;
@@ -197,4 +217,22 @@ export async function completeIdempotency(type, key, response, session = null) {
 
 export async function failIdempotency(type, key, error, session = null) {
   return failIdempotentAction(type, key, error, session);
+}
+
+export async function getIdempotencyRecord(type, key, session = null) {
+  const normalized = normalizeKey(key);
+  if (!normalized) {
+    return null;
+  }
+
+  const row = await Idempotency.findOne({ type, key: normalized })
+    .session(session)
+    .lean();
+
+  if (row?.status === "failed") {
+    const cleared = await clearExpiredFailedIdempotency(row, session);
+    return cleared ? null : row;
+  }
+
+  return row;
 }
