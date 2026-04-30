@@ -26,6 +26,14 @@ import { roiRoutes, salaryRoutes, stakingRoutes, withdrawRoutes, hybridDepositRo
 import { startHybridEngine, runHybridStartupRecovery } from "./hybrid/engine/index.js";
 import { startRealtimeListener } from "./hybrid/listeners/realtimeListener.js";
 
+process.on("uncaughtException", (err) => {
+  console.error("CRASH:", err);
+});
+
+process.on("unhandledRejection", (err) => {
+  console.error("REJECTION:", err);
+});
+
 if (!process.env.JWT_SECRET) {
   throw new Error("JWT_SECRET missing");
 }
@@ -113,14 +121,6 @@ await connectDB();
  */
 const novaService = (process.env.NOVA_SERVICE ?? "all").trim().toLowerCase();
 const hybridStackEnabled = novaService !== "api" && novaService !== "hybrid";
-
-process.on("uncaughtException", (err) => {
-  console.error("CRASH:", err);
-});
-
-process.on("unhandledRejection", (err) => {
-  console.error("REJECTION:", err);
-});
 
 /* ==============================
    🔐 GLOBAL SECURITY

@@ -1,11 +1,10 @@
 import Redis from "ioredis";
 
 let client;
-const REDIS_KEEP_ALIVE_INTERVAL_MS = 30000;
+const MAX_REDIS_RECONNECT_ATTEMPTS = 5;
 
 export function getRedis() {
   if (!process.env.REDIS_URL) {
-    console.warn("❌ REDIS_URL missing");
     return null;
   }
 
@@ -17,8 +16,10 @@ export function getRedis() {
       keepAlive: 30000,
       connectTimeout: 10000,
       lazyConnect: true,
-      reconnectOnError: () => true,
-      retryStrategy: (times) => Math.min(1000 * 2 ** times, 30000),
+      retryStrategy: (times) => {
+        if (times > MAX_REDIS_RECONNECT_ATTEMPTS) return null;
+        return Math.min(times * 1000, 5000);
+      },
     });
 
     client.on("connect", () => {
@@ -26,14 +27,9 @@ export function getRedis() {
     });
 
     client.on("error", () => {});
-    client.on("end", () => console.warn("Redis disconnected"));
-    client.on("reconnecting", () => console.log("Redis reconnecting"));
+    client.on("end", () => {});
+    client.on("reconnecting", () => {});
   }
 
   return client;
 }
-
-setInterval(() => {
-  const redis = getRedis();
-  if (redis) redis.ping().catch(() => {});
-}, REDIS_KEEP_ALIVE_INTERVAL_MS);
