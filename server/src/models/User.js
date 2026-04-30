@@ -126,11 +126,16 @@ const userSchema = new mongoose.Schema(
     },
 
     // 📍 WALLET ADDRESS (stored lowercase for on-chain Transfer `to` matching)
+    // Migration cleanup before creating the production index:
+    // db.users.updateMany({ walletAddress: "" }, { $unset: { walletAddress: "" } });
+    // Create the Mongo index manually; do not rely on Mongoose for this field:
+    // db.users.createIndex(
+    //   { walletAddress: 1 },
+    //   { unique: true, partialFilterExpression: { walletAddress: { $type: "string", $ne: "" } } }
+    // );
     walletAddress: {
       type: String,
-      unique: true,
-      sparse: true,
-      default: "",
+      default: null,
       trim: true,
       lowercase: true,
     },

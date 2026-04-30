@@ -54,14 +54,17 @@ function normalizeCorsOrigin(origin) {
 const allowedOrigins = [
   "https://hybridearn.com",
   "https://www.hybridearn.com",
+  "http://localhost:3000",
 ];
 
 const corsAllowedOrigins = new Set(allowedOrigins);
+const devVercelOriginPattern = /^https:\/\/[a-z0-9-]+\.vercel\.app$/i;
 
 function isCorsOriginAllowed(origin) {
   if (!origin) return true;
   const n = normalizeCorsOrigin(origin);
   if (corsAllowedOrigins.has(n)) return true;
+  if (process.env.NODE_ENV !== "production" && devVercelOriginPattern.test(n)) return true;
   return false;
 }
 

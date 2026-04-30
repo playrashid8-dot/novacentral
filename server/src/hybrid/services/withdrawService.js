@@ -389,6 +389,18 @@ const normalizeTxHash = (txHash) => {
   return raw;
 };
 
+const adminClientError = (message, statusCode = 400) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+};
+
+const wrapAdminClientError = (error, fallback) => {
+  const wrapped = new Error(error?.message || fallback);
+  wrapped.statusCode = error?.statusCode && error.statusCode < 500 ? error.statusCode : 400;
+  return wrapped;
+};
+
 const transferEventIface = new Interface(BSC_USDT_ABI);
 
 /**
@@ -489,7 +501,7 @@ export const autoMarkClaimable = async () => {
 
 export const adminApproveHybridWithdrawal = async (withdrawalId, adminId = null) => {
   if (!withdrawalId) {
-    throw new Error("Withdrawal ID required");
+    throw adminClientError("Withdrawal ID required");
   }
 
   const session = await mongoose.startSession();
@@ -499,15 +511,15 @@ export const adminApproveHybridWithdrawal = async (withdrawalId, adminId = null)
     const withdrawal = await HybridWithdrawal.findById(withdrawalId).session(session);
 
     if (!withdrawal) {
-      throw new Error("Withdrawal not found");
+      throw adminClientError("Withdrawal not found", 404);
     }
 
     if (withdrawal.status !== "pending" && withdrawal.status !== "review" && withdrawal.status !== "claimable") {
-      throw new Error("Already processed");
+      throw adminClientError("Already processed");
     }
 
     if (new Date(withdrawal.availableAt).getTime() > Date.now()) {
-      throw new Error("Withdrawal lock period (96h) is still active");
+      throw adminClientError("Withdrawal lock period (96h) is still active");
     }
 
     const updated = await HybridWithdrawal.findOneAndUpdate(
@@ -523,14 +535,14 @@ export const adminApproveHybridWithdrawal = async (withdrawalId, adminId = null)
     );
 
     if (!updated) {
-      throw new Error("Unable to approve withdrawal");
+      throw adminClientError("Unable to approve withdrawal");
     }
 
     await session.commitTransaction();
     return updated;
   } catch (error) {
     await session.abortTransaction();
-    throw new Error(error.message || "Failed to approve withdrawal");
+    throw wrapAdminClientError(error, "Failed to approve withdrawal");
   } finally {
     session.endSession();
   }
@@ -539,15 +551,15 @@ export const adminApproveHybridWithdrawal = async (withdrawalId, adminId = null)
 export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash, adminId = null) => {
   const normalized = normalizeTxHash(txHash);
   if (!normalized) {
-    throw new Error("Valid transaction hash required");
+    throw adminClientError("Valid transaction hash required");
   }
 
   const head = await HybridWithdrawal.findById(withdrawalId).select("status").lean();
   if (!head) {
-    throw new Error("Withdrawal not found");
+    throw adminClientError("Withdrawal not found", 404);
   }
   if (head.status === "paid") {
-    throw new Error("Withdrawal already paid");
+    throw adminClientError("Withdrawal already paid");
   }
 
   const preCheck = await HybridWithdrawal.findOne({
@@ -558,12 +570,12 @@ export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash, adminI
     .lean();
 
   if (!preCheck) {
-    throw new Error("Withdrawal not found or not approved");
+    throw adminClientError("Withdrawal not found or not approved");
   }
 
   const isValid = await verifyPayoutTx(normalized, preCheck.netAmount, preCheck.walletAddress);
   if (!isValid) {
-    throw new Error("Invalid payout transaction");
+    throw adminClientError("Invalid payout transaction");
   }
 
   const session = await mongoose.startSession();
@@ -578,11 +590,11 @@ export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash, adminI
     }).session(session);
 
     if (!withdrawal) {
-      throw new Error("Withdrawal not found or not approved");
+      throw adminClientError("Withdrawal not found or not approved");
     }
 
     if (withdrawal.status === "paid") {
-      throw new Error("Withdrawal already paid");
+      throw adminClientError("Withdrawal already paid");
     }
 
     const userBeforePay = await User.findById(withdrawal.userId)
@@ -594,7 +606,7 @@ export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash, adminI
       Number(userBeforePay.pendingWithdraw || 0) < Number(withdrawal.grossAmount || 0)
     ) {
       console.warn("⚠️ Pending mismatch detected");
-      throw new Error("Pending balance mismatch");
+      throw adminClientError("Pending balance mismatch");
     }
 
     const duplicateTx = await HybridWithdrawal.findOne({
@@ -606,7 +618,7 @@ export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash, adminI
       .session(session);
 
     if (duplicateTx) {
-      throw new Error("Transaction hash already used");
+      throw adminClientError("Transaction hash already used");
     }
 
     const nowPaid = new Date();
@@ -627,7 +639,7 @@ export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash, adminI
     );
 
     if (!paid) {
-      throw new Error("Unable to mark withdrawal paid");
+      throw adminClientError("Unable to mark withdrawal paid");
     }
 
     const updatedUser = await User.findOneAndUpdate(
@@ -644,7 +656,7 @@ export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash, adminI
     );
 
     if (!updatedUser) {
-      throw new Error("Pending withdrawal balance mismatch");
+      throw adminClientError("Pending withdrawal balance mismatch");
     }
 
     await addHybridLedgerEntries(
@@ -686,9 +698,9 @@ export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash, adminI
       /E11000/i.test(String(error?.message || "")) ||
       /duplicate key/i.test(String(error?.message || ""));
     if (isDupTx) {
-      throw new Error("Transaction hash already used");
+      throw adminClientError("Transaction hash already used");
     }
-    throw new Error(error.message || "Failed to mark withdrawal paid");
+    throw wrapAdminClientError(error, "Failed to mark withdrawal paid");
   } finally {
     session.endSession();
   }
@@ -696,7 +708,7 @@ export const adminMarkHybridWithdrawalPaid = async (withdrawalId, txHash, adminI
 
 export const adminRejectHybridWithdrawal = async (withdrawalId) => {
   if (!withdrawalId) {
-    throw new Error("Withdrawal ID required");
+    throw adminClientError("Withdrawal ID required");
   }
 
   const session = await mongoose.startSession();
@@ -707,7 +719,7 @@ export const adminRejectHybridWithdrawal = async (withdrawalId) => {
     const withdrawal = await HybridWithdrawal.findById(withdrawalId).session(session);
 
     if (!withdrawal) {
-      throw new Error("Withdrawal not found");
+      throw adminClientError("Withdrawal not found", 404);
     }
 
     if (
@@ -716,7 +728,7 @@ export const adminRejectHybridWithdrawal = async (withdrawalId) => {
       withdrawal.status !== "claimable" &&
       withdrawal.status !== "approved"
     ) {
-      throw new Error("Already processed");
+      throw adminClientError("Already processed");
     }
 
     const rewardBack = Number(withdrawal.sourceRewardAmount || 0);
@@ -724,11 +736,11 @@ export const adminRejectHybridWithdrawal = async (withdrawalId) => {
     const gross = Number(withdrawal.grossAmount || 0);
 
     if (rewardBack + depositBack <= 0 && gross > 0) {
-      throw new Error("Cannot reject this withdrawal: missing source breakdown (legacy record)");
+      throw adminClientError("Cannot reject this withdrawal: missing source breakdown (legacy record)");
     }
 
     if (Math.abs(rewardBack + depositBack - gross) > 0.0001) {
-      throw new Error("Source breakdown does not match gross amount; reject aborted");
+      throw adminClientError("Source breakdown does not match gross amount; reject aborted");
     }
 
     const updatedWithdrawal = await HybridWithdrawal.findOneAndUpdate(
@@ -738,7 +750,7 @@ export const adminRejectHybridWithdrawal = async (withdrawalId) => {
     );
 
     if (!updatedWithdrawal) {
-      throw new Error("Unable to reject withdrawal");
+      throw adminClientError("Unable to reject withdrawal");
     }
 
     const updatedUser = await User.findOneAndUpdate(
@@ -758,7 +770,7 @@ export const adminRejectHybridWithdrawal = async (withdrawalId) => {
     );
 
     if (!updatedUser) {
-      throw new Error("User balance state mismatch; reject aborted");
+      throw adminClientError("User balance state mismatch; reject aborted");
     }
 
     const ledger = [
@@ -802,7 +814,7 @@ export const adminRejectHybridWithdrawal = async (withdrawalId) => {
     return updatedWithdrawal;
   } catch (error) {
     await session.abortTransaction();
-    throw new Error(error.message || "Failed to reject withdrawal");
+    throw wrapAdminClientError(error, "Failed to reject withdrawal");
   } finally {
     session.endSession();
   }

@@ -26,6 +26,14 @@ import {
 const router = express.Router();
 const sendAdminError = (res, err, context) => {
   console.error(`${context}:`, err.message);
+  if (err.statusCode && err.statusCode < 500) {
+    return res.status(err.statusCode).json({
+      success: false,
+      msg: err.message,
+      data: null,
+    });
+  }
+
   return res.status(500).json({ success: false, msg: "Internal server error", data: null });
 };
 
@@ -396,8 +404,7 @@ router.post("/hybrid/withdraw/approve", auth, isAdmin, async (req, res) => {
     });
     return res.json({ success: true, msg: "Withdrawal approved", data: { withdrawal: data } });
   } catch (err) {
-    console.error("ADMIN WITHDRAW APPROVE ERROR:", err.message);
-    return res.status(400).json({ success: false, msg: "Request failed", data: null });
+    return sendAdminError(res, err, "ADMIN WITHDRAW APPROVE ERROR");
   }
 });
 
@@ -420,8 +427,7 @@ router.post("/hybrid/withdraw/pay", auth, isAdmin, async (req, res) => {
     });
     return res.json({ success: true, msg: "Withdrawal marked as paid", data });
   } catch (err) {
-    console.error("ADMIN WITHDRAW PAY ERROR:", err.message);
-    return res.status(400).json({ success: false, msg: "Request failed", data: null });
+    return sendAdminError(res, err, "ADMIN WITHDRAW PAY ERROR");
   }
 });
 
@@ -441,8 +447,7 @@ router.post("/hybrid/withdraw/reject", auth, isAdmin, async (req, res) => {
     });
     return res.json({ success: true, msg: "Withdrawal rejected and refunded", data: { withdrawal: data } });
   } catch (err) {
-    console.error("ADMIN WITHDRAW REJECT ERROR:", err.message);
-    return res.status(400).json({ success: false, msg: "Request failed", data: null });
+    return sendAdminError(res, err, "ADMIN WITHDRAW REJECT ERROR");
   }
 });
 
@@ -463,8 +468,7 @@ router.post("/withdraw/approve/:id", auth, isAdmin, async (req, res) => {
     });
     return res.json({ success: true, msg: "Withdrawal approved", data: { withdrawal: data } });
   } catch (err) {
-    console.error("ADMIN REST WITHDRAW APPROVE ERROR:", err.message);
-    return res.status(400).json({ success: false, msg: "Request failed", data: null });
+    return sendAdminError(res, err, "ADMIN REST WITHDRAW APPROVE ERROR");
   }
 });
 
@@ -484,8 +488,7 @@ router.post("/withdraw/reject/:id", auth, isAdmin, async (req, res) => {
     });
     return res.json({ success: true, msg: "Withdrawal rejected and refunded", data: { withdrawal: data } });
   } catch (err) {
-    console.error("ADMIN REST WITHDRAW REJECT ERROR:", err.message);
-    return res.status(400).json({ success: false, msg: "Request failed", data: null });
+    return sendAdminError(res, err, "ADMIN REST WITHDRAW REJECT ERROR");
   }
 });
 
