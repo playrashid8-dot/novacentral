@@ -5,12 +5,12 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import ProtectedRoute from "../../../components/ProtectedRoute";
 import PageWrapper from "../../../components/PageWrapper";
-import AppToast from "../../../components/AppToast";
 import LiveRefreshIndicator from "../../../components/LiveRefreshIndicator";
 import { fetchCurrentUser } from "../../../lib/session";
 import { logout } from "../../../lib/auth";
 import { claimHybridSalary, fetchSalaryProgress } from "../../../lib/hybrid";
 import { getApiErrorMessage } from "../../../lib/api";
+import { showToast } from "../../../lib/vipToast";
 
 const CARD = "rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl";
 const GLOW = "shadow-[0_0_25px_rgba(16,185,129,0.35)]";
@@ -27,16 +27,10 @@ type HistoryRow = { stage?: number; amount?: number; claimedAt?: string | null }
 export default function TeamSalaryPage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState("");
   const [salaryPayload, setSalaryPayload] = useState<any>(null);
   const [claiming, setClaiming] = useState<number | null>(null);
   const [historyShown, setHistoryShown] = useState(12);
   const [syncedAt, setSyncedAt] = useState<number | null>(null);
-
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(""), 2800);
-  };
 
   const load = useCallback(async () => {
     try {
@@ -48,8 +42,7 @@ export default function TeamSalaryPage() {
       setSalaryPayload(sal);
       setSyncedAt(Date.now());
     } catch (err: any) {
-      showToast(getApiErrorMessage(err, "Session expired 🔒"));
-      logout();
+      logout(getApiErrorMessage(err, "Session expired. Please sign in again."));
     } finally {
       setLoading(false);
     }
@@ -108,11 +101,11 @@ export default function TeamSalaryPage() {
   const handleClaim = async (stageRule: RuleRow) => {
     const target = Number(stageRule.stage);
     if (claimableStage !== target) {
-      showToast("This stage cannot be claimed yet.");
+      showToast("error", "This stage cannot be claimed yet.");
       return;
     }
     if (direct < Number(stageRule.directCount) || team < Number(stageRule.teamCount)) {
-      showToast("Requirements not met for this stage.");
+      showToast("error", "Requirements not met for this stage.");
       return;
     }
     try {
@@ -121,10 +114,15 @@ export default function TeamSalaryPage() {
       if (!res || typeof res.stage !== "number") {
         throw new Error("Unexpected response");
       }
-      showToast(`Stage ${res.stage} claimed (+$${Number(res.amount ?? 0).toFixed(2)})`);
+      showToast("success", "Salary reward claimed");
       await load();
     } catch (err: any) {
-      showToast(getApiErrorMessage(err, "Claim failed"));
+      const raw = getApiErrorMessage(err, "Claim failed");
+      const msg =
+        err?.response?.status === 403 || /not allowed|forbidden/i.test(raw)
+          ? "Action not allowed"
+          : raw;
+      showToast("error", msg);
     } finally {
       setClaiming(null);
     }
@@ -134,8 +132,6 @@ export default function TeamSalaryPage() {
     <ProtectedRoute>
       <PageWrapper loading={loading} data={user?._id} emptyText="No data available">
         <div className="relative w-full max-w-full overflow-x-hidden px-1 pb-24 text-white sm:px-0 sm:pb-24">
-          <AppToast message={toast} />
-
           <motion.header
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}

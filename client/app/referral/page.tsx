@@ -5,8 +5,8 @@ import { motion } from "framer-motion";
 import API, { getApiErrorMessage, normalize } from "../../lib/api";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import PageWrapper from "../../components/PageWrapper";
-import AppToast from "../../components/AppToast";
 import { fetchCurrentUser } from "../../lib/session";
+import { showToast } from "../../lib/vipToast";
 import { claimHybridSalary, fetchHybridSummary, fetchSalaryProgress } from "../../lib/hybrid";
 import GradientButton from "../../components/GradientButton";
 
@@ -20,18 +20,12 @@ const SALARY_UI_STAGES = [
 
 export default function Referral() {
   const [copied, setCopied] = useState(false);
-  const [toast, setToast] = useState("");
   const [stats, setStats] = useState<any>(null);
   const [user, setUser]: any = useState(null);
   const [hybrid, setHybrid] = useState<any>(null);
   const [salaryProgress, setSalaryProgress] = useState<any>(null);
   const [salaryLoading, setSalaryLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
-
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(""), 2500);
-  };
 
   useEffect(() => {
     const loadStats = async () => {
@@ -52,7 +46,7 @@ export default function Referral() {
         setHybrid(hybridData);
         setSalaryProgress(salaryData);
       } catch (err: any) {
-        showToast(getApiErrorMessage(err, "Failed to load referral stats ❌"));
+        showToast("error", getApiErrorMessage(err, "Could not load referral data"));
       } finally {
         setPageLoading(false);
       }
@@ -100,12 +94,7 @@ export default function Referral() {
         amount?: number;
         stage?: number;
       } | null;
-      const claimed = Number(result?.stage ?? stageLevel);
-      const salMsg =
-        typeof result?.msg === "string" && result.msg.trim()
-          ? result.msg.trim()
-          : "";
-      showToast(salMsg || `Stage ${claimed} claimed · $${Number(result?.amount ?? 0).toFixed(2)} USDT`);
+      showToast("success", "Salary reward claimed");
       const [hybridData, salaryData] = await Promise.all([
         fetchHybridSummary().catch(() => null),
         fetchSalaryProgress().catch(() => null),
@@ -146,8 +135,6 @@ export default function Referral() {
     <ProtectedRoute>
       <PageWrapper loading={pageLoading} skipEmpty>
         <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 pb-24 text-white relative bg-[#040406] overflow-x-hidden w-full">
-          <AppToast message={toast} />
-
           <div className="absolute w-[500px] h-[500px] bg-purple-600 opacity-20 blur-[150px] top-[-150px] left-[-150px]" />
           <div className="absolute w-[500px] h-[500px] bg-indigo-600 opacity-20 blur-[150px] bottom-[-150px] right-[-150px]" />
 

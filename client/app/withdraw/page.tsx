@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { motion } from "framer-motion";
 import ProtectedRoute from "../../components/ProtectedRoute";
-import AppToast from "../../components/AppToast";
-import { getApiErrorMessage, suppressDuplicateCatchToast } from "../../lib/api";
+import { getApiErrorMessage } from "../../lib/api";
+import { showToast as showVipToast } from "../../lib/vipToast";
 import { estimateWithdrawNetUsd, inferWithdrawFeeRate } from "../../lib/withdrawFeeEstimate";
 import { fetchHybridSummary, fetchHybridWithdrawals, requestHybridWithdraw } from "../../lib/hybrid";
 import { maskAddress, isValidEvmAddress42 } from "../../lib/helpers";
@@ -24,7 +24,7 @@ function formatWithdrawSubmitError(err: unknown, fallback: string): string {
     response?: { status?: number; data?: { msg?: string; message?: string } };
   };
   if (!e?.response) {
-    if (e?.code === "ECONNABORTED" || e?.code === "TIMEOUT") return "Updating data…";
+    if (e?.code === "ECONNABORTED" || e?.code === "TIMEOUT") return "Request timed out. Try again.";
     return "Network error, try again";
   }
   const status = e.response.status;
@@ -34,6 +34,12 @@ function formatWithdrawSubmitError(err: unknown, fallback: string): string {
     return "Please sign in — no valid session token";
   }
   if (/invalid password/i.test(msg)) return "Invalid password";
+  if (/pending withdrawal must be completed first/i.test(msg)) {
+    return "Withdrawal already pending";
+  }
+  if (/insufficient hybrid balance or pending withdrawal exists/i.test(msg)) {
+    return "Insufficient balance or a withdrawal may already be in progress";
+  }
   const minMatch = msg.match(/minimum withdrawal is\s+(\d+(?:\.\d+)?)/i);
   if (minMatch) return `Minimum amount is $${minMatch[1]}`;
   if (/insufficient hybrid balance/i.test(msg)) return "Insufficient balance";
@@ -51,22 +57,11 @@ export default function WithdrawPage() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [submitError, setSubmitError] = useState("");
-  const [toast, setToast] = useState("");
-  const [toastTone, setToastTone] = useState<"neutral" | "success" | "error">("neutral");
   const [hybrid, setHybrid] = useState<any>(null);
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [detail, setDetail] = useState<any | null>(null);
   const [successBanner, setSuccessBanner] = useState<{ net: number; gross: number } | null>(null);
-
-  const showToast = (msg: string, tone: "neutral" | "success" | "error" = "neutral") => {
-    setToast(msg);
-    setToastTone(tone);
-    setTimeout(() => {
-      setToast("");
-      setToastTone("neutral");
-    }, 2800);
-  };
 
   const spendableHybridBalance =
     Number(hybrid?.depositBalance || 0) + Number(hybrid?.rewardBalance || 0);
@@ -129,23 +124,23 @@ export default function WithdrawPage() {
     const amt = Number(amount || 0);
 
     if (withdrawMin == null) {
-      return showToast("Loading withdrawal rules…", "neutral");
+      return;
     }
 
     if (!Number.isFinite(amt) || amt < withdrawMin) {
-      return showToast(`Minimum amount is $${withdrawMin}`, "error");
+      return showVipToast("error", `Minimum amount is $${withdrawMin}`);
     }
 
     if (amt > spendableHybridBalance) {
-      return showToast("Insufficient balance", "error");
+      return showVipToast("error", "Insufficient balance");
     }
 
     if (!isValidEvmAddress42(walletAddress.trim())) {
-      return showToast("Enter a valid wallet: 0x + 40 hex characters (42 total)", "error");
+      return showVipToast("error", "Enter a valid wallet: 0x + 40 hex characters (42 total)");
     }
 
     if (!withdrawPassword.trim()) {
-      return showToast("Enter password", "error");
+      return showVipToast("error", "Enter password");
     }
 
     try {
@@ -169,16 +164,16 @@ export default function WithdrawPage() {
       });
       window.setTimeout(() => setSuccessBanner(null), 12000);
 
-      showToast("Withdrawal request submitted", "success");
+      showVipToast("success", "Withdrawal request submitted");
       setAmount("");
       setWithdrawPassword("");
       await loadHybrid(true);
     } catch (err: any) {
       const msg = formatWithdrawSubmitError(err, getApiErrorMessage(err, "Request failed"));
       setSubmitError(msg);
-      if (!suppressDuplicateCatchToast(err)) {
-        showToast(msg, "error");
-      }
+      const toastMsg =
+        /already pending/i.test(msg) ? "Withdrawal already pending" : msg;
+      showVipToast("error", toastMsg);
     } finally {
       setLoading(false);
     }
@@ -227,8 +222,6 @@ export default function WithdrawPage() {
   return (
     <ProtectedRoute>
       <div className={`relative w-full max-w-lg space-y-4 px-4 pb-24 text-white`}>
-        <AppToast message={toast} tone={toastTone} />
-
         {loadError ? (
           <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
             {loadError}

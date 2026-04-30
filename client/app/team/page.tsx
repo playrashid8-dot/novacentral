@@ -6,7 +6,7 @@ import useSWR from "swr";
 import { motion } from "framer-motion";
 import API, { normalize } from "../../lib/api";
 import { fetchTeamPageBundleSWR, TEAM_PAGE_BUNDLE_KEY, hybridDashboardSWRConfig } from "../../lib/swr-fetch";
-import AppToast from "../../components/AppToast";
+import { showToast as vipToast } from "../../lib/vipToast";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import PageWrapper from "../../components/PageWrapper";
 import LiveRefreshIndicator from "../../components/LiveRefreshIndicator";
@@ -64,7 +64,9 @@ function isAfterClaim(joinedIso: string | undefined, claimedIso: string | null |
 }
 
 export default function TeamPage() {
-  const [toast, setToast] = useState("");
+  const pushToast = useCallback((type: "success" | "error", message: string) => {
+    vipToast(type, message);
+  }, []);
   const [members, setMembers] = useState<TeamMemberRow[]>([]);
   const [membersPage, setMembersPage] = useState(1);
   const [membersHasMore, setMembersHasMore] = useState(false);
@@ -80,11 +82,6 @@ export default function TeamPage() {
 
   const user = teamBundle?.user;
   const summary = teamBundle?.summary;
-
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(""), 2500);
-  };
 
   const referralCode = String(
     summary?.referralStats?.referralCode ?? user?.referralCode ?? ""
@@ -130,11 +127,11 @@ export default function TeamPage() {
       setMembersPage(nextPage);
       setMembersHasMore(normalized.hasMore);
     } catch {
-      showToast("Could not load more members");
+      pushToast("error", "Could not load more members");
     } finally {
       setLoadingMoreMembers(false);
     }
-  }, [loadingMembers, loadingMoreMembers, membersHasMore, membersPage, showToast]);
+  }, [loadingMembers, loadingMoreMembers, membersHasMore, membersPage, pushToast]);
 
   const directCount = Number(stats?.directCount ?? 0);
   const teamCount = Number(stats?.teamCount ?? 0);
@@ -157,10 +154,9 @@ export default function TeamPage() {
           loadingMembers={loadingMembers}
           lastUpdatedAt={lastUpdatedAt}
           lastSalaryClaimAt={lastSalaryClaimAt}
-          toast={toast}
           membersHasMore={membersHasMore}
           loadingMoreMembers={loadingMoreMembers}
-          showToast={showToast}
+          notifyToast={pushToast}
           onLoadMoreMembers={() => void loadMoreMembers()}
         />
       </PageWrapper>
@@ -182,10 +178,9 @@ function TeamContent({
   loadingMembers,
   lastUpdatedAt,
   lastSalaryClaimAt,
-  toast,
   membersHasMore,
   loadingMoreMembers,
-  showToast,
+  notifyToast,
   onLoadMoreMembers,
 }: {
   loadingPage: boolean;
@@ -201,10 +196,9 @@ function TeamContent({
   loadingMembers: boolean;
   lastUpdatedAt: number | null;
   lastSalaryClaimAt: string | null;
-  toast: string;
   membersHasMore: boolean;
   loadingMoreMembers: boolean;
-  showToast: (msg: string) => void;
+  notifyToast: (type: "success" | "error", message: string) => void;
   onLoadMoreMembers: () => void;
 }) {
   const [search, setSearch] = useState("");
@@ -232,8 +226,6 @@ function TeamContent({
 
   return (
     <div className="relative w-full max-w-full overflow-x-hidden px-1 pb-24 text-white sm:px-0">
-      <AppToast message={toast} />
-
       <motion.header
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -315,7 +307,7 @@ function TeamContent({
           setSearch={setSearch}
           lastSalaryClaimAt={lastSalaryClaimAt}
           referralCode={referralCode}
-          showToast={showToast}
+          notifyToast={notifyToast}
           membersHasMore={membersHasMore}
           loadingMoreMembers={loadingMoreMembers}
           onLoadMoreMembers={onLoadMoreMembers}
@@ -364,7 +356,7 @@ function MembersMessage({
   setSearch,
   lastSalaryClaimAt,
   referralCode,
-  showToast,
+  notifyToast,
   membersHasMore,
   loadingMoreMembers,
   onLoadMoreMembers,
@@ -380,7 +372,7 @@ function MembersMessage({
   setSearch: (v: string) => void;
   lastSalaryClaimAt: string | null;
   referralCode: string;
-  showToast: (msg: string) => void;
+  notifyToast: (type: "success" | "error", message: string) => void;
   membersHasMore: boolean;
   loadingMoreMembers: boolean;
   onLoadMoreMembers: () => void;
@@ -523,14 +515,14 @@ function MembersMessage({
     const link = `${origin}/signup?ref=${encodeURIComponent(referralCode)}`;
     const copyReferral = async () => {
       if (!referralCode) {
-        showToast("Open Profile to copy your referral code");
+        notifyToast("error", "Open Profile to copy your referral code");
         return;
       }
       try {
         await navigator.clipboard.writeText(link);
-        showToast("Referral link copied");
+        notifyToast("success", "Referral link copied");
       } catch {
-        showToast("Could not copy link");
+        notifyToast("error", "Could not copy link");
       }
     };
     return (

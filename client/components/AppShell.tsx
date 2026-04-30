@@ -6,6 +6,7 @@ import AppNavbar from "./AppNavbar";
 import AppSidebar from "./AppSidebar";
 import BottomNav from "./BottomNav";
 import MobileStickyBalance from "./MobileStickyBalance";
+import VipToastHost from "./ui/VipToast";
 
 const NO_CHROME = new Set(["/", "/login", "/signup", "/admin"]);
 
@@ -14,11 +15,17 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const hideChrome = pathname ? NO_CHROME.has(pathname) : false;
 
   if (hideChrome) {
-    return <>{children}</>;
+    return (
+      <>
+        <VipToastHost />
+        {children}
+      </>
+    );
   }
 
   return (
     <div className="min-h-screen bg-[#0B0F19] text-white antialiased">
+      <VipToastHost />
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute left-[-120px] top-[-120px] h-[420px] w-[420px] rounded-full bg-[#6366F1]/18 blur-[120px]" />
         <div className="absolute bottom-[-140px] right-[-100px] h-[400px] w-[400px] rounded-full bg-emerald-500/10 blur-[110px]" />

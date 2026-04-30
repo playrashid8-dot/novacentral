@@ -7,9 +7,9 @@ import Image from "next/image";
 import API, {
   getApiErrorMessage,
   initCSRF,
-  suppressDuplicateCatchToast,
 } from "../../lib/api";
 import { resetLogoutState } from "../../lib/auth";
+import { showToast } from "../../lib/vipToast";
 import PrimaryButton from "../../components/PrimaryButton";
 
 export default function Login() {
@@ -18,12 +18,23 @@ export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState("");
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(""), 2500);
-  };
+  function loginErrorMessage(err: unknown): string {
+    const e = err as { response?: { status?: number; data?: { msg?: string } } };
+    const status = e?.response?.status;
+    const msg = String(e?.response?.data?.msg || "").trim();
+    const lower = msg.toLowerCase();
+    if (status === 400 && lower.includes("invalid credential")) {
+      return "Invalid username or password";
+    }
+    if (status === 403 && lower.includes("blocked")) {
+      return msg || "Action not allowed";
+    }
+    if (status === 429 || lower.includes("too many login")) {
+      return msg || "Too many attempts. Try again later.";
+    }
+    return getApiErrorMessage(err, "Invalid username or password");
+  }
 
   const handleLogin = async () => {
     if (loading) return;
@@ -32,15 +43,15 @@ export default function Login() {
     const cleanPassword = password.trim();
 
     if (!cleanUsername || !cleanPassword) {
-      return showToast("All fields required ⚠️");
+      return showToast("error", "Enter username and password");
     }
 
     if (cleanUsername.length < 3) {
-      return showToast("Username must be at least 3 characters ⚠️");
+      return showToast("error", "Username must be at least 3 characters");
     }
 
     if (cleanPassword.length < 8) {
-      return showToast("Password must be at least 8 characters 🔒");
+      return showToast("error", "Password must be at least 8 characters");
     }
 
     try {
@@ -57,13 +68,11 @@ export default function Login() {
         },
       });
 
-      showToast("Login successful ✅");
+      showToast("success", "Login successful");
       router.replace("/dashboard");
 
     } catch (err: any) {
-      if (!suppressDuplicateCatchToast(err)) {
-        showToast(getApiErrorMessage(err, "Login failed ❌"));
-      }
+      showToast("error", loginErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -71,12 +80,6 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 relative overflow-hidden bg-[#040406] text-white">
-      {toast && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 bg-purple-600 px-4 py-2 rounded-xl text-sm shadow-lg z-50">
-          {toast}
-        </div>
-      )}
-
       {/* 🌌 BACKGROUND */}
       <div className="absolute w-[500px] h-[500px] bg-purple-600 opacity-20 blur-[150px] top-[-150px] left-[-150px]" />
       <div className="absolute w-[500px] h-[500px] bg-indigo-600 opacity-20 blur-[150px] bottom-[-150px] right-[-150px]" />

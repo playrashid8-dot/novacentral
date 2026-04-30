@@ -4,7 +4,6 @@ import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import ProtectedRoute from "../../components/ProtectedRoute";
-import AppToast from "../../components/AppToast";
 import PrimaryButton from "../../components/PrimaryButton";
 import GradientButton from "../../components/GradientButton";
 import GlassCard from "../../components/GlassCard";
@@ -12,6 +11,7 @@ import ProgressBar from "../../components/ProgressBar";
 import CountdownTimer from "../../components/CountdownTimer";
 import { claimHybridStake, createHybridStake, fetchHybridSummary, fetchHybridStakes } from "../../lib/hybrid";
 import { getApiErrorMessage } from "../../lib/api";
+import { showToast } from "../../lib/vipToast";
 import PageSkeleton from "../../components/Skeleton";
 
 export default function Investment() {
@@ -22,14 +22,8 @@ export default function Investment() {
   const [amount, setAmount] = useState("");
   const [hybrid, setHybrid]: any = useState(null);
   const [stakes, setStakes] = useState<any[]>([]);
-  const [toast, setToast] = useState("");
   const [claimingStake, setClaimingStake] = useState<string | null>(null);
   const [pageLoading, setPageLoading] = useState(true);
-
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(""), 2500);
-  };
 
   const plans = [
     { name: "7d", key: "stake-7", days: 7, roi: 1.3, color: "from-purple-500 to-indigo-500" },
@@ -56,17 +50,17 @@ export default function Investment() {
     const amt = Number(amount);
 
     if (!amount.trim() || !Number.isFinite(amt) || amt <= 0) {
-      showToast("Enter a valid amount");
+      showToast("error", "Enter a valid amount");
       return;
     }
 
     if (amt < 10) {
-      showToast("Minimum stake is $10");
+      showToast("error", "Minimum stake is $10");
       return;
     }
 
     if (amt > (Number(hybrid?.depositBalance ?? 0) + Number(hybrid?.rewardBalance ?? 0))) {
-      return showToast("Insufficient Hybrid balance");
+      return showToast("error", "Insufficient Hybrid balance");
     }
 
     try {
@@ -76,7 +70,7 @@ export default function Investment() {
         typeof (result as { msg?: string })?.msg === "string" && (result as { msg?: string }).msg?.trim()
           ? String((result as { msg?: string }).msg).trim()
           : "";
-      showToast(stakeMsg || "Stake created successfully");
+      showToast("success", stakeMsg || "Stake created successfully");
 
       setSelectedPlan(null);
       setAmount("");
@@ -88,7 +82,7 @@ export default function Investment() {
       setStakes(stakeData || []);
 
     } catch (err: unknown) {
-      showToast(getApiErrorMessage(err, "Something went wrong"));
+      showToast("error", getApiErrorMessage(err, "Something went wrong"));
     } finally {
       setLoadingPlan(null);
     }
@@ -105,6 +99,7 @@ export default function Investment() {
           ? String((result as { msg?: string }).msg).trim()
           : "";
       showToast(
+        "success",
         claimMsg || `Stake claimed: $${Number((result as { payout?: number })?.payout || 0).toFixed(2)}`,
       );
       const [hybridData, stakeData] = await Promise.all([
@@ -114,7 +109,7 @@ export default function Investment() {
       if (hybridData) setHybrid(hybridData);
       setStakes(stakeData || []);
     } catch (err: unknown) {
-      showToast(getApiErrorMessage(err, "Stake is not ready to claim"));
+      showToast("error", getApiErrorMessage(err, "Stake is not ready to claim"));
     } finally {
       setClaimingStake(null);
     }
@@ -150,8 +145,6 @@ export default function Investment() {
   return (
     <ProtectedRoute>
     <div className="min-h-screen max-w-[420px] mx-auto px-4 py-6 pb-24 text-white relative bg-[#040406] overflow-x-hidden w-full">
-      <AppToast message={toast} />
-
       {/* 🌌 BACKGROUND */}
       <div className="absolute w-[500px] h-[500px] bg-purple-600 opacity-20 blur-[150px] top-[-150px] left-[-150px]" />
       <div className="absolute w-[500px] h-[500px] bg-indigo-600 opacity-20 blur-[150px] bottom-[-150px] right-[-150px]" />

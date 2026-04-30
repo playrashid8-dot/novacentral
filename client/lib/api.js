@@ -1,6 +1,5 @@
 import axios from "axios";
 
-import { showSafeToast } from "./toast";
 import { devWarn } from "./devWarn";
 
 axios.defaults.withCredentials = true;
@@ -126,25 +125,7 @@ API.interceptors.response.use(
   (res) => res,
 
   async (error) => {
-    const cfgEarly = error.config || {};
-
-    const reqUrlEarly = String(cfgEarly.url || "");
-    const skipWithdrawUiToast = reqUrlEarly.includes("/user/withdraw");
-
     if (!error.response) {
-      if (typeof window !== "undefined" && !skipWithdrawUiToast) {
-        const isTimeout =
-          error.code === "ECONNABORTED" || error.code === "TIMEOUT";
-        const started = Number(cfgEarly._requestStartedAt) || 0;
-        const elapsed = started ? Date.now() - started : 0;
-        const networkMsg =
-          error.message || "Network error, try again";
-        if (!isTimeout) {
-          showSafeToast(networkMsg, { fallback: "Network error, try again" });
-        } else if (elapsed < 2000) {
-          showSafeToast(networkMsg, { fallback: "Network error, try again" });
-        }
-      }
       return Promise.reject(error);
     }
 
@@ -176,7 +157,7 @@ API.interceptors.response.use(
         isRedirecting = true;
 
         import("./auth").then(({ logout }) => {
-          logout("Session expired 🔒");
+          logout("Session expired. Please sign in again.");
         });
       }
       return Promise.reject(error);
@@ -189,17 +170,6 @@ API.interceptors.response.use(
       devWarn("Server error:", data?.msg || data?.message);
     }
 
-    const apiMsg =
-      data?.msg ||
-      data?.message ||
-      error.message ||
-      "Something went wrong";
-
-    const reqUrl = String(cfg.url || "");
-    if (typeof window !== "undefined" && !reqUrl.includes("/user/withdraw")) {
-      showSafeToast(apiMsg);
-    }
-
     return Promise.reject(error);
   },
 );
@@ -208,7 +178,7 @@ export function getApiErrorMessage(error, fallback = "Something went wrong") {
   if (error == null) return fallback;
   if (!error?.response) {
     if (error?.code === "ECONNABORTED" || error?.code === "TIMEOUT") {
-      return "Updating data…";
+      return "Request timed out. Try again.";
     }
     return "Network error, try again";
   }
@@ -220,14 +190,9 @@ export function getApiErrorMessage(error, fallback = "Something went wrong") {
   );
 }
 
-export function suppressDuplicateCatchToast(error) {
-  if (!error?.config) return false;
-  const url = String(error.config.url || "");
-  if (url.includes("/user/withdraw")) return false;
-  if (url.includes("csrf-token")) return false;
-  const status = error.response?.status;
-  if (status === 401) return false;
-  return true;
+/** Axios no longer surfaces global toasts; catch handlers always show when appropriate. */
+export function suppressDuplicateCatchToast(_error) {
+  return false;
 }
 
 export default API;

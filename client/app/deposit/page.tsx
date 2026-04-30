@@ -4,10 +4,10 @@ import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import QRCode from "react-qr-code";
 import ProtectedRoute from "../../components/ProtectedRoute";
-import AppToast from "../../components/AppToast";
 import Card from "../../components/ui/Card";
 import { fetchCurrentUser } from "../../lib/session";
 import { fetchHybridSummary } from "../../lib/hybrid";
+import { showToast } from "../../lib/vipToast";
 import SkeletonCard from "../../components/SkeletonCard";
 import { SkeletonLine } from "../../components/Skeleton";
 import StatusBadge from "../../components/StatusBadge";
@@ -30,7 +30,6 @@ const CARD_GLASS =
 
 export default function Deposit() {
   const [copied, setCopied] = useState(false);
-  const [toast, setToast] = useState("");
   const [user, setUser]: any = useState(null);
   const [hybrid, setHybrid]: any = useState(null);
   const [walletLoading, setWalletLoading] = useState(true);
@@ -111,16 +110,13 @@ export default function Deposit() {
     if (!wallet) return;
     await navigator.clipboard.writeText(wallet);
     setCopied(true);
-    setToast("Address copied to clipboard");
+    showToast("success", "Address copied");
     setTimeout(() => setCopied(false), 2000);
-    setTimeout(() => setToast(""), 2500);
   };
 
   return (
     <ProtectedRoute>
       <div className="relative w-full max-w-full overflow-x-hidden pb-24 text-white">
-        <AppToast message={toast} />
-
         <h1 className="mb-6 text-2xl font-bold tracking-tight text-white sm:text-3xl">Deposit</h1>
 
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>

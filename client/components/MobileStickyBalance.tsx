@@ -4,8 +4,8 @@ import { memo, useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { fetchHybridSummary } from "../lib/hybrid";
 
-/** Deposit excluded — balance strip adds clutter on the deposit screen itself. */
-const ROUTES = new Set(["/withdraw", "/history", "/staking", "/investment"]);
+/** Total balance strip only on dashboard — avoids duplication on history / withdraw / deposit. */
+const ROUTES = new Set(["/dashboard"]);
 
 function MobileStickyBalanceInner() {
   const pathname = usePathname();

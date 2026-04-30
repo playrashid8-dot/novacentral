@@ -4,14 +4,14 @@ import useSWR from "swr";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { getApiErrorMessage, suppressDuplicateCatchToast } from "../../lib/api";
+import { getApiErrorMessage } from "../../lib/api";
 import { claimHybridRoi } from "../../lib/hybrid";
 import {
   fetchDashboardMainBundleSWR,
   DASHBOARD_MAIN_BUNDLE_KEY,
   hybridDashboardSWRConfig,
 } from "../../lib/swr-fetch";
-import AppToast from "../../components/AppToast";
+import { showToast } from "../../lib/vipToast";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import PageWrapper from "../../components/PageWrapper";
 import LiveRefreshIndicator from "../../components/LiveRefreshIndicator";
@@ -53,8 +53,6 @@ function RoiBlockSkeleton({ cardClass }: { cardClass: string }) {
 export default function Dashboard() {
   const router = useRouter();
 
-  const [toast, setToast] = useState("");
-  const [toastTone, setToastTone] = useState<"neutral" | "success" | "error">("neutral");
   const [roiLoading, setRoiLoading] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
 
@@ -73,15 +71,6 @@ export default function Dashboard() {
     if (hybrid || user) setLastUpdatedAt(Date.now());
   }, [hybrid, user]);
 
-  const showToast = (msg: string, tone: "neutral" | "success" | "error" = "neutral") => {
-    setToast(msg);
-    setToastTone(tone);
-    setTimeout(() => {
-      setToast("");
-      setToastTone("neutral");
-    }, 2500);
-  };
-
   const currentVipLevel = Number(hybrid?.level ?? user?.level ?? 0);
   const depositUsd = Number(hybrid?.depositBalance ?? 0);
   const rewardUsd = Number(hybrid?.rewardBalance ?? 0);
@@ -92,16 +81,16 @@ export default function Dashboard() {
     if (roiLoading || hybrid?.canClaimRoi !== true || currentVipLevel < 1) return;
     try {
       setRoiLoading(true);
-      const result: any = await claimHybridRoi();
-      showToast(
-        result?.amount != null ? `ROI claimed: $${Number(result.amount).toFixed(2)}` : "ROI claimed successfully",
-        "success",
-      );
+      await claimHybridRoi();
+      showToast("success", "ROI claimed successfully");
       await mutateDashboardBundle();
     } catch (err: any) {
-      if (!suppressDuplicateCatchToast(err)) {
-        showToast(getApiErrorMessage(err, "Could not claim ROI"), "error");
-      }
+      const raw = getApiErrorMessage(err, "Could not claim ROI");
+      const msg =
+        err?.response?.status === 403 || /not allowed|forbidden/i.test(raw)
+          ? "Action not allowed"
+          : raw;
+      showToast("error", msg);
     } finally {
       setRoiLoading(false);
     }
@@ -115,8 +104,6 @@ export default function Dashboard() {
         emptyText="No data available"
       >
         <div className="relative w-full max-w-full overflow-x-hidden px-1 pb-24 text-white sm:px-0">
-          <AppToast message={toast} tone={toastTone} />
-
           <header className="relative z-10 flex flex-col gap-3 transition-opacity duration-300 ease-out sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h1 className="text-lg font-bold tracking-tight text-white sm:text-xl">Smart Income Dashboard</h1>

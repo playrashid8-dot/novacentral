@@ -9,25 +9,19 @@ import { fetchCurrentUser, updateUserPassword } from "../../lib/session";
 import { fetchHybridSummary } from "../../lib/hybrid";
 import GlassCard from "../../components/GlassCard";
 import PageWrapper from "../../components/PageWrapper";
-import AppToast from "../../components/AppToast";
 import { copyToClipboard, maskAddress } from "../../lib/helpers";
 import { getApiErrorMessage } from "../../lib/api";
+import { showToast } from "../../lib/vipToast";
 import VipBadge from "../../components/ui/VipBadge";
 
 export default function Profile() {
   const [user, setUser]: any = useState(null);
   const [hybrid, setHybrid]: any = useState(null);
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [pwdBusy, setPwdBusy] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
-
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(""), 2800);
-  };
 
   useEffect(() => {
     Promise.all([fetchCurrentUser(), fetchHybridSummary().catch(() => null)])
@@ -53,25 +47,25 @@ export default function Profile() {
     const cur = currentPassword.trim();
     const neu = newPassword.trim();
     if (!cur || !neu) {
-      showToast("Enter current and new password");
+      showToast("error", "Enter current and new password");
       return;
     }
     if (neu.length < 8) {
-      showToast("New password must be at least 8 characters");
+      showToast("error", "New password must be at least 8 characters");
       return;
     }
     try {
       setPwdBusy(true);
       const res = await updateUserPassword(cur, neu);
       if (!res.success) {
-        showToast(res.msg || "Could not update password");
+        showToast("error", res.msg || "Could not update password");
         return;
       }
-      showToast(res.msg || "Password updated");
+      showToast("success", res.msg || "Password updated");
       setCurrentPassword("");
       setNewPassword("");
     } catch (e: any) {
-      showToast(getApiErrorMessage(e, "Password update failed"));
+      showToast("error", getApiErrorMessage(e, "Password update failed"));
     } finally {
       setPwdBusy(false);
     }
@@ -80,7 +74,7 @@ export default function Profile() {
   const copyRef = async () => {
     if (!referralLink) return;
     const ok = await copyToClipboard(referralLink);
-    showToast(ok ? "Referral link copied" : "Could not copy");
+    showToast(ok ? "success" : "error", ok ? "Referral link copied" : "Could not copy");
     if (ok) {
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2000);
@@ -91,8 +85,6 @@ export default function Profile() {
     <ProtectedRoute>
       <PageWrapper loading={loading} data={user?._id}>
         <div className="relative mx-auto min-h-screen w-full max-w-[420px] overflow-x-hidden px-4 pb-24 pt-6 text-white">
-          <AppToast message={toast} />
-
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
             <p className="text-[10px] uppercase tracking-[0.28em] text-emerald-400/75">HybridEarn</p>
             <h1 className="mt-1 text-2xl font-black tracking-tight text-white">Profile</h1>

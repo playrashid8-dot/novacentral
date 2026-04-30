@@ -1,5 +1,5 @@
 import API, { resetRedirectState } from "./api";
-import { showToast } from "./toast";
+import { showToast } from "./vipToast";
 import { fetchCurrentUser } from "./session";
 
 // 🚫 prevent multiple logout redirects
@@ -42,7 +42,7 @@ export const logout = (message) => {
   });
 
   if (message) {
-    showToast(message);
+    showToast("error", message);
   }
 
   setTimeout(() => {

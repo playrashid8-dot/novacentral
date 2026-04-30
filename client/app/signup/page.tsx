@@ -7,10 +7,10 @@ import Image from "next/image";
 import API, {
   getApiErrorMessage,
   initCSRF,
-  suppressDuplicateCatchToast,
 } from "../../lib/api";
 
 import PrimaryButton from "../../components/PrimaryButton";
+import { showToast } from "../../lib/vipToast";
 
 /* ==============================
    🔥 WRAPPER (FIX BUILD ERROR)
@@ -37,7 +37,6 @@ function SignupInner() {
   const [referral, setReferral] = useState("");
 
   const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState("");
 
   const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
   const normalizePhone = (value: string) => value.replace(/[^\d+]/g, "");
@@ -47,12 +46,6 @@ function SignupInner() {
     const ref = params.get("ref");
     if (ref) setReferral(ref);
   }, [params]);
-
-  /* 🔔 TOAST */
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(""), 2500);
-  };
 
   /* 🚀 SIGNUP */
   const handleSignup = async () => {
@@ -64,23 +57,23 @@ function SignupInner() {
     const cleanPassword = password.trim();
 
     if (!cleanUsername || !cleanEmail || !cleanPassword || !cleanPhone) {
-      return showToast("All fields required ⚠️");
+      return showToast("error", "All fields are required");
     }
 
     if (cleanUsername.length < 3) {
-      return showToast("Username must be at least 3 characters ⚠️");
+      return showToast("error", "Username must be at least 3 characters");
     }
 
     if (!isValidEmail(cleanEmail)) {
-      return showToast("Enter a valid email address ⚠️");
+      return showToast("error", "Enter a valid email address");
     }
 
     if (!/^\+?\d{10,15}$/.test(cleanPhone)) {
-      return showToast("Enter a valid phone number ⚠️");
+      return showToast("error", "Enter a valid phone number");
     }
 
     if (cleanPassword.length < 8) {
-      return showToast("Password must be at least 8 characters 🔒");
+      return showToast("error", "Password must be at least 8 characters");
     }
 
     try {
@@ -95,16 +88,14 @@ function SignupInner() {
         referralCode: referral.trim(),
       });
 
-      showToast("Account created 🚀");
+      showToast("success", "Account created");
 
       setTimeout(() => {
         router.push("/dashboard");
       }, 800);
 
     } catch (err: any) {
-      if (!suppressDuplicateCatchToast(err)) {
-        showToast(getApiErrorMessage(err, "Signup failed ❌"));
-      }
+      showToast("error", getApiErrorMessage(err, "Signup failed"));
     } finally {
       setLoading(false);
     }
@@ -112,13 +103,6 @@ function SignupInner() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 relative overflow-hidden bg-[#040406] text-white">
-
-      {/* 🔔 TOAST */}
-      {toast && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 bg-purple-600 px-4 py-2 rounded-xl text-sm shadow-lg z-50">
-          {toast}
-        </div>
-      )}
 
       {/* 🌌 BACKGROUND */}
       <Glow />
