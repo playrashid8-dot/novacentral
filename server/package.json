@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon --exec node --expose-gc --max-old-space-size=1024 src/server.js",
-    "start": "node --expose-gc --max-old-space-size=1024 src/server.js",
+    "start": "node src/server.js",
     "start:api": "cross-env NOVA_SERVICE=api node --expose-gc --max-old-space-size=1024 src/server.js",
     "start:hybrid": "node --expose-gc --max-old-space-size=1024 src/hybridService.js",
     "worker:deposit": "node --expose-gc --max-old-space-size=1024 src/worker.js",
